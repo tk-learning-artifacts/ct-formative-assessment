@@ -1,0 +1,157 @@
+{
+  "bank": "rgsynapse",
+  "description": "Sample questions for RGSynapse (RGS Sec 1 and Sec 2), who already write some Swift and Python and build with AI assistants. A small Phase 1 sample that exercises the schema, not the full paper.",
+  "questions": [
+    {
+      "id": "RGS-S1-01",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Odd and even totals",
+      "prompt": "What does this Python program print?",
+      "code": {
+        "language": "python",
+        "source": "total = 0\nfor i in range(1, 6):\n    if i % 2 == 0:\n        total += i\n    else:\n        total -= 1\nprint(total)"
+      },
+      "options": [
+        "3",
+        "5",
+        "6",
+        "9"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "concept.data.variables",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Predict the output",
+      "details": "Traces a loop with a branch inside it, including where range() stops."
+    },
+    {
+      "id": "RGS-S1-02",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Checking the AI's answer",
+      "prompt": "You asked an AI assistant for a Python function that returns the largest number in a list. It wrote the code below.\n\nWhich test input shows that the function has a bug?",
+      "code": {
+        "language": "python",
+        "source": "def largest(nums):\n    best = 0\n    for n in nums:\n        if n > best:\n            best = n\n    return best"
+      },
+      "options": [
+        "[3, 8, 2]",
+        "[5]",
+        "[-4, -2, -7]",
+        "[1, 1, 1]"
+      ],
+      "answer": {
+        "index": 2
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "practice.testing-debugging.edge-cases",
+        "concept.data.variables"
+      ],
+      "outcomes": [
+        "LO-AI-REVIEW-1",
+        "LO-DEBUG-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reviewing AI code",
+      "qType": "Find the failing input",
+      "details": "Chooses a test case that exposes a wrong starting value."
+    },
+    {
+      "id": "RGS-S2-01",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Swift to Python",
+      "prompt": "This Swift loop prints some numbers. Which Python loop prints exactly the same numbers in the same order?",
+      "code": {
+        "language": "swift",
+        "source": "for i in stride(from: 10, to: 0, by: -3) {\n    print(i)\n}"
+      },
+      "options": [
+        "for i in range(10, 0, -3):",
+        "for i in range(10, 1, -3):",
+        "for i in range(0, 10, 3):",
+        "for i in range(10, 0, 3):"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 6,
+      "difficulty": 4,
+      "ontology": [
+        "practice.reusing-remixing.translating",
+        "concept.loops"
+      ],
+      "outcomes": [
+        "LO-TRANSLATE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Swift and Python",
+      "qType": "Equivalent loops",
+      "details": "Compares loop bounds and step direction across two languages."
+    },
+    {
+      "id": "RGS-S2-02",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Counting passes",
+      "prompt": "An AI assistant wrote this code to count how many scores are 50 or more.\n\nWhat does it print?",
+      "code": {
+        "language": "python",
+        "source": "scores = [72, 45, 50, 38, 91]\ncount = 0\nfor i in range(1, len(scores)):\n    if scores[i] >= 50:\n        count += 1\nprint(count)"
+      },
+      "options": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 6,
+      "difficulty": 4,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "concept.loops",
+        "concept.data.structures",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1",
+        "LO-AI-REVIEW-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reviewing AI code",
+      "qType": "Predict the output",
+      "details": "Traces list indexing and notices which items the loop skips."
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+{
+  "outcomes": [
+    {
+      "id": "LO-SEQ-1",
+      "statement": "Put the steps of a process in an order that always works, respecting constraints between steps.",
+      "nodes": [
+        "concept.sequences"
+      ],
+      "levels": [
+        "P5",
+        "P6"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-PAT-1",
+      "statement": "Spot a repeating pattern and use it to predict a later item.",
+      "nodes": [
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "levels": [
+        "P5",
+        "P6"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-COND-1",
+      "statement": "Apply if/otherwise rules correctly, including rules with priority and conditions joined by AND or OR.",
+      "nodes": [
+        "concept.conditionals",
+        "concept.operators.logic"
+      ],
+      "levels": [
+        "P5",
+        "P6",
+        "S1"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-TRACE-1",
+      "statement": "Trace a sequence, loop or branching procedure step by step to find its final state.",
+      "nodes": [
+        "concept.sequences",
+        "concept.loops",
+        "concept.data.variables",
+        "practice.testing-debugging.tracing"
+      ],
+      "levels": [
+        "P5",
+        "P6",
+        "S1"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-DATA-1",
+      "statement": "Count the states that n on/off choices can represent and the bits a piece of data needs.",
+      "nodes": [
+        "concept.data.representation.binary"
+      ],
+      "levels": [
+        "P5",
+        "S1"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-PATH-1",
+      "statement": "Find shortest or cheapest routes, and count routes, in small grids and networks.",
+      "nodes": [
+        "concept.data.structures.paths"
+      ],
+      "levels": [
+        "P6",
+        "S2"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-EFF-1",
+      "statement": "Reason about the work a sorting or searching strategy needs and compare strategies by their worst case.",
+      "nodes": [
+        "concept.data.structures.search-sort"
+      ],
+      "levels": [
+        "P6",
+        "S2"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-DEBUG-1",
+      "statement": "Find the input where a rule or program behaves unexpectedly, such as equal values or an empty case.",
+      "nodes": [
+        "practice.testing-debugging.edge-cases",
+        "concept.conditionals"
+      ],
+      "levels": [
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "core",
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-INV-1",
+      "statement": "Use a property that every move preserves to decide which states can never be reached.",
+      "nodes": [
+        "practice.abstracting-modularizing.invariants"
+      ],
+      "levels": [
+        "S2"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-STR-1",
+      "statement": "Match patterns in strings and apply or reverse a simple cipher.",
+      "nodes": [
+        "concept.data.representation.text",
+        "concept.data.representation.encryption"
+      ],
+      "levels": [
+        "S2"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-CODE-TRACE-1",
+      "statement": "Predict the output of a short Python program that uses loops, conditionals and lists.",
+      "nodes": [
+        "concept.loops",
+        "concept.conditionals",
+        "concept.data.variables",
+        "concept.data.structures",
+        "practice.testing-debugging.tracing"
+      ],
+      "levels": [
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-AI-REVIEW-1",
+      "statement": "Find an input that exposes a bug in AI-generated code before trusting that code.",
+      "nodes": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "practice.testing-debugging.edge-cases",
+        "perspective.questioning.ai-output"
+      ],
+      "levels": [
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-TRANSLATE-1",
+      "statement": "Recognise the same algorithm written in Swift and in Python.",
+      "nodes": [
+        "practice.reusing-remixing.translating",
+        "concept.loops"
+      ],
+      "levels": [
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    }
+  ]
+}

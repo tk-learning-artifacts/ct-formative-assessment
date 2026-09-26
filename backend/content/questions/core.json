@@ -1,0 +1,634 @@
+{
+  "bank": "core",
+  "description": "The original 20 Bebras-style questions, 5 per level P5/P6/S1/S2.",
+  "questions": [
+    {
+      "id": "P5-01",
+      "type": "mcq",
+      "audience": "core",
+      "level": "P5",
+      "title": "Packing order",
+      "prompt": "A robot packs a snack box.\n\nSteps available:\n1) Put the sandwich into the box\n2) Close the box\n3) Put the note into the box\n\nWhich order always works?",
+      "options": [
+        "1, 2, 3",
+        "3, 2, 1",
+        "2, 1, 3",
+        "1, 3, 2"
+      ],
+      "answer": {
+        "index": 3
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.sequences"
+      ],
+      "outcomes": [
+        "LO-SEQ-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Sequencing",
+      "qType": "Order / process",
+      "details": "Tests reasoning about step order and constraints (can’t close box before inserting items)."
+    },
+    {
+      "id": "P5-02",
+      "type": "mcq",
+      "audience": "core",
+      "level": "P5",
+      "title": "Sticker pattern",
+      "prompt": "A sticker machine prints this pattern repeatedly:\n\nCircle, Circle, Square, Circle, Circle, Square, ...\n\nWhat is the 9th sticker?",
+      "options": [
+        "Circle",
+        "Square",
+        "Triangle",
+        "It cannot be known"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-PAT-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Patterns",
+      "qType": "Next in sequence",
+      "details": "Finds a repeating pattern and predicts a later position."
+    },
+    {
+      "id": "P5-03",
+      "type": "mcq",
+      "audience": "core",
+      "level": "P5",
+      "title": "Ticket rule",
+      "prompt": "A game gives a ticket based on the number you roll:\nIf the number is 1 or 2, you get a BLUE ticket.\nOtherwise, you get a RED ticket.\n\nYou roll a 4. What ticket do you get?",
+      "options": [
+        "BLUE",
+        "RED",
+        "Both",
+        "None"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.conditionals"
+      ],
+      "outcomes": [
+        "LO-COND-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Logic",
+      "qType": "If rule",
+      "details": "Applies a simple if/otherwise rule carefully."
+    },
+    {
+      "id": "P5-04",
+      "type": "mcq",
+      "audience": "core",
+      "level": "P5",
+      "title": "Turn the arrow",
+      "prompt": "An arrow points UP. You turn it right (clockwise) twice.\n\nWhere does it point now?",
+      "options": [
+        "Up",
+        "Down",
+        "Left",
+        "Right"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.sequences",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Spatial reasoning",
+      "qType": "Rotation",
+      "details": "Mentally rotates an object by 90° steps."
+    },
+    {
+      "id": "P5-05",
+      "type": "mcq",
+      "audience": "core",
+      "level": "P5",
+      "title": "Light switches",
+      "prompt": "You have 3 light switches. Each switch can be ON or OFF.\n\nHow many different switch patterns are possible?",
+      "options": [
+        "3",
+        "6",
+        "8",
+        "9"
+      ],
+      "answer": {
+        "index": 2
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.data.representation.binary"
+      ],
+      "outcomes": [
+        "LO-DATA-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      },
+      "topic": "Information",
+      "qType": "Counting states",
+      "details": "Counts how many outcomes exist for multiple ON/OFF choices."
+    },
+    {
+      "id": "P6-01",
+      "type": "mcq",
+      "audience": "core",
+      "level": "P6",
+      "title": "Shortest safe walk",
+      "prompt": "You are at S and want to reach T.\nYou can move up/down/left/right.\nYou cannot step on #.\n\n",
+      "art": "S . . .\n# # . #\n. . . #\n. # . T",
+      "options": [
+        "6 steps",
+        "7 steps",
+        "8 steps",
+        "9 steps"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "concept.data.structures.paths"
+      ],
+      "outcomes": [
+        "LO-PATH-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Grids / paths",
+      "qType": "Shortest path",
+      "details": "Finds a shortest path length on a grid while avoiding obstacles."
+    },
+    {
+      "id": "P6-02",
+      "type": "mcq",
+      "audience": "core",
+      "level": "P6",
+      "title": "Stamping cards",
+      "prompt": "A machine starts at 0 points.\nIt repeats 5 times:\nAdd 2 points.\n\nHow many points at the end?",
+      "options": [
+        "7",
+        "8",
+        "9",
+        "10"
+      ],
+      "answer": {
+        "index": 3
+      },
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.data.variables",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Loops",
+      "qType": "Repeated action",
+      "details": "Simulates a loop and computes the final total."
+    },
+    {
+      "id": "P6-03",
+      "type": "mcq",
+      "audience": "core",
+      "level": "P6",
+      "title": "Neighbour swaps",
+      "prompt": "You have: 2 4 1 3\nYou may swap only neighbouring numbers.\n\nMinimum swaps to sort into 1 2 3 4?",
+      "options": [
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "concept.data.structures.search-sort"
+      ],
+      "outcomes": [
+        "LO-EFF-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Sorting",
+      "qType": "Minimum swaps (adjacent)",
+      "details": "Counts the minimum neighbouring swaps needed to sort (inversions)."
+    },
+    {
+      "id": "P6-04",
+      "type": "mcq",
+      "audience": "core",
+      "level": "P6",
+      "title": "Bonus points",
+      "prompt": "A quiz gives points like this:\n- Correct answer: +2\n- Extra bonus: If you answer correctly AND in under 10 seconds, you get +5 total (not +2).\n\nYou answer correctly in 8 seconds. How many points do you get?",
+      "options": [
+        "2",
+        "5",
+        "7",
+        "10"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "concept.conditionals",
+        "concept.operators.logic"
+      ],
+      "outcomes": [
+        "LO-COND-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Conditions",
+      "qType": "Rule with priority",
+      "details": "Special-case rule overrides normal scoring."
+    },
+    {
+      "id": "P6-05",
+      "type": "mcq",
+      "audience": "core",
+      "level": "P6",
+      "title": "Two-step routes",
+      "prompt": "A can connect to B and C.\nB can connect to D.\nC can connect to D.\n\nHow many different shortest routes are there from A to D?",
+      "options": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "concept.data.structures.paths"
+      ],
+      "outcomes": [
+        "LO-PATH-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "communication-networking"
+      },
+      "topic": "Networks",
+      "qType": "Count shortest routes",
+      "details": "Counts distinct shortest routes in a small network."
+    },
+    {
+      "id": "S1-01",
+      "type": "mcq",
+      "audience": "core",
+      "level": "S1",
+      "title": "Pick the larger number",
+      "prompt": "A student writes this rule to return the larger of A and B:\n\nIf A > B, return A\nElse return B\n\nWhen A = 3 and B = 3, which line runs?",
+      "options": [
+        "The first line runs and returns A",
+        "The Else line runs and returns B",
+        "It crashes",
+        "It returns nothing"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "practice.testing-debugging.edge-cases",
+        "concept.conditionals"
+      ],
+      "outcomes": [
+        "LO-DEBUG-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Debugging",
+      "qType": "Edge case / equality",
+      "details": "Tests understanding of comparisons when values are equal."
+    },
+    {
+      "id": "S1-02",
+      "type": "mcq",
+      "audience": "core",
+      "level": "S1",
+      "title": "How many codes?",
+      "prompt": "A locker code uses exactly 4 bits (0/1).\n\nHow many different codes are possible?",
+      "options": [
+        "4",
+        "8",
+        "12",
+        "16"
+      ],
+      "answer": {
+        "index": 3
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "concept.data.representation.binary"
+      ],
+      "outcomes": [
+        "LO-DATA-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      },
+      "topic": "Binary",
+      "qType": "Bit counting",
+      "details": "Uses 2^n outcomes for n bits."
+    },
+    {
+      "id": "S1-03",
+      "type": "mcq",
+      "audience": "core",
+      "level": "S1",
+      "title": "Even-odd machine",
+      "prompt": "Start with the number 10.\nRepeat exactly 3 times:\n- If the number is even, divide by 2\n- If the number is odd, add 3\n\nWhat is the final number?",
+      "options": [
+        "4",
+        "5",
+        "6",
+        "7"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Algorithms",
+      "qType": "Trace a procedure",
+      "details": "Traces a branching procedure across fixed iterations."
+    },
+    {
+      "id": "S1-04",
+      "type": "mcq",
+      "audience": "core",
+      "level": "S1",
+      "title": "Pixel storage",
+      "prompt": "A 5×5 black/white image uses 1 bit per pixel.\n\nHow many bits are needed in total?",
+      "options": [
+        "10",
+        "15",
+        "20",
+        "25"
+      ],
+      "answer": {
+        "index": 3
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "concept.data.representation.binary"
+      ],
+      "outcomes": [
+        "LO-DATA-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      },
+      "topic": "Data representation",
+      "qType": "Encoding size",
+      "details": "Computes bits needed: pixels × bits per pixel."
+    },
+    {
+      "id": "S1-05",
+      "type": "mcq",
+      "audience": "core",
+      "level": "S1",
+      "title": "Club entry rule",
+      "prompt": "A club rule says:\nYou may enter if you have a PASS OR you are with a TEACHER.\n\nYou have no pass, but you are with a teacher.\nCan you enter?",
+      "options": [
+        "Yes",
+        "No",
+        "Only on weekends",
+        "Not enough information"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "concept.operators.logic"
+      ],
+      "outcomes": [
+        "LO-COND-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Logic",
+      "qType": "OR condition",
+      "details": "Understands OR: either condition is enough."
+    },
+    {
+      "id": "S2-01",
+      "type": "mcq",
+      "audience": "core",
+      "level": "S2",
+      "title": "Finding a name",
+      "prompt": "A list has 100 names.\nStrategy A: start from the top and check one by one.\nStrategy B: the list is sorted, so you can repeatedly check the middle and cut the list in half.\n\nIn the worst case, which strategy uses fewer checks?",
+      "options": [
+        "A",
+        "B",
+        "Same",
+        "Cannot compare"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 6,
+      "difficulty": 4,
+      "ontology": [
+        "concept.data.structures.search-sort"
+      ],
+      "outcomes": [
+        "LO-EFF-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Efficiency",
+      "qType": "Compare strategies",
+      "details": "Chooses strategy with fewer checks in the worst case (binary search idea)."
+    },
+    {
+      "id": "S2-02",
+      "type": "mcq",
+      "audience": "core",
+      "level": "S2",
+      "title": "Cheapest route",
+      "prompt": "A delivery bot can travel these paths (cost in minutes):\nA→B (2), A→C (5), B→D (6), C→D (1), B→C (1)\n\nWhat is the cheapest cost from A to D?",
+      "options": [
+        "4",
+        "6",
+        "7",
+        "8"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 6,
+      "difficulty": 4,
+      "ontology": [
+        "concept.data.structures.paths"
+      ],
+      "outcomes": [
+        "LO-PATH-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Graphs / routing",
+      "qType": "Cheapest path (weighted)",
+      "details": "Finds minimum total cost, not minimum number of steps."
+    },
+    {
+      "id": "S2-03",
+      "type": "mcq",
+      "audience": "core",
+      "level": "S2",
+      "title": "Colour flips",
+      "prompt": "You have 6 tiles in a row, all WHITE.\nOne move flips exactly 2 neighbouring tiles (WHITE↔BLACK).\n\nAfter any number of moves, which situation is impossible?",
+      "options": [
+        "0 black tiles",
+        "1 black tile",
+        "2 black tiles",
+        "4 black tiles"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 6,
+      "difficulty": 4,
+      "ontology": [
+        "practice.abstracting-modularizing.invariants"
+      ],
+      "outcomes": [
+        "LO-INV-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Invariants",
+      "qType": "Parity / impossible state",
+      "details": "Flipping 2 tiles keeps number of black tiles even."
+    },
+    {
+      "id": "S2-04",
+      "type": "mcq",
+      "audience": "core",
+      "level": "S2",
+      "title": "Counting blocks",
+      "prompt": "A code is: ABABABAA\n\nHow many times does the block 'ABA' appear if overlaps ARE allowed?",
+      "options": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "answer": {
+        "index": 2
+      },
+      "points": 6,
+      "difficulty": 4,
+      "ontology": [
+        "concept.data.representation.text"
+      ],
+      "outcomes": [
+        "LO-STR-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      },
+      "topic": "Strings",
+      "qType": "Pattern matching (overlaps)",
+      "details": "Counts substring occurrences allowing overlaps."
+    },
+    {
+      "id": "S2-05",
+      "type": "mcq",
+      "audience": "core",
+      "level": "S2",
+      "title": "Shift message",
+      "prompt": "A message uses this rule:\nA→D, B→E, C→F, ... (each letter shifts forward by 3)\n\nThe coded word is: KHOOR\nWhat is the original word?",
+      "options": [
+        "HELLO",
+        "KELLY",
+        "HOLLY",
+        "KHOOR"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 6,
+      "difficulty": 4,
+      "ontology": [
+        "concept.data.representation.encryption"
+      ],
+      "outcomes": [
+        "LO-STR-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "communication-networking"
+      },
+      "topic": "Cryptography basics",
+      "qType": "Caesar shift decode",
+      "details": "Decodes by shifting letters backward by 3."
+    }
+  ]
+}

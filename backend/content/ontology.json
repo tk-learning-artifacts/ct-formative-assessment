@@ -1,0 +1,623 @@
+{
+  "framework": {
+    "id": "brennan-resnick-2012",
+    "name": "Brennan & Resnick (2012) computational thinking dimensions, with CT Quest sub-nodes",
+    "decision": "Chosen by Akmal on 2026-09-26. See docs/adr/0001-ct-platform-model.md.",
+    "primary": {
+      "id": "brennan-resnick-2012",
+      "citation": "Brennan, K. & Resnick, M. (2012). New frameworks for studying and assessing the development of computational thinking. Paper presented at the annual meeting of the American Educational Research Association, Vancouver, Canada."
+    },
+    "extensions": {
+      "id": "ctquest",
+      "note": "Sub-nodes added beneath the Brennan & Resnick nodes where CT Quest questions need finer grain. The top two levels are Brennan & Resnick only."
+    },
+    "crosswalks": {
+      "bebrasCategory": {
+        "citation": "Dagiene, V., Sentance, S. & Stupuriene, G. (2017). Developing a two-dimensional categorization system for educational tasks in informatics. Informatica 28(1). Informatics domains axis.",
+        "values": [
+          "algorithms-programming",
+          "data-structures-representations",
+          "computer-processes-hardware",
+          "communication-networking",
+          "interactions-systems-society"
+        ]
+      },
+      "bebrasSkill": {
+        "citation": "Same categorisation, computational thinking skills axis.",
+        "values": [
+          "abstraction",
+          "algorithmic thinking",
+          "decomposition",
+          "evaluation",
+          "generalisation"
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "id": "concept",
+      "kind": "concept",
+      "label": "Computational concepts",
+      "description": "Ideas that programs and algorithms are built from.",
+      "parent": null,
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "computational concepts"
+        }
+      ]
+    },
+    {
+      "id": "concept.sequences",
+      "kind": "concept",
+      "label": "Sequences",
+      "description": "Steps carried out in a particular order, where order matters.",
+      "parent": "concept",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "sequences"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      }
+    },
+    {
+      "id": "concept.loops",
+      "kind": "concept",
+      "label": "Loops",
+      "description": "Running the same steps several times, a fixed number of times or until a condition holds.",
+      "parent": "concept",
+      "prerequisites": [
+        "concept.sequences"
+      ],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "loops"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      }
+    },
+    {
+      "id": "concept.events",
+      "kind": "concept",
+      "label": "Events",
+      "description": "One thing causing another to happen, such as a button press triggering code.",
+      "parent": "concept",
+      "prerequisites": [
+        "concept.sequences"
+      ],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "events"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      }
+    },
+    {
+      "id": "concept.parallelism",
+      "kind": "concept",
+      "label": "Parallelism",
+      "description": "Sequences of steps happening at the same time.",
+      "parent": "concept",
+      "prerequisites": [
+        "concept.sequences"
+      ],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "parallelism"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "computer-processes-hardware"
+      }
+    },
+    {
+      "id": "concept.conditionals",
+      "kind": "concept",
+      "label": "Conditionals",
+      "description": "Choosing what to do based on whether a condition is true.",
+      "parent": "concept",
+      "prerequisites": [
+        "concept.sequences"
+      ],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "conditionals"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      }
+    },
+    {
+      "id": "concept.operators",
+      "kind": "concept",
+      "label": "Operators",
+      "description": "Mathematical, logical and string operations on values.",
+      "parent": "concept",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "operators"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      }
+    },
+    {
+      "id": "concept.operators.logic",
+      "kind": "concept",
+      "label": "Logic operators",
+      "description": "Combining conditions with AND, OR and NOT, and reasoning about which rule takes priority.",
+      "parent": "concept.operators",
+      "prerequisites": [
+        "concept.conditionals"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under operators"
+        }
+      ]
+    },
+    {
+      "id": "concept.data",
+      "kind": "concept",
+      "label": "Data",
+      "description": "Storing, retrieving and updating values.",
+      "parent": "concept",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "data"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      }
+    },
+    {
+      "id": "concept.data.variables",
+      "kind": "concept",
+      "label": "Variables and state",
+      "description": "Named values that change as a program or process runs.",
+      "parent": "concept.data",
+      "prerequisites": [
+        "concept.sequences"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under data"
+        }
+      ]
+    },
+    {
+      "id": "concept.data.representation",
+      "kind": "concept",
+      "label": "Data representation",
+      "description": "Encoding information so a computer can store and process it.",
+      "parent": "concept.data",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under data"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      }
+    },
+    {
+      "id": "concept.data.representation.binary",
+      "kind": "concept",
+      "label": "Binary and counting states",
+      "description": "Bits, how many states n bits can hold, and how many bits data needs.",
+      "parent": "concept.data.representation",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under data"
+        }
+      ]
+    },
+    {
+      "id": "concept.data.representation.text",
+      "kind": "concept",
+      "label": "Text and strings",
+      "description": "Sequences of characters, pattern matching and simple text transformations.",
+      "parent": "concept.data.representation",
+      "prerequisites": [
+        "concept.data.representation.binary"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under data"
+        }
+      ]
+    },
+    {
+      "id": "concept.data.representation.encryption",
+      "kind": "concept",
+      "label": "Encryption",
+      "description": "Transforming a message so only someone who knows the rule can read it.",
+      "parent": "concept.data.representation",
+      "prerequisites": [
+        "concept.data.representation.text"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under data"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "communication-networking"
+      }
+    },
+    {
+      "id": "concept.data.structures",
+      "kind": "concept",
+      "label": "Data structures",
+      "description": "Lists, grids and graphs that organise data so it can be processed.",
+      "parent": "concept.data",
+      "prerequisites": [
+        "concept.data.variables"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under data"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      }
+    },
+    {
+      "id": "concept.data.structures.paths",
+      "kind": "concept",
+      "label": "Paths and routing",
+      "description": "Shortest, cheapest and counted routes through grids and graphs.",
+      "parent": "concept.data.structures",
+      "prerequisites": [
+        "concept.loops"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under data"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      }
+    },
+    {
+      "id": "concept.data.structures.search-sort",
+      "kind": "concept",
+      "label": "Searching and sorting",
+      "description": "Finding and ordering items in a collection, and comparing how much work each strategy needs in the worst case.",
+      "parent": "concept.data.structures",
+      "prerequisites": [
+        "concept.loops",
+        "concept.conditionals"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under data"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      }
+    },
+    {
+      "id": "practice",
+      "kind": "practice",
+      "label": "Computational practices",
+      "description": "Ways of working while solving problems computationally.",
+      "parent": null,
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "computational practices"
+        }
+      ]
+    },
+    {
+      "id": "practice.experimenting-iterating",
+      "kind": "practice",
+      "label": "Experimenting and iterating",
+      "description": "Building a little, trying it, and improving it in cycles.",
+      "parent": "practice",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "being incremental and iterative (experimenting and iterating)"
+        }
+      ]
+    },
+    {
+      "id": "practice.testing-debugging",
+      "kind": "practice",
+      "label": "Testing and debugging",
+      "description": "Making sure things work, and finding and fixing the cause when they do not.",
+      "parent": "practice",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "testing and debugging"
+        }
+      ]
+    },
+    {
+      "id": "practice.testing-debugging.tracing",
+      "kind": "practice",
+      "label": "Tracing and predicting",
+      "description": "Stepping through a procedure or program by hand to predict exactly what it does.",
+      "parent": "practice.testing-debugging",
+      "prerequisites": [
+        "concept.sequences"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under testing and debugging"
+        }
+      ],
+      "crosswalk": {
+        "bebrasSkill": "algorithmic thinking"
+      }
+    },
+    {
+      "id": "practice.testing-debugging.edge-cases",
+      "kind": "practice",
+      "label": "Choosing edge cases",
+      "description": "Picking inputs, such as equal values or negative numbers, that expose mistakes.",
+      "parent": "practice.testing-debugging",
+      "prerequisites": [
+        "practice.testing-debugging.tracing"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under testing and debugging"
+        }
+      ],
+      "crosswalk": {
+        "bebrasSkill": "evaluation"
+      }
+    },
+    {
+      "id": "practice.testing-debugging.reviewing-ai-code",
+      "kind": "practice",
+      "label": "Reviewing AI-generated code",
+      "description": "Reading code an AI assistant produced, predicting its behaviour and finding inputs where it fails.",
+      "parent": "practice.testing-debugging",
+      "prerequisites": [
+        "practice.testing-debugging.edge-cases",
+        "practice.reusing-remixing.ai-assisted"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "vibe coding"
+        }
+      ]
+    },
+    {
+      "id": "practice.reusing-remixing",
+      "kind": "practice",
+      "label": "Reusing and remixing",
+      "description": "Making something by building on existing projects, code or ideas.",
+      "parent": "practice",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "reusing and remixing"
+        }
+      ]
+    },
+    {
+      "id": "practice.reusing-remixing.translating",
+      "kind": "practice",
+      "label": "Translating between languages",
+      "description": "Recognising the same algorithm written in different programming languages, such as Swift and Python.",
+      "parent": "practice.reusing-remixing",
+      "prerequisites": [
+        "concept.loops"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under reusing and remixing"
+        }
+      ],
+      "crosswalk": {
+        "bebrasSkill": "generalisation"
+      }
+    },
+    {
+      "id": "practice.reusing-remixing.ai-assisted",
+      "kind": "practice",
+      "label": "Building with AI assistants",
+      "description": "Directing an AI assistant to produce code (vibe coding) and building on what it gives back.",
+      "parent": "practice.reusing-remixing",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "vibe coding"
+        }
+      ]
+    },
+    {
+      "id": "practice.abstracting-modularizing",
+      "kind": "practice",
+      "label": "Abstracting and modularizing",
+      "description": "Exploring connections between the whole and the parts; keeping the details that matter.",
+      "parent": "practice",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "abstracting and modularizing"
+        }
+      ],
+      "crosswalk": {
+        "bebrasSkill": "abstraction"
+      }
+    },
+    {
+      "id": "practice.abstracting-modularizing.decomposition",
+      "kind": "practice",
+      "label": "Decomposition",
+      "description": "Breaking a problem into smaller parts that can be solved separately.",
+      "parent": "practice.abstracting-modularizing",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under abstracting and modularizing"
+        }
+      ],
+      "crosswalk": {
+        "bebrasSkill": "decomposition"
+      }
+    },
+    {
+      "id": "practice.abstracting-modularizing.generalisation",
+      "kind": "practice",
+      "label": "Pattern recognition and generalisation",
+      "description": "Spotting a repeating structure and using it to predict or to solve related problems.",
+      "parent": "practice.abstracting-modularizing",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under abstracting and modularizing"
+        }
+      ],
+      "crosswalk": {
+        "bebrasSkill": "generalisation"
+      }
+    },
+    {
+      "id": "practice.abstracting-modularizing.invariants",
+      "kind": "practice",
+      "label": "Finding invariants",
+      "description": "Noticing a property that every allowed move preserves and using it to rule states out.",
+      "parent": "practice.abstracting-modularizing",
+      "prerequisites": [
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "finer grain under abstracting and modularizing"
+        }
+      ],
+      "crosswalk": {
+        "bebrasSkill": "abstraction"
+      }
+    },
+    {
+      "id": "perspective",
+      "kind": "perspective",
+      "label": "Computational perspectives",
+      "description": "How learners see themselves, others and the world in relation to computing.",
+      "parent": null,
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "computational perspectives"
+        }
+      ]
+    },
+    {
+      "id": "perspective.expressing",
+      "kind": "perspective",
+      "label": "Expressing",
+      "description": "Seeing computation as a way to create and express ideas.",
+      "parent": "perspective",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "expressing"
+        }
+      ]
+    },
+    {
+      "id": "perspective.connecting",
+      "kind": "perspective",
+      "label": "Connecting",
+      "description": "Creating with and for other people.",
+      "parent": "perspective",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "connecting"
+        }
+      ]
+    },
+    {
+      "id": "perspective.questioning",
+      "kind": "perspective",
+      "label": "Questioning",
+      "description": "Asking questions about technology and how it works.",
+      "parent": "perspective",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "brennan-resnick-2012",
+          "term": "questioning"
+        }
+      ]
+    },
+    {
+      "id": "perspective.questioning.ai-output",
+      "kind": "perspective",
+      "label": "Questioning AI output",
+      "description": "Treating what an AI assistant produces as a claim to check rather than an answer to trust.",
+      "parent": "perspective.questioning",
+      "prerequisites": [],
+      "sources": [
+        {
+          "framework": "ctquest",
+          "term": "vibe coding"
+        }
+      ],
+      "crosswalk": {
+        "bebrasCategory": "interactions-systems-society"
+      }
+    }
+  ]
+}

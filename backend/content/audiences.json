@@ -1,0 +1,22 @@
+{
+  "levels": [
+    { "id": "P5", "label": "Primary 5", "typicalAge": 11 },
+    { "id": "P6", "label": "Primary 6", "typicalAge": 12 },
+    { "id": "S1", "label": "Secondary 1", "typicalAge": 13 },
+    { "id": "S2", "label": "Secondary 2", "typicalAge": 14 }
+  ],
+  "audiences": [
+    {
+      "id": "core",
+      "label": "CT Quest core (P5 to S2)",
+      "description": "The original Bebras-style unplugged puzzles. No programming experience assumed.",
+      "levels": ["P5", "P6", "S1", "S2"]
+    },
+    {
+      "id": "rgsynapse",
+      "label": "RGSynapse (Raffles Girls' School Sec 1 and Sec 2)",
+      "description": "Students who already write some Swift and Python and build things with AI assistants (vibe coding). Questions may show real code.",
+      "levels": ["S1", "S2"]
+    }
+  ]
+}
