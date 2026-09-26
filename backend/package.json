@@ -9,7 +9,7 @@
     "test": "node --test --test-timeout=30000 --test-force-exit test/*.test.js"
   },
   "dependencies": {
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "~12.9.0",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2"
   },
