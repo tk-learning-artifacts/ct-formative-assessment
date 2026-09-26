@@ -17,7 +17,7 @@ const ORIGINAL_IDS = [
 const keys = Object.fromEntries(loadContent().questions.map(question => [question.id, question.answer.index]));
 
 test("DEMO123 end to end", async t => {
-  const ctx = buildApp();
+  const ctx = await buildApp();
   t.after(() => ctx.cleanup());
   const { app } = ctx;
 

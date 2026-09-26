@@ -35,7 +35,7 @@ function schemaSummary(db) {
 test("migrating a v1 database", async t => {
   const dir = makeTempDir();
   const dbPath = writeV1Database(dir);
-  let ctx = buildApp({ dbPath });
+  let ctx = await buildApp({ dbPath });
   t.after(() => {
     ctx.close();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -77,8 +77,8 @@ test("migrating a v1 database", async t => {
     assert.equal(unanswered.response_json, "null");
   });
 
-  await t.test("ends with the same schema as a fresh database", () => {
-    const fresh = buildApp();
+  await t.test("ends with the same schema as a fresh database", async () => {
+    const fresh = await buildApp();
     try {
       assert.deepEqual(schemaSummary(db), schemaSummary(fresh.store.db));
     } finally {
@@ -136,10 +136,10 @@ test("migrating a v1 database", async t => {
     assert.equal(res.body.result.score, 4 + 6 + 5);
   });
 
-  await t.test("reopening is a no-op", () => {
+  await t.test("reopening is a no-op", async () => {
     ctx.close();
     const backupsBefore = fs.readdirSync(dir).filter(name => name.includes(".pre-v")).length;
-    ctx = buildApp({ dbPath });
+    ctx = await buildApp({ dbPath });
     assert.deepEqual(ctx.store.migration.applied, []);
     assert.equal(ctx.store.migration.backupPath, null);
     assert.equal(fs.readdirSync(dir).filter(name => name.includes(".pre-v")).length, backupsBefore);
@@ -147,14 +147,14 @@ test("migrating a v1 database", async t => {
   });
 });
 
-test("a database newer than the code is refused", () => {
+test("a database newer than the code is refused", async () => {
   const dir = makeTempDir();
   const dbPath = path.join(dir, "app.db");
   const db = new Database(dbPath);
   db.pragma(`user_version = ${LATEST_VERSION + 1}`);
   db.close();
 
-  assert.throws(() => buildApp({ dbPath }), /newer than this code/);
+  await assert.rejects(() => buildApp({ dbPath }), /newer than this code/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

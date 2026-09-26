@@ -115,7 +115,7 @@ npm test                          # from the repo root
 npm test --workspace backend      # same thing
 ```
 
-The suite uses Node's built-in test runner (`node:test`) with `supertest`, which calls the Express app in-process without opening a port. Every test builds its app on a fresh database in a temporary directory, passed through `DB_PATH`. With `NODE_ENV=test`, opening `backend/data/app.db` throws, so tests can never touch real data.
+The suite uses Node's built-in test runner (`node:test`) with `supertest` for HTTP requests. Every test builds its app on a fresh database in a temporary directory, passed through `DB_PATH`, and serves it on `127.0.0.1` on a random port (see the comment in `test/helpers.js` for why supertest is not handed the bare Express app). With `NODE_ENV=test`, opening `backend/data/app.db` throws, so tests can never touch real data.
 
 | File | Covers |
 |---|---|

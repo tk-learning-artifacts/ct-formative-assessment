@@ -1,10 +1,18 @@
 // Shared test setup. Every app built here gets its own database in a fresh
 // temporary directory (passed through DB_PATH), so tests never touch
 // backend/data/app.db and never see each other's data.
+//
+// The app is served on 127.0.0.1 explicitly, and buildApp waits until it is
+// listening, rather than handing supertest a bare Express app. Supertest
+// would listen on "::" and then connect to 127.0.0.1; on macOS another local
+// process bound to 127.0.0.1 on the same ephemeral port can take that
+// connection, and the request hangs or reaches the wrong server. (It also
+// re-listens on "::" if handed a server that is not listening yet.)
 
 process.env.NODE_ENV = "test";
 
 const fs = require("fs");
+const http = require("http");
 const os = require("os");
 const path = require("path");
 const request = require("supertest");
@@ -17,25 +25,36 @@ function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ctquest-test-"));
 }
 
-// Builds an app on a temporary database. Pass dbPath to open an existing file
-// (the migration tests do), and env to override settings.
-function buildApp({ dbPath = null, env = {} } = {}) {
+// Builds an app on a temporary database and resolves once it is listening.
+// Pass dbPath to open an existing file (the migration tests do), and env to
+// override settings.
+async function buildApp({ dbPath = null, env = {} } = {}) {
   const dir = dbPath ? path.dirname(dbPath) : makeTempDir();
   const resolvedDbPath = dbPath || path.join(dir, "app.db");
   const config = loadConfig({ ...process.env, DB_PATH: resolvedDbPath, ...env });
-  const app = createApp({ config, log: () => {} });
-  const store = app.locals.store;
+  const expressApp = createApp({ config, log: () => {} });
+  const store = expressApp.locals.store;
+  const server = http.createServer(expressApp);
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+
+  function close() {
+    server.closeAllConnections();
+    server.close();
+    store.close();
+  }
 
   return {
-    app,
+    app: server,
+    expressApp,
     store,
     dir,
     dbPath: resolvedDbPath,
-    close() {
-      store.close();
-    },
+    close,
     cleanup() {
-      store.close();
+      close();
       fs.rmSync(dir, { recursive: true, force: true });
     }
   };

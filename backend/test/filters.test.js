@@ -7,7 +7,7 @@ const request = require("supertest");
 const { buildApp, login, startAttempt } = require("./helpers");
 
 test("event filters and picker endpoints", async t => {
-  const ctx = buildApp();
+  const ctx = await buildApp();
   t.after(() => ctx.cleanup());
   const { app } = ctx;
   const token = await login(app);

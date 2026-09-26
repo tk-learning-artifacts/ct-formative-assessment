@@ -47,7 +47,7 @@ test("legacy fixed-salt hashes still verify and are flagged for rehash", () => {
 });
 
 test("logging in with a legacy hash rewrites it in the new format", async t => {
-  const ctx = buildApp();
+  const ctx = await buildApp();
   t.after(() => ctx.cleanup());
   const legacy = crypto.scryptSync("changeme123", "ct-quest-salt", 64).toString("hex");
   ctx.store.db.prepare("UPDATE users SET password_hash = ? WHERE email = ?").run(legacy, "teacher@ctquest.local");

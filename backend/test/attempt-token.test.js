@@ -7,7 +7,7 @@ const { buildApp, startAttempt, submit } = require("./helpers");
 const { hashAttemptToken } = require("../src/security");
 
 test("attempt tokens and deadlines", async t => {
-  const ctx = buildApp({ env: { SUBMIT_GRACE_SECONDS: "60" } });
+  const ctx = await buildApp({ env: { SUBMIT_GRACE_SECONDS: "60" } });
   t.after(() => ctx.cleanup());
   const { app, store } = ctx;
 

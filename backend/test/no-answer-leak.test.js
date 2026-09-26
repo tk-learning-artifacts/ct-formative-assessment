@@ -10,7 +10,7 @@ const { PUBLIC_FILES } = require("../src/app");
 const ANSWER_KEYS = ["answer", "answerIndex", "correctIndex", "correct_index", "accepted", "rubric", "solution"];
 
 test("answer keys never reach students", async t => {
-  const ctx = buildApp();
+  const ctx = await buildApp();
   t.after(() => ctx.cleanup());
   const { app } = ctx;
 

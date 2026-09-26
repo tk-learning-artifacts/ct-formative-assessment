@@ -6,7 +6,7 @@ const request = require("supertest");
 const { buildApp, login, startAttempt, submit } = require("./helpers");
 
 test("teacher scoping", async t => {
-  const ctx = buildApp();
+  const ctx = await buildApp();
   t.after(() => ctx.cleanup());
   const { app, store } = ctx;
 
