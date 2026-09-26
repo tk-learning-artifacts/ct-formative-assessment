@@ -12,6 +12,7 @@ RUN addgroup -S app && adduser -S app -G app
 
 COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY backend/src                           ./backend/src
+COPY backend/content                       ./backend/content
 COPY backend/package.json                  ./backend/
 COPY web                                   ./web
 
