@@ -16,7 +16,7 @@
 //   recorded as "needs-review" with no model text kept, so unvalidated model
 //   output never reaches a student.
 
-const { buildScoringPayload, scrubResponseText } = require("./payload");
+const { buildScoringPayload, scrubResponseText, isBuiltPayload } = require("./payload");
 const { buildScoreSchema, validateModelScore, FEEDBACK_CODES } = require("./schema");
 
 const SCORING_SYSTEM_PROMPT = [
@@ -36,6 +36,22 @@ const disabledProvider = {
 // Providers register here in a later phase, e.g. providers.anthropic = config => ({ ... }).
 const providers = {};
 
+// Wraps a provider so its complete() only accepts payloads made by
+// buildScoringPayload(). A hand-built object is refused before any adapter
+// code runs.
+function guardProvider(provider) {
+  return {
+    name: provider.name,
+    enabled: provider.enabled,
+    async complete(request) {
+      if (!request || !isBuiltPayload(request.payload)) {
+        throw new Error("Refusing to send a payload that was not built by buildScoringPayload().");
+      }
+      return provider.complete(request);
+    }
+  };
+}
+
 function createAiProvider(aiConfig = {}) {
   const name = aiConfig.provider || "none";
 
@@ -53,7 +69,7 @@ function createAiProvider(aiConfig = {}) {
     throw new Error(`AI_PROVIDER is "${name}" but AI_API_KEY is not set.`);
   }
 
-  return factory(aiConfig);
+  return guardProvider(factory(aiConfig));
 }
 
 function needsReview(question, reason) {

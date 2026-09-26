@@ -16,6 +16,23 @@ const MAX_RESPONSE_CHARS = 4000;
 const REDACTED = "[redacted]";
 const BUILDER_ARGS = ["question", "responseText", "redact", "outcomes"];
 
+// Every payload this builder returns is deep-frozen and remembered here, so a
+// provider can refuse anything that did not come from the builder, or that
+// had fields added afterwards (see guardProvider in ./index.js).
+const BUILT_PAYLOADS = new WeakSet();
+
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.values(value).forEach(deepFreeze);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function isBuiltPayload(payload) {
+  return Boolean(payload && typeof payload === "object" && BUILT_PAYLOADS.has(payload));
+}
+
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -81,11 +98,14 @@ function buildScoringPayload(args) {
     payload.question.code = { language: String(question.code.language), source: String(question.code.source) };
   }
 
+  deepFreeze(payload);
+  BUILT_PAYLOADS.add(payload);
   return payload;
 }
 
 module.exports = {
   buildScoringPayload,
+  isBuiltPayload,
   scrubResponseText,
   MAX_RESPONSE_CHARS
 };

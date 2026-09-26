@@ -5,6 +5,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  providers,
   createAiProvider,
   scoreWithAi,
   buildScoringPayload,
@@ -93,6 +94,30 @@ test("the scoring payload has a fixed shape with no student identifiers", () => 
   assert.ok(!serialized.includes("S1234567D"));
   assert.ok(!serialized.includes("server-only marking notes"));
   assert.match(payload.response.text, /f\(0\) and f\(-3\)/);
+});
+
+test("providers only accept payloads made by the builder, unchanged", async () => {
+  const sent = [];
+  providers.fake = () => ({ name: "fake", enabled: true, async complete(request) { sent.push(request); return { output: null }; } });
+
+  try {
+    const provider = createAiProvider({ provider: "fake", apiKey: "k" });
+    const handBuilt = { task: "score-open-response", question: { prompt: "p" }, response: { text: "x" }, studentName: STUDENT_NAME };
+    await assert.rejects(() => provider.complete({ purpose: "p", payload: handBuilt }), /not built by buildScoringPayload/);
+    await assert.rejects(() => provider.complete({ purpose: "p", payload: { ...buildScoringPayload({ question, responseText: "x" }) } }), /not built/);
+    assert.equal(sent.length, 0);
+
+    const payload = buildScoringPayload({ question, responseText: "x" });
+    assert.equal(Reflect.set(payload, "studentName", STUDENT_NAME), false);
+    assert.equal(Reflect.set(payload.response, "name", STUDENT_NAME), false);
+    assert.equal(payload.studentName, undefined);
+
+    await provider.complete({ purpose: "p", payload });
+    assert.equal(sent.length, 1);
+    assert.ok(!JSON.stringify(sent[0]).includes(STUDENT_NAME));
+  } finally {
+    delete providers.fake;
+  }
 });
 
 test("the payload builder refuses any extra argument", () => {
