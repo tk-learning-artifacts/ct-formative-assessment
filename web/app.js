@@ -13,6 +13,10 @@
     eventTitle: "",
     durationMinutes: null,
     attemptId: null,
+    attemptToken: null,
+    deadlineMs: null,
+    timerId: null,
+    submitting: false,
     i: 0,
     answers: {},
     startedAt: null
@@ -73,11 +77,14 @@
   }
 
   async function api(path, options) {
+    // Merge rather than spread headers, so a caller's extra header (such as
+    // the attempt token) does not drop Content-Type and empty the JSON body.
+    const headers = new Headers(options && options.headers ? options.headers : {});
+    headers.set("Content-Type", "application/json");
+
     const response = await fetch(path, {
-      headers: {
-        "Content-Type": "application/json"
-      },
-      ...options
+      ...options,
+      headers
     });
 
     const payload = await response.json().catch(() => ({}));
@@ -87,6 +94,87 @@
     }
 
     return payload;
+  }
+
+  function formatRemaining(ms) {
+    const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function stopTimer() {
+    if (state.timerId) {
+      clearInterval(state.timerId);
+      state.timerId = null;
+    }
+  }
+
+  function updateTimerPill() {
+    const pill = document.getElementById("timerPill");
+
+    if (!pill || state.deadlineMs === null) {
+      return;
+    }
+
+    const remaining = state.deadlineMs - Date.now();
+    pill.textContent = `${formatRemaining(remaining)} left`;
+    pill.classList.toggle("pill--timer-low", remaining <= 60 * 1000);
+  }
+
+  // The server sends its own clock with the deadline, so a student whose
+  // device clock is wrong still gets the right amount of time.
+  function startTimer(deadlineAt, serverNow) {
+    stopTimer();
+
+    if (!deadlineAt) {
+      state.deadlineMs = null;
+      return;
+    }
+
+    const skew = serverNow ? Date.now() - Date.parse(serverNow) : 0;
+    state.deadlineMs = Date.parse(deadlineAt) + skew;
+
+    state.timerId = setInterval(() => {
+      updateTimerPill();
+
+      if (Date.now() >= state.deadlineMs) {
+        stopTimer();
+        submitAttempt({ auto: true });
+      }
+    }, 1000);
+  }
+
+  function captureCurrentSelection() {
+    const q = ACTIVE_BANK[state.i];
+    const selected = screen.querySelector('input[name="opt"]:checked');
+
+    if (q && selected) {
+      state.answers[q.id] = Number(selected.value);
+    }
+  }
+
+  async function submitAttempt({ auto = false } = {}) {
+    if (state.submitting || !state.attemptId) {
+      return;
+    }
+
+    captureCurrentSelection();
+    state.submitting = true;
+
+    try {
+      const payload = await api(`/api/attempts/${state.attemptId}/submit`, {
+        method: "POST",
+        headers: { "X-Attempt-Token": state.attemptToken },
+        body: JSON.stringify({ answers: state.answers })
+      });
+
+      stopTimer();
+      renderResults(payload, { auto });
+    } catch (error) {
+      state.submitting = false;
+      alert(auto ? `Time is up, but your answers could not be sent: ${error.message}` : error.message);
+    }
   }
 
   function renderStart(errorMessage) {
@@ -170,11 +258,14 @@
         state.eventTitle = payload.event.title;
         state.durationMinutes = payload.event.durationMinutes;
         state.attemptId = payload.attempt.id;
+        state.attemptToken = payload.attempt.token;
+        state.submitting = false;
         state.i = 0;
         state.answers = {};
         state.startedAt = Date.now();
         ACTIVE_BANK = payload.questions;
 
+        startTimer(payload.attempt.deadlineAt, payload.serverNow);
         renderQuestion();
       } catch (error) {
         renderStart(error.message);
@@ -201,6 +292,9 @@
       : "";
 
     const art = q.art ? `<pre>${escapeHtml(q.art)}</pre>` : "";
+    const code = q.code
+      ? `<p class="code-label">${escapeHtml(q.code.language)}</p><pre><code>${escapeHtml(q.code.source)}</code></pre>`
+      : "";
 
     const optionsHtml = q.options.map((opt, idx) => {
       const checked = chosen === idx ? "checked" : "";
@@ -234,7 +328,7 @@
             <div class="row" style="margin-top:16px">
               <span class="pill">${progressPct}% complete</span>
               <span class="pill">${escapeHtml(state.joinCode)}</span>
-              ${state.durationMinutes ? `<span class="pill">${state.durationMinutes} min limit</span>` : ""}
+              ${state.deadlineMs !== null ? `<span class="pill pill--timer" id="timerPill" role="timer" aria-live="off"></span>` : ""}
             </div>
           </div>
         </div>
@@ -251,6 +345,7 @@
 
             <p class="prompt-text">${escapeHtml(q.prompt)}</p>
             ${art}
+            ${code}
           </div>
 
           <div class="options-card">
@@ -269,6 +364,8 @@
       </section>
     `;
 
+    updateTimerPill();
+
     document.getElementById("backBtn").addEventListener("click", () => {
       state.i = clamp(state.i - 1, 0, ACTIVE_BANK.length - 1);
       renderQuestion();
@@ -284,16 +381,7 @@
       state.answers[q.id] = Number(selected.value);
 
       if (state.i === ACTIVE_BANK.length - 1) {
-        try {
-          const payload = await api(`/api/attempts/${state.attemptId}/submit`, {
-            method: "POST",
-            body: JSON.stringify({ answers: state.answers })
-          });
-
-          renderResults(payload);
-        } catch (error) {
-          alert(error.message);
-        }
+        await submitAttempt();
       } else {
         state.i += 1;
         renderQuestion();
@@ -301,7 +389,7 @@
     });
   }
 
-  function renderResults(payload) {
+  function renderResults(payload, { auto = false } = {}) {
     const score = payload.result.score;
     const perQ = payload.result.perQuestion;
     const max = payload.result.max;
@@ -365,6 +453,7 @@
         <div class="results-breakdown" style="margin-top:18px">
           <p class="panel-label">Submission Status</p>
           <h3>Saved Online</h3>
+          ${auto ? `<p class="notice">Time ran out, so your answers were submitted automatically.</p>` : ""}
           <p class="muted">Your answers were submitted to the backend successfully. Teachers can retrieve them from the event dashboard.</p>
         </div>
 
@@ -405,9 +494,13 @@
       state.eventTitle = "";
       state.durationMinutes = null;
       state.attemptId = null;
+      state.attemptToken = null;
+      state.deadlineMs = null;
+      state.submitting = false;
       state.i = 0;
       state.answers = {};
       state.startedAt = null;
+      stopTimer();
       renderStart();
     });
   }

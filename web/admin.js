@@ -80,24 +80,24 @@
         <div class="panel">
           <p class="panel-label">Teacher Login</p>
           <h2>Access Your Event Dashboard</h2>
-          <p class="muted">Use the seeded demo account first, then change it once you have your own user flow in place.</p>
+          <p class="muted">Sign in with your teacher account to create events and view results.</p>
 
           <div class="stack" style="margin-top:20px">
             <div>
               <label for="email">Email</label>
-              <input id="email" type="text" value="teacher@ctquest.local" autocomplete="username" />
+              <input id="email" type="email" autocomplete="username" />
             </div>
 
             <div>
               <label for="password">Password</label>
-              <input id="password" type="password" value="changeme123" autocomplete="current-password" />
+              <input id="password" type="password" autocomplete="current-password" />
             </div>
           </div>
 
           ${errorMessage ? `<p class="notice notice--danger">${escapeHtml(errorMessage)}</p>` : ""}
 
           <div class="nav">
-            <span class="pill">Demo account prefilled</span>
+            <span class="pill">Teacher access only</span>
             <button class="primary" id="loginBtn">Sign in</button>
           </div>
         </div>
@@ -142,7 +142,7 @@
           <span class="pill">${escapeHtml(event.join_code)}</span>
         </div>
         <div class="event-card__meta">
-          <span>${escapeHtml(event.selection_mode)}</span>
+          <span>${escapeHtml(event.selection_mode === "FILTER" ? event.filter_summary || "Custom filter" : event.selection_mode)}</span>
           <span>${event.duration_minutes ? `${event.duration_minutes} min` : "No timer"}</span>
           <span>${event.attempt_count} attempts</span>
         </div>
@@ -205,11 +205,18 @@
               <div>
                 <label for="selectionMode">Question set</label>
                 <select id="selectionMode">
-                  <option value="ALL">All levels</option>
-                  <option value="P5">P5 only</option>
-                  <option value="P6">P6 only</option>
-                  <option value="S1">S1 only</option>
-                  <option value="S2">S2 only</option>
+                  <optgroup label="CT Quest core">
+                    <option value="ALL">All levels</option>
+                    <option value="P5">P5 only</option>
+                    <option value="P6">P6 only</option>
+                    <option value="S1">S1 only</option>
+                    <option value="S2">S2 only</option>
+                  </optgroup>
+                  <optgroup label="RGSynapse (sample questions)">
+                    <option value="RGS:S1,S2">RGSynapse Sec 1 and Sec 2</option>
+                    <option value="RGS:S1">RGSynapse Sec 1</option>
+                    <option value="RGS:S2">RGSynapse Sec 2</option>
+                  </optgroup>
                 </select>
               </div>
               <div>
@@ -267,12 +274,18 @@
       const startAt = document.getElementById("startAt").value;
       const endAt = document.getElementById("endAt").value;
 
+      // Core options use the legacy selectionMode; RGSynapse options send the
+      // v2 filter shape that the Phase 2 picker will build in full.
+      const selection = selectionMode.startsWith("RGS:")
+        ? { filter: { audiences: ["rgsynapse"], levels: selectionMode.slice(4).split(",") } }
+        : { selectionMode };
+
       try {
         await api("/api/events", {
           method: "POST",
           body: JSON.stringify({
             title,
-            selectionMode,
+            ...selection,
             joinCode,
             durationMinutes: durationMinutes ? Number(durationMinutes) : null,
             startAt: startAt || null,
