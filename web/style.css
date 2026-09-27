@@ -1188,6 +1188,7 @@ textarea.open-response {
 @media (max-width: 999.98px) {
   .dash:has(.results-head) .dash__main {
     order: -1;
+    scroll-margin-top: 12px;
   }
 }
 

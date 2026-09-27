@@ -177,16 +177,29 @@ test("in order, the student holds only the questions up to the one they are on",
     assertAbsent(resumed.body, later(3), `${feedbackMode} resume`);
     assertAbsent((await status(app, attempt)).body, later(3), `${feedbackMode} status`);
 
-    // Submitting on P5-03: the later questions are never sent, before or
-    // after (unless the breakdown is released, which is its own rule).
+    // Submitting on P5-03: the later questions are never sent as questions,
+    // before or after.
     const submitted = await submit(app, attempt, { "P5-03": 0 });
     assert.equal(submitted.status, 200);
     assertAbsent(submitted.body, later(3), `${feedbackMode} submit`);
 
     const after = await getAttempt(app, attempt);
     assert.deepEqual(after.body.questions.map(q => q.id), ["P5-01", "P5-02", "P5-03"]);
-    if (!after.body.result.perQuestion) {
-      assertAbsent(after.body, later(3), `${feedbackMode} after submit`);
+
+    if (feedbackMode === "release") {
+      assert.equal(after.body.result.perQuestion, undefined);
+      assertAbsent(after.body, later(3), "release, after submit");
+    } else {
+      // Under "each" (and "end") the breakdown is visible straight after
+      // submit, and by design it lists every question with its key,
+      // including those the student never reached (ADR 0003 §3). The
+      // question content itself (the prompt) still never arrives.
+      later(3).forEach(q => {
+        assert.ok(!JSON.stringify(after.body).includes(JSON.stringify(q.prompt).slice(1, -1)), `the prompt of ${q.id} is in the breakdown`);
+        const row = after.body.result.perQuestion.find(item => item.id === q.id);
+        assert.equal(row.response, null, `${q.id} is stored blank`);
+        assert.ok(row.correctResponse, `${q.id} shows its key in the breakdown`);
+      });
     }
   }
 });
