@@ -426,6 +426,8 @@
     if (payload.attempt.status === "submitted") {
       state.joinCode = payload.event.joinCode;
       state.eventTitle = payload.event.title;
+      state.answers = saved.answers || {};
+      state.startedAt = payload.attempt.startedAt ? Date.parse(payload.attempt.startedAt) : null;
       renderResults(payload);
       return;
     }
