@@ -1016,3 +1016,103 @@ hr {
     justify-content: flex-end;
   }
 }
+
+/* ---------- Teacher event picker (admin.js): advanced filter section, ---------- */
+/* ---------- learning-outcome/ontology tree, and the per-outcome results list. --- */
+
+#advancedPicker {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface-soft);
+}
+
+#advancedPicker summary {
+  cursor: pointer;
+  font-weight: 800;
+  color: var(--text-main);
+  outline-offset: 4px;
+}
+
+#advancedPicker[open] summary {
+  margin-bottom: 12px;
+}
+
+.outcome-group {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+}
+
+.outcome-group legend {
+  padding: 0 6px;
+  font-weight: 800;
+  color: var(--text-soft);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.outcome-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.outcome-option input {
+  margin-top: 4px;
+}
+
+.tree {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 10px 12px;
+}
+
+.tree-branch > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.tree-branch > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tree-branch > summary::before {
+  content: "\25b8";
+  display: inline-block;
+  width: 1em;
+  color: var(--text-soft);
+}
+
+.tree-branch[open] > summary::before {
+  content: "\25be";
+}
+
+.tree-children,
+.tree-leaf {
+  margin-left: 1.4em;
+}
+
+.tree-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tree-count {
+  margin: 0;
+  font-weight: 700;
+}
+
+.result-row .row {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
