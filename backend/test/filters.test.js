@@ -48,13 +48,19 @@ test("event filters and picker endpoints", async t => {
     assert.deepEqual((await preview({ filter: { audiences: [], levels: ["P5"] } })).body.byAudience, { core: 5 });
 
     const s1Everyone = await preview({ filter: { levels: ["S1"], audiences: ["core", "rgsynapse"], types: ["mcq"] } });
-    assert.deepEqual(s1Everyone.body.byAudience, { core: 5, rgsynapse: 2 });
+    assert.deepEqual(s1Everyone.body.byAudience, { core: 5, rgsynapse: 12 });
 
     const rgs = await preview({ filter: { audiences: ["rgsynapse"], types: ["mcq"] } });
-    assert.deepEqual(rgs.body.questions.map(q => q.id), ["RGS-S1-01", "RGS-S1-02", "RGS-S2-01", "RGS-S2-02"]);
+    assert.deepEqual(rgs.body.questions.map(q => q.id), [
+      "RGS-S1-01", "RGS-S1-02", "RGS-S2-01", "RGS-S2-02",
+      "RGS-S1-03", "RGS-S1-04", "RGS-S1-05", "RGS-S1-06", "RGS-S1-07",
+      "RGS-S1-08", "RGS-S1-09", "RGS-S1-10", "RGS-S1-11", "RGS-S1-12",
+      "RGS-S2-03", "RGS-S2-04", "RGS-S2-05", "RGS-S2-06", "RGS-S2-07",
+      "RGS-S2-08", "RGS-S2-09", "RGS-S2-10", "RGS-S2-11", "RGS-S2-12"
+    ]);
 
     const byOutcome = await preview({ filter: { outcomes: ["LO-DEBUG-1"], audiences: ["core", "rgsynapse"] } });
-    assert.deepEqual(byOutcome.body.questions.map(q => q.id), ["S1-01", "RGS-S1-02"]);
+    assert.deepEqual(byOutcome.body.questions.map(q => q.id), ["S1-01", "RGS-S1-02", "RGS-S1-10", "RGS-S2-12"]);
 
     const outcomeAndLevel = await preview({ filter: { outcomes: ["LO-PATH-1"], levels: ["S2"] } });
     assert.deepEqual(outcomeAndLevel.body.questions.map(q => q.id), ["S2-02"]);
@@ -64,7 +70,7 @@ test("event filters and picker endpoints", async t => {
     assert.deepEqual(difficulty.body.byLevel, { S2: 5 });
 
     const types = await preview({ filter: { types: ["mcq"], audiences: ["core", "rgsynapse"] } });
-    assert.equal(types.body.count, 24);
+    assert.equal(types.body.count, 44);
 
     const picked = await preview({ filter: { questionIds: ["S2-05", "P5-01"] } });
     assert.deepEqual(picked.body.questions.map(q => q.id), ["P5-01", "S2-05"]);
@@ -79,7 +85,7 @@ test("event filters and picker endpoints", async t => {
     assert.ok(parent.body.count > child.body.count);
 
     const practiceRoot = await preview({ filter: { nodes: ["practice"], audiences: ["rgsynapse"], types: ["mcq"] } });
-    assert.equal(practiceRoot.body.count, 4);
+    assert.equal(practiceRoot.body.count, 20);
   });
 
   await t.test("preview count equals the created event's question count", async () => {
@@ -156,7 +162,11 @@ test("event filters and picker endpoints", async t => {
 
     assert.ok(all.body.outcomes.length > p5.body.outcomes.length);
     assert.ok(p5.body.outcomes.every(outcome => outcome.levels.includes("P5")));
-    assert.deepEqual(rgsS2.body.outcomes.map(outcome => outcome.id), ["LO-DEBUG-1", "LO-CODE-TRACE-1", "LO-AI-REVIEW-1", "LO-TRANSLATE-1"]);
+    assert.deepEqual(rgsS2.body.outcomes.map(outcome => outcome.id), [
+      "LO-DEBUG-1", "LO-CODE-TRACE-1", "LO-AI-REVIEW-1", "LO-TRANSLATE-1",
+      "LO-EVENTS-1", "LO-PARALLEL-1", "LO-SORT-RGS-1", "LO-ITERATE-1",
+      "LO-GENERALISE-1", "LO-SPEC-1", "LO-PROMPT-1", "LO-EXPRESS-1"
+    ]);
     assert.ok(rgsS2.body.outcomes.every(outcome => outcome.nodes.length > 0));
 
     assert.equal((await request(app).get("/api/outcomes?level=S9").set(auth)).status, 400);
@@ -175,7 +185,7 @@ test("event filters and picker endpoints", async t => {
   await t.test("RGSynapse questions reach students with their code and without keys", async () => {
     const created = await createEvent({ filter: { audiences: ["rgsynapse"], levels: ["S1"], types: ["mcq"] } });
     const started = await startAttempt(app, { joinCode: created.body.event.join_code });
-    assert.equal(started.questions.length, 2);
+    assert.equal(started.questions.length, 12);
     assert.equal(started.questions[0].code.language, "python");
     assert.equal(started.questions[0].answer, undefined);
   });
