@@ -1919,17 +1919,20 @@ textarea.open-response {
 .qp-row__title {
   flex: 1 1 160px;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-weight: 600;
   color: var(--color-ink);
 }
 
 .qp-row__answer {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   overflow-wrap: anywhere;
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: var(--status-positive);
 }
 
 .qp-row__body {
@@ -1955,11 +1958,14 @@ textarea.open-response {
 
 .qp-teacher__label {
   margin: 0 0 6px;
-  color: var(--color-muted);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+}
+
+/* Same look as a real MCQ option, plus room to wrap onto a second line for
+   the "Correct" tag on narrow screens, which the interactive .opt never
+   needs. */
+.qp-opt {
+  flex-wrap: wrap;
+  cursor: default;
 }
 
 .qp-teacher p + p {

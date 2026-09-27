@@ -62,6 +62,11 @@
     // (fetched with include: "questions", full teacher views) instead of the
     // plain title list.
     previewQuestionsOpen: false,
+    // Whether state.preview.questions (whatever is currently held) was
+    // fetched with include: "questions". previewQuestionsOpen can flip
+    // before that fetch resolves, so the render must check this too, or a
+    // stale summary-shaped list gets rendered as full teacher views.
+    previewIncludesQuestions: false,
     // The chosen event's frozen question snapshot (full teacher views), or
     // null until GET /api/events/:id/questions has loaded.
     eventQuestions: null
@@ -224,26 +229,28 @@
     return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
   }
 
-  // The correct answer, in short form, for a collapsed row.
+  // The correct answer, in short form, for a collapsed row. Only a genuine
+  // correctness statement gets the positive tone (ADR 0002: a status tone is
+  // paired with a word, and reserved for what it actually means); the AI
+  // rubric line is neutral, since it names a criterion count, not a result.
   function qpCompactAnswer(question) {
     if (question.type === "mcq") {
       const letter = String.fromCharCode(65 + question.answer.index);
-      return `✓ ${letter}: ${escapeHtml(truncate(question.options[question.answer.index], 40))}`;
+      return `<span class="tone-positive">✓ ${letter}: ${escapeHtml(truncate(question.options[question.answer.index], 40))}</span>`;
     }
 
     if (question.type === "code-trace") {
-      const firstLine = question.answer.output.split("\n")[0];
-      return `✓ output: ${escapeHtml(truncate(firstLine, 40))}`;
+      return `<span class="tone-positive">✓ output: ${escapeHtml(truncate(question.answer.output, 40))}</span>`;
     }
 
     if (question.type === "parsons") {
       const n = question.answer.order.length;
-      return `✓ order: ${n} line${n === 1 ? "" : "s"}`;
+      return `<span class="tone-positive">✓ order: ${n} line${n === 1 ? "" : "s"}</span>`;
     }
 
     if (question.type === "open-response-ai") {
       const n = question.rubric.length;
-      return `AI rubric: ${n} level${n === 1 ? "" : "s"}`;
+      return `<span class="tone-neutral">AI rubric: ${n} level${n === 1 ? "" : "s"}</span>`;
     }
 
     return "";
@@ -298,9 +305,10 @@
   function qpTypeBody(question) {
     if (question.type === "mcq") {
       const options = question.options.map((option, i) => `
-        <label class="opt">
+        <label class="opt qp-opt">
           <input type="radio" disabled ${i === question.answer.index ? "checked" : ""} />
           <span class="opt__text">${escapeHtml(option)}</span>
+          ${i === question.answer.index ? `<span class="tag tag--accent">Correct</span>` : ""}
         </label>
       `).join("");
 
@@ -368,7 +376,7 @@
       return "";
     }
 
-    return `<div class="qp-teacher"><p class="qp-teacher__label">Teacher only</p>${bits.join("")}</div>`;
+    return `<div class="qp-teacher"><p class="qp-teacher__label"><span class="tag">Teacher only</span></p>${bits.join("")}</div>`;
   }
 
   function qpQuestionBody(question) {
@@ -379,7 +387,7 @@
     }
 
     if (question.code) {
-      parts.push(`<p class="code-label">${escapeHtml(question.code.language)}</p><pre>${escapeHtml(question.code.source)}</pre>`);
+      parts.push(`<p class="code-label">${escapeHtml(question.code.language)}</p><pre class="codebox">${escapeHtml(question.code.source)}</pre>`);
     }
 
     parts.push(qpTypeBody(question));
@@ -564,8 +572,11 @@
     const requestId = (previewRequestId += 1);
     const fromPreset = !advancedIsOpen() && Boolean(state.quick);
     const body = fromPreset ? { preset: state.quick } : { filter: pickerFilter() };
+    // Captured now, not read again after the await: previewQuestionsOpen can
+    // change while this request is in flight.
+    const requestedQuestions = state.previewQuestionsOpen;
 
-    if (state.previewQuestionsOpen) {
+    if (requestedQuestions) {
       body.include = "questions";
     }
 
@@ -580,6 +591,7 @@
       }
 
       state.preview = payload;
+      state.previewIncludesQuestions = requestedQuestions;
       state.previewError = null;
 
       if (fromPreset && !state.pickerEdited) {
@@ -627,6 +639,10 @@
     // aiRequired: some matched question is AI-scored. warning: AI is off, so
     // those answers will wait for the teacher to mark them.
     const aiFlag = preview.aiRequired;
+    // state.preview.questions may still be the plain summary shape if the
+    // toggle just turned on and its include: "questions" fetch has not
+    // resolved yet: render the compact list only once both agree.
+    const showQuestionPreview = state.previewQuestionsOpen && state.previewIncludesQuestions;
 
     el.innerHTML = `
       <div class="row">
@@ -645,11 +661,13 @@
         <dt>Types</dt><dd>${counts(preview.byType)}</dd>
         <dt>Audiences</dt><dd>${counts(preview.byAudience)}</dd>
       </dl>
-      ${state.previewQuestionsOpen
+      ${showQuestionPreview
         ? renderQuestionPreview(preview.questions)
-        : (preview.questions && preview.questions.length
-          ? `<ol class="preview-list">${preview.questions.map(q => `<li>${escapeHtml(q.title)} <span class="muted">${escapeHtml(q.level)} · ${escapeHtml(q.type)}</span></li>`).join("")}</ol>`
-          : "")
+        : (state.previewQuestionsOpen
+          ? `<p class="muted small">Loading questions&hellip;</p>`
+          : (preview.questions && preview.questions.length
+            ? `<ol class="preview-list">${preview.questions.map(q => `<li>${escapeHtml(q.title)} <span class="muted">${escapeHtml(q.level)} · ${escapeHtml(q.type)}</span></li>`).join("")}</ol>`
+            : ""))
       }
     `;
 
@@ -669,7 +687,7 @@
       });
     }
 
-    if (state.previewQuestionsOpen) {
+    if (showQuestionPreview) {
       bindQuestionPreviewEvents(el);
     }
   }
