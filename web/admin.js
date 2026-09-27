@@ -1,8 +1,5 @@
 (function () {
   const screen = document.getElementById("screen");
-  const themeToggle = document.getElementById("themeToggle");
-  const root = document.documentElement;
-  const THEME_KEY = "ct-quest-theme";
   const TOKEN_KEY = "ct-quest-token";
   const PREVIEW_DEBOUNCE_MS = 300;
 
@@ -38,36 +35,6 @@
 
   let previewTimer = null;
   let previewRequestId = 0;
-
-  function getPreferredTheme() {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === "light" || saved === "dark") {
-      return saved;
-    }
-
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  }
-
-  function updateThemeButton(theme) {
-    const pressed = theme === "dark";
-    themeToggle.setAttribute("aria-pressed", pressed ? "true" : "false");
-    themeToggle.setAttribute("aria-label", pressed ? "Switch to light mode" : "Switch to dark mode");
-  }
-
-  function applyTheme(theme) {
-    root.setAttribute("data-theme", theme);
-    localStorage.setItem(THEME_KEY, theme);
-    updateThemeButton(theme);
-  }
-
-  function initTheme() {
-    applyTheme(getPreferredTheme());
-
-    themeToggle.addEventListener("click", () => {
-      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-      applyTheme(next);
-    });
-  }
 
   async function api(path, options) {
     const headers = new Headers(options && options.headers ? options.headers : {});
@@ -108,27 +75,28 @@
     "job-error": "the scoring job failed"
   };
 
-  // Status line for an AI-scored answer, for the teacher only.
-  function aiStatusText(answer) {
+  // Status line for an AI-scored answer, for the teacher only, with the
+  // status tone it is drawn in.
+  function aiStatus(answer) {
     const detail = answer.detail || {};
 
     if (detail.review) {
-      return `Marked by you: ${detail.review.score}/${answer.maxPoints}`;
+      return { tone: "positive", text: `Marked by you: ${detail.review.score}/${answer.maxPoints}` };
     }
 
     if (answer.scoreStatus === "pending") {
-      return "Being marked by AI";
+      return { tone: "pending", text: "Being marked by AI" };
     }
 
     if (answer.scoreStatus === "needs-review") {
-      return `Needs your mark: ${AI_REASONS[detail.reason] || "AI could not score it"}`;
+      return { tone: "warning", text: `Needs your mark: ${AI_REASONS[detail.reason] || "AI could not score it"}` };
     }
 
     if (detail.ai === "scored") {
-      return `AI scored ${answer.earnedPoints}/${answer.maxPoints} (criterion "${detail.criterionId}", ${detail.feedbackCode})`;
+      return { tone: "positive", text: `AI scored ${answer.earnedPoints}/${answer.maxPoints} (criterion "${detail.criterionId}", ${detail.feedbackCode})` };
     }
 
-    return answer.response ? `Scored ${answer.earnedPoints}/${answer.maxPoints}` : "No answer";
+    return { tone: "neutral", text: answer.response ? `Scored ${answer.earnedPoints}/${answer.maxPoints}` : "No answer" };
   }
 
   // Each AI-scored answer, with a small form to set the score and feedback.
@@ -140,23 +108,30 @@
         const aiFeedback = detail.ai === "scored" && detail.feedback ? detail.feedback : "";
         const reviewFeedback = detail.review && detail.review.feedback ? detail.review.feedback : "";
         const key = escapeHtml(`${attempt.id}-${answer.questionId}`);
+        const status = aiStatus(answer);
 
         return `
-          <div class="ai-review">
-            <strong>${escapeHtml(answer.questionId)}</strong>
-            <span class="${answer.scoreStatus === "scored" ? "" : "bad"}">${escapeHtml(aiStatusText(answer))}</span>
+          <div class="ai-review ${status.tone === "warning" ? "ai-review--attention" : ""}">
+            <div class="row">
+              <strong class="mono small">${escapeHtml(answer.questionId)}</strong>
+              <span class="tag status status--${status.tone}">${escapeHtml(status.text)}</span>
+            </div>
             <p class="ai-review__answer">${escapeHtml(answer.response && answer.response.text ? answer.response.text : "No answer")}</p>
-            ${aiFeedback ? `<p class="muted">AI feedback: ${escapeHtml(aiFeedback)}</p>` : ""}
+            ${aiFeedback ? `<p class="muted small">AI feedback: ${escapeHtml(aiFeedback)}</p>` : ""}
             ${attempt.status === "submitted" ? `
-              <div class="row" style="margin-top:8px">
-                <label for="score-${key}">Score</label>
-                <input id="score-${key}" type="number" min="0" max="${answer.maxPoints}" step="1" value="${answer.earnedPoints}" />
-                <span>/ ${answer.maxPoints}</span>
-              </div>
-              <label for="feedback-${key}">Feedback for the student (optional)</label>
-              <textarea id="feedback-${key}" maxlength="500">${escapeHtml(reviewFeedback)}</textarea>
-              <div class="nav">
-                <button class="secondary" data-review-attempt="${attempt.id}" data-review-question="${escapeHtml(answer.questionId)}" data-review-key="${key}">Save mark</button>
+              <div class="ai-review__form">
+                <div class="field">
+                  <label for="score-${key}">Score</label>
+                  <span class="ai-review__score">
+                    <input id="score-${key}" type="number" min="0" max="${answer.maxPoints}" step="1" value="${answer.earnedPoints}" />
+                    <span>/ ${answer.maxPoints}</span>
+                  </span>
+                </div>
+                <div class="field field--feedback">
+                  <label for="feedback-${key}">Feedback for the student <span class="field__hint">optional</span></label>
+                  <textarea id="feedback-${key}" maxlength="500" rows="1">${escapeHtml(reviewFeedback)}</textarea>
+                </div>
+                <button class="btn btn--secondary" data-review-attempt="${attempt.id}" data-review-question="${escapeHtml(answer.questionId)}" data-review-key="${key}">Save mark</button>
               </div>
             ` : ""}
           </div>
@@ -166,45 +141,33 @@
 
   function renderLogin(errorMessage) {
     screen.innerHTML = `
-      <section class="card start-layout">
-        <div class="panel">
-          <p class="panel-label">Teacher Login</p>
-          <h2>Access Your Event Dashboard</h2>
-          <p class="muted">Sign in with your teacher account to create events and view results.</p>
-
-          <div class="stack" style="margin-top:20px">
-            <div>
-              <label for="email">Email</label>
-              <input id="email" type="email" autocomplete="username" />
-            </div>
-
-            <div>
-              <label for="password">Password</label>
-              <input id="password" type="password" autocomplete="current-password" />
-            </div>
+      <section class="card join">
+        <form class="stack" id="loginForm" novalidate>
+          <div class="section-heading">
+            <h2>Teacher sign-in</h2>
+            <p>Sign in to create tests and see your students' results.</p>
           </div>
 
-          ${errorMessage ? `<p class="notice notice--danger">${escapeHtml(errorMessage)}</p>` : ""}
-
-          <div class="nav">
-            <span class="pill">Teacher access only</span>
-            <button class="primary" id="loginBtn">Sign in</button>
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" type="email" autocomplete="username" />
           </div>
-        </div>
 
-        <div class="panel panel--accent">
-          <p class="panel-label">What You Can Do</p>
-          <h2>Launch Events Fast</h2>
-          <ul class="feature-list">
-            <li>Create a new event with a unique join code.</li>
-            <li>Choose a level track or release all questions.</li>
-            <li>Monitor submissions and scores from the same page.</li>
-          </ul>
-        </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" />
+          </div>
+
+          ${errorMessage ? `<p class="error-text" role="alert">${escapeHtml(errorMessage)}</p>` : ""}
+
+          <button type="submit" class="btn btn--accent btn--block" id="loginBtn">Sign in</button>
+        </form>
       </section>
     `;
 
-    document.getElementById("loginBtn").addEventListener("click", async () => {
+    // A form, so Enter in either field signs in too.
+    document.getElementById("loginForm").addEventListener("submit", async event => {
+      event.preventDefault();
       const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
 
@@ -309,36 +272,36 @@
     }
 
     if (state.previewError) {
-      el.innerHTML = `<p class="notice notice--danger" style="margin-top:0">${escapeHtml(state.previewError)}</p>`;
+      el.innerHTML = `<p class="notice notice--critical">${escapeHtml(state.previewError)}</p>`;
       return;
     }
 
     if (!state.preview) {
-      el.innerHTML = `<p class="muted">Choose what to test above to see a live preview.</p>`;
+      el.innerHTML = `<p class="muted">Pick what to test and the matching questions show up here.</p>`;
       return;
     }
 
     const preview = state.preview;
-    const byLevel = Object.entries(preview.byLevel || {}).map(([level, count]) => `${escapeHtml(level)}: ${count}`).join(", ") || "&mdash;";
-    const byType = Object.entries(preview.byType || {}).map(([type, count]) => `${escapeHtml(type)}: ${count}`).join(", ") || "&mdash;";
-    const byAudience = Object.entries(preview.byAudience || {}).map(([audience, count]) => `${escapeHtml(audience)}: ${count}`).join(", ") || "&mdash;";
+    const counts = obj => Object.entries(obj || {}).map(([key, count]) => `${escapeHtml(key)} ${count}`).join(", ") || "&mdash;";
     // aiRequired: some matched question is AI-scored. warning: AI is off, so
     // those answers will wait for the teacher to mark them.
     const aiFlag = preview.aiRequired;
 
     el.innerHTML = `
-      ${preview.count === 0 ? `<p class="notice notice--danger" style="margin-top:0">No questions match this selection. Widen it before creating the event.</p>` : ""}
-      <div class="row" style="margin-top:0">
-        <span class="pill">${preview.count} question${preview.count === 1 ? "" : "s"}</span>
-        <span class="pill">${preview.totalPoints} point${preview.totalPoints === 1 ? "" : "s"}</span>
-        ${aiFlag !== undefined ? `<span class="pill">${aiFlag ? "Uses AI scoring" : "No AI scoring"}</span>` : ""}
+      <div class="row">
+        <h3>${preview.count} question${preview.count === 1 ? "" : "s"}</h3>
+        <span class="muted small">${preview.totalPoints} point${preview.totalPoints === 1 ? "" : "s"}</span>
+        ${aiFlag !== undefined ? `<span class="tag ${aiFlag ? "tag--accent" : ""}">${aiFlag ? "Uses AI scoring" : "No AI scoring"}</span>` : ""}
       </div>
-      ${preview.warning ? `<p class="notice">${escapeHtml(preview.warning)}</p>` : ""}
-      <p class="muted">By level: ${byLevel}</p>
-      <p class="muted">By type: ${byType}</p>
-      <p class="muted">By audience: ${byAudience}</p>
+      ${preview.count === 0 ? `<p class="notice notice--critical mt-s">No questions match. Widen the selection before you create the event.</p>` : ""}
+      ${preview.warning ? `<p class="notice notice--warning mt-s">${escapeHtml(preview.warning)}</p>` : ""}
+      <dl class="preview-facts">
+        <dt>Levels</dt><dd>${counts(preview.byLevel)}</dd>
+        <dt>Types</dt><dd>${counts(preview.byType)}</dd>
+        <dt>Audiences</dt><dd>${counts(preview.byAudience)}</dd>
+      </dl>
       ${preview.questions && preview.questions.length
-        ? `<ul class="rule-list" style="margin-top:12px">${preview.questions.map(q => `<li>${escapeHtml(q.title)} <span class="muted" style="margin:0">(${escapeHtml(q.level)}, ${escapeHtml(q.type)})</span></li>`).join("")}</ul>`
+        ? `<ol class="preview-list">${preview.questions.map(q => `<li>${escapeHtml(q.title)} <span class="muted">${escapeHtml(q.level)} · ${escapeHtml(q.type)}</span></li>`).join("")}</ol>`
         : ""
       }
     `;
@@ -374,7 +337,7 @@
       const level = state.catalog.levels.find(item => item.id === levelId) || { id: levelId, label: levelId };
       const checked = state.picker.levels.includes(levelId);
       return `
-        <label class="row" style="font-weight:700">
+        <label class="check">
           <input type="checkbox" data-picker-level="${escapeHtml(levelId)}" ${checked ? "checked" : ""} />
           ${escapeHtml(level.label || level.id)}
         </label>
@@ -393,7 +356,7 @@
     const visible = (state.outcomes || []).filter(outcomeMatchesAudienceAndLevel);
 
     if (!visible.length) {
-      return `<p class="muted" style="margin-top:0">No learning outcomes match this audience and level yet.</p>`;
+      return `<p class="muted small">No learning outcomes match this audience and level yet.</p>`;
     }
 
     const groups = new Map();
@@ -406,7 +369,7 @@
       groups.get(groupId).push(outcome);
     });
 
-    return Array.from(groups.entries()).map(([nodeId, outcomes]) => {
+    return `<div class="outcome-groups">${Array.from(groups.entries()).map(([nodeId, outcomes]) => {
       const node = nodesById.get(nodeId);
       const heading = node ? node.label : "Other";
 
@@ -419,13 +382,13 @@
             return `
               <label class="outcome-option" for="${inputId}">
                 <input type="checkbox" id="${inputId}" data-picker-outcome="${escapeHtml(outcome.id)}" ${checked ? "checked" : ""} />
-                <span>${escapeHtml(outcome.statement)} <span class="muted" style="margin:0">(${outcome.questionCount} question${outcome.questionCount === 1 ? "" : "s"})</span></span>
+                <span>${escapeHtml(outcome.statement)} <span class="muted">(${outcome.questionCount})</span></span>
               </label>
             `;
           }).join("")}
         </fieldset>
       `;
-    }).join("");
+    }).join("")}</div>`;
   }
 
   // A keyboard-operable expandable tree using native <details>/<summary>, one
@@ -467,7 +430,7 @@
         <label class="tree-row" for="${inputId}">
           <input type="checkbox" id="${inputId}" data-picker-node="${escapeHtml(node.id)}" ${checked ? "checked" : ""} />
           <span>${escapeHtml(node.label)}</span>
-          <span class="muted tree-count">${count} question${count === 1 ? "" : "s"}</span>
+          <span class="tree-count">${count} question${count === 1 ? "" : "s"}</span>
         </label>
       `;
 
@@ -498,9 +461,9 @@
       const inputId = `type-${type.type}`;
 
       return `
-        <label class="row" for="${inputId}" style="font-weight:700 ${active ? "" : "opacity:0.6"}">
+        <label class="check ${active ? "" : "check--disabled"}" for="${inputId}">
           <input type="checkbox" id="${inputId}" data-picker-type="${escapeHtml(type.type)}" ${checked ? "checked" : ""} ${active ? "" : "disabled"} />
-          ${escapeHtml(type.label)} ${active ? "" : `<span class="pill">coming soon</span>`}
+          ${escapeHtml(type.label)}${active ? "" : ` <span class="muted small">(coming later)</span>`}
         </label>
       `;
     }).join("");
@@ -508,61 +471,66 @@
 
   function renderAdvancedPicker() {
     if (state.catalogFailed) {
-      return `<p class="muted">The question picker could not load. The simple options above still work.</p>`;
+      return `<p class="muted picker">The question picker could not load. The question set above still works.</p>`;
     }
 
     if (!state.catalog || !state.ontology || !state.outcomes) {
-      return `<p class="muted">Loading the question picker&hellip;</p>`;
+      return `<p class="muted picker">Loading the question picker&hellip;</p>`;
     }
 
     return `
-      <div class="stack" style="margin-top:14px">
-        <div>
-          <p class="panel-label" style="margin-bottom:6px">Audience</p>
-          <div class="row">
-            ${state.catalog.audiences.map(audience => `
-              <label class="row" style="font-weight:700">
-                <input type="radio" name="pickerAudience" value="${escapeHtml(audience.id)}" ${state.picker.audience === audience.id ? "checked" : ""} />
-                ${escapeHtml(audience.label)}
-              </label>
-            `).join("")}
+      <div class="picker">
+        <div class="picker__filters">
+          <p class="notice">While this is open, it replaces the question set above.</p>
+
+          <div class="picker__row">
+            <fieldset>
+              <legend class="legend">Audience</legend>
+              <div class="row">
+                ${state.catalog.audiences.map(audience => `
+                  <label class="check">
+                    <input type="radio" name="pickerAudience" value="${escapeHtml(audience.id)}" ${state.picker.audience === audience.id ? "checked" : ""} />
+                    ${escapeHtml(audience.label)}
+                  </label>
+                `).join("")}
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend class="legend">Levels</legend>
+              <div class="row" id="pickerLevels">${renderLevelCheckboxes()}</div>
+            </fieldset>
+
+            <fieldset>
+              <legend class="legend">Difficulty, 1 to 5</legend>
+              <div class="picker__difficulty">
+                <label class="visually-hidden" for="difficultyMin">Lowest difficulty</label>
+                <input id="difficultyMin" type="number" min="1" max="5" placeholder="From" value="${escapeHtml(state.picker.difficultyMin)}" />
+                <label class="visually-hidden" for="difficultyMax">Highest difficulty</label>
+                <input id="difficultyMax" type="number" min="1" max="5" placeholder="To" value="${escapeHtml(state.picker.difficultyMax)}" />
+              </div>
+            </fieldset>
           </div>
+          <p class="picker__hint">No levels ticked means every level this audience offers.</p>
+
+          <fieldset>
+            <legend class="legend">Question types</legend>
+            <div class="row" id="pickerTypes">${renderTypeCheckboxes()}</div>
+            <p class="picker__hint">No types ticked means every type except AI-scored ones. Tick those to include them.</p>
+          </fieldset>
+
+          <fieldset>
+            <legend class="legend">Learning outcomes</legend>
+            <div id="pickerOutcomes">${renderOutcomeGroups()}</div>
+          </fieldset>
+
+          <fieldset>
+            <legend class="legend">CT capabilities</legend>
+            <div class="tree" id="pickerTree">${renderOntologyTree()}</div>
+          </fieldset>
         </div>
 
-        <div>
-          <p class="panel-label" style="margin-bottom:6px">Levels</p>
-          <div class="row" id="pickerLevels">${renderLevelCheckboxes()}</div>
-          <p class="muted" style="margin-top:6px">No levels checked means every level this audience offers.</p>
-        </div>
-
-        <div>
-          <p class="panel-label" style="margin-bottom:6px">Learning outcomes</p>
-          <div id="pickerOutcomes">${renderOutcomeGroups()}</div>
-        </div>
-
-        <div>
-          <p class="panel-label" style="margin-bottom:6px">Capabilities (CT ontology)</p>
-          <div class="tree" id="pickerTree">${renderOntologyTree()}</div>
-        </div>
-
-        <div>
-          <p class="panel-label" style="margin-bottom:6px">Question types</p>
-          <div class="row" id="pickerTypes">${renderTypeCheckboxes()}</div>
-          <p class="muted" style="margin-top:6px">No types checked means every type except AI-scored ones, which are only included when checked.</p>
-        </div>
-
-        <div class="row">
-          <div>
-            <label for="difficultyMin">Difficulty min</label>
-            <input id="difficultyMin" type="number" min="1" max="5" value="${escapeHtml(state.picker.difficultyMin)}" style="width:6rem" />
-          </div>
-          <div>
-            <label for="difficultyMax">Difficulty max</label>
-            <input id="difficultyMax" type="number" min="1" max="5" value="${escapeHtml(state.picker.difficultyMax)}" style="width:6rem" />
-          </div>
-        </div>
-
-        <div class="prompt-card" id="previewPanel" style="padding:16px"></div>
+        <aside class="picker__preview" id="previewPanel" aria-live="polite" aria-label="Preview"></aside>
       </div>
     `;
   }
@@ -699,37 +667,57 @@
     return dir === "desc" ? sorted.reverse() : sorted;
   }
 
+  // A sortable column header. Both tables share one sort, as before.
   function outcomesSummaryHeader(label, key) {
     const active = state.outcomesSort.key === key;
-    const arrow = active ? (state.outcomesSort.dir === "asc" ? "&uarr;" : "&darr;") : "";
-    return `<button type="button" class="secondary" data-sort-key="${key}" style="padding:8px 12px">${escapeHtml(label)} ${arrow}</button>`;
+    const arrow = active ? (state.outcomesSort.dir === "asc" ? " &uarr;" : " &darr;") : "";
+    const sort = active ? (state.outcomesSort.dir === "asc" ? "ascending" : "descending") : "none";
+    return `<th scope="col" aria-sort="${sort}"><button type="button" class="sort-btn" data-sort-key="${key}">${escapeHtml(label)}${arrow}</button></th>`;
   }
 
-  function renderOutcomeRow(row, labelText) {
+  function renderOutcomeRow(row, labelText, indent) {
+    const label = `<td class="${indent ? "indent" : ""}">${escapeHtml(labelText)}`;
+
     if (!row.submittedAttempts) {
       return `
-        <li class="result-row">
-          <span>${escapeHtml(labelText)}</span>
-          <span class="muted" style="margin:0">No submissions yet</span>
-        </li>
+        <tr>
+          ${label}</td>
+          <td colspan="3" class="muted">No submissions yet</td>
+        </tr>
       `;
     }
 
-    const lateNote = row.lateAttempts ? ` <span class="pill">${row.lateAttempts} late</span>` : "";
+    const lateNote = row.lateAttempts ? ` <span class="tag status status--warning">${row.lateAttempts} late</span>` : "";
     // AI-scored answers still waiting for a mark are left out of the average.
-    const unmarkedNote = row.unmarkedAnswers ? ` <span class="pill">${row.unmarkedAnswers} not marked yet</span>` : "";
+    const unmarkedNote = row.unmarkedAnswers ? ` <span class="tag status status--pending">${row.unmarkedAnswers} not marked yet</span>` : "";
     return `
-      <li class="result-row">
-        <span>${escapeHtml(labelText)}</span>
-        <span class="row" style="gap:16px">
-          <span>${row.submittedAttempts} student${row.submittedAttempts === 1 ? "" : "s"}</span>
-          ${row.meanPercentage === null
-            ? `<span class="muted" style="margin:0">No marked answers yet</span>`
-            : `<span class="${row.meanPercentage < 50 ? "bad" : "good"}">${row.meanPercentage}% average</span>`}
-          <span class="${row.belowHalfCount ? "bad" : "muted"}" style="margin:0">${row.belowHalfCount} below 50%</span>
-          ${lateNote}${unmarkedNote}
-        </span>
-      </li>
+      <tr>
+        ${label}${lateNote}${unmarkedNote}</td>
+        <td>${row.submittedAttempts}</td>
+        ${row.meanPercentage === null
+          ? `<td class="muted">Not marked</td>`
+          : `<td class="${row.meanPercentage < 50 ? "tone-critical" : "tone-positive"}">${row.meanPercentage}%</td>`}
+        <td class="${row.belowHalfCount ? "tone-critical" : "muted"}">${row.belowHalfCount}</td>
+      </tr>
+    `;
+  }
+
+  function outcomesTable(caption, firstColumn, rows, labelFor) {
+    return `
+      <div class="table-wrap">
+        <table class="data-table">
+          <caption>${escapeHtml(caption)}</caption>
+          <thead>
+            <tr>
+              <th scope="col">${escapeHtml(firstColumn)}</th>
+              ${outcomesSummaryHeader("Students", "submittedAttempts")}
+              ${outcomesSummaryHeader("Average", "meanPercentage")}
+              ${outcomesSummaryHeader("Below 50%", "belowHalfCount")}
+            </tr>
+          </thead>
+          <tbody>${rows.map(labelFor).join("")}</tbody>
+        </table>
+      </div>
     `;
   }
 
@@ -742,26 +730,22 @@
     const nodeRows = sortRows(state.outcomesSummary.ontologyNodes, state.outcomesSort.key, state.outcomesSort.dir);
 
     return `
-      <div class="results-breakdown" style="margin-top:18px">
-        <p class="panel-label">Per-outcome results</p>
-        <div class="row" style="margin-top:6px">
-          ${outcomesSummaryHeader("Students", "submittedAttempts")}
-          ${outcomesSummaryHeader("Average", "meanPercentage")}
-          ${outcomesSummaryHeader("Below 50%", "belowHalfCount")}
+      <section class="card">
+        <div class="section-heading">
+          <h2>Results by outcome</h2>
+          <p class="small">Averages leave out AI-scored answers that are not marked yet. Click a column to sort.</p>
         </div>
 
-        <p class="muted" style="margin-top:14px">Learning outcomes</p>
         ${outcomeRows.length
-          ? `<ul class="event-grid" style="list-style:none;padding:0;margin:8px 0 0">${outcomeRows.map(row => renderOutcomeRow(row, row.statement)).join("")}</ul>`
+          ? outcomesTable("Learning outcomes", "Outcome", outcomeRows, row => renderOutcomeRow(row, row.statement, false))
           : `<p class="muted">No learning outcome has submissions yet.</p>`
         }
 
-        <p class="muted" style="margin-top:18px">CT capabilities</p>
         ${nodeRows.length
-          ? `<ul class="event-grid" style="list-style:none;padding:0;margin:8px 0 0">${nodeRows.map(row => renderOutcomeRow(row, `${row.topLevel ? "" : "  "}${row.label}`)).join("")}</ul>`
-          : `<p class="muted">No CT capability has submissions yet.</p>`
+          ? outcomesTable("CT capabilities", "Capability", nodeRows, row => renderOutcomeRow(row, row.label, !row.topLevel))
+          : `<p class="muted mt-m">No CT capability has submissions yet.</p>`
         }
-      </div>
+      </section>
     `;
   }
 
@@ -781,83 +765,92 @@
 
   function renderDashboard() {
     const eventCards = state.events.map(event => `
-      <button class="event-card ${state.selectedEventId === event.id ? "event-card--active" : ""}" data-event-id="${event.id}">
-        <div class="event-card__top">
-          <strong>${escapeHtml(event.title)}</strong>
-          <span class="pill">${escapeHtml(event.join_code)}</span>
-        </div>
-        <div class="event-card__meta">
-          <span>${escapeHtml(event.filter_summary || event.selection_mode)}</span>
-          <span>${event.duration_minutes ? `${event.duration_minutes} min` : "No timer"}</span>
-          <span>${event.attempt_count} attempts</span>
-        </div>
-      </button>
+      <li>
+        <button class="event-card ${state.selectedEventId === event.id ? "event-card--active" : ""}" data-event-id="${event.id}" ${state.selectedEventId === event.id ? `aria-current="true"` : ""}>
+          <span class="event-card__title">${escapeHtml(event.title)}</span>
+          <span class="tag tag--code">${escapeHtml(event.join_code)}</span>
+          <span class="event-card__meta">
+            <span>${escapeHtml(event.filter_summary || event.selection_mode)}</span>
+            <span>${event.duration_minutes ? `${event.duration_minutes} min` : "No time limit"}</span>
+            <span>${event.attempt_count} attempt${event.attempt_count === 1 ? "" : "s"}</span>
+          </span>
+        </button>
+      </li>
     `).join("");
+
+    const formatTime = iso => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+    const attemptStatus = attempt => attempt.reset_at
+      ? `<span class="tag status status--neutral">Reset</span>`
+      : attempt.status === "submitted"
+        ? `<span class="tag status status--positive">Submitted</span>`
+        : `<span class="tag status status--pending">${escapeHtml(attempt.status === "started" ? "In progress" : attempt.status)}</span>`;
 
     const resultsEvent = state.results && state.results.event;
     const resultsBlock = state.results
       ? `
-        <div class="results-breakdown" style="margin-top:18px">
-          <p class="panel-label">Submissions</p>
-          <h3>${escapeHtml(resultsEvent.title)} (${escapeHtml(resultsEvent.join_code)})</h3>
-          <div class="row" style="margin-top:10px">
-            <span class="pill">${resultsEvent.breakdown_released ? "Breakdown visible to students" : "Breakdown hidden from students"}</span>
-            ${resultsEvent.results_released_at ? "" : `<button id="releaseBtn" class="secondary">Release results</button>`}
+        <section class="card">
+          <div class="results-head">
+            <div class="row">
+              <h2>${escapeHtml(resultsEvent.title)}</h2>
+              <span class="tag tag--code">${escapeHtml(resultsEvent.join_code)}</span>
+            </div>
+            <div class="row">
+              ${resultsEvent.breakdown_released
+                ? `<span class="tag status status--positive">Students can see their breakdown</span>`
+                : `<span class="tag status status--neutral">Breakdown hidden from students</span>`}
+              ${resultsEvent.results_released_at ? "" : `<button id="releaseBtn" class="btn btn--accent btn--sm">Release results</button>`}
+            </div>
           </div>
-          <div class="stack" style="margin-top:14px">
-            ${state.results.attempts.length
-              ? state.results.attempts.map(attempt => `
-                <div class="attempt-card">
-                  <div class="attempt-card__top">
-                    <strong>${escapeHtml(attempt.student_name)}</strong>
-                    <span class="${attempt.score === attempt.max_score ? "good" : "bad"}">${attempt.score ?? 0}/${attempt.max_score ?? 0}</span>
-                  </div>
-                  <div class="event-card__meta">
-                    <span>${escapeHtml(attempt.student_group)}</span>
-                    <span>${escapeHtml(attempt.reset_at ? "reset" : attempt.status)}</span>
-                    ${attempt.late ? `<span class="bad">late</span>` : ""}
-                    <span>${attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : "Not submitted"}</span>
-                    ${attempt.reset_at ? "" : `<button class="secondary" data-reset-attempt="${attempt.id}">Reset</button>`}
-                  </div>
-                  ${aiAnswersBlock(attempt)}
+          ${state.results.attempts.length
+            ? `<ul class="attempts">${state.results.attempts.map(attempt => `
+              <li class="attempt">
+                <div class="attempt__row">
+                  <span class="attempt__who"><strong>${escapeHtml(attempt.student_name)}</strong> <span class="muted small">${escapeHtml(attempt.student_group)}</span></span>
+                  <span class="row">
+                    ${attemptStatus(attempt)}
+                    ${attempt.late ? `<span class="tag status status--warning">Late</span>` : ""}
+                    <span class="muted small">${attempt.submitted_at ? formatTime(attempt.submitted_at) : "Not submitted"}</span>
+                  </span>
+                  <span class="attempt__score">${attempt.score ?? 0}/${attempt.max_score ?? 0}</span>
+                  ${attempt.reset_at ? "<span></span>" : `<button class="btn btn--destructive btn--sm" data-reset-attempt="${attempt.id}" aria-label="Reset attempt for ${escapeHtml(attempt.student_name)}">Reset</button>`}
                 </div>
-              `).join("")
-              : `<p class="muted">No submissions yet for this event.</p>`
-            }
-          </div>
-        </div>
+                ${aiAnswersBlock(attempt)}
+              </li>
+            `).join("")}</ul>`
+            : `<p class="muted">No submissions yet.</p>`
+          }
+        </section>
 
         ${renderOutcomesSummaryBlock()}
       `
       : `
-        <div class="results-breakdown" style="margin-top:18px">
-          <p class="panel-label">Submissions</p>
-          <h3>Choose an event</h3>
-          <p class="muted">Select one of your events to load student submissions.</p>
-        </div>
+        <section class="card card--raised">
+          <div class="section-heading">
+            <h2>Results</h2>
+            <p>Pick an event to see its submissions.</p>
+          </div>
+        </section>
       `;
 
     screen.innerHTML = `
-      <section class="card question-card">
-        <div class="question-top">
-          <div class="question-banner">
-            <p class="panel-label">Signed In</p>
-            <h2>${escapeHtml(state.user.email)}</h2>
-            <p class="muted">Create events with join codes and keep each cohort on the right paper.</p>
-            <div class="row" style="margin-top:14px">
-              <span class="pill">${escapeHtml(state.user.role)}</span>
-              <button id="logoutBtn" class="secondary">Log out</button>
-            </div>
-          </div>
+      <div class="toolbar">
+        <span class="muted">Signed in as <strong>${escapeHtml(state.user.email)}</strong> (${escapeHtml(state.user.role)})</span>
+        <button id="logoutBtn" class="btn btn--destructive btn--sm">Log out</button>
+      </div>
 
-          <div class="progress-panel">
-            <p class="panel-label">Create Event</p>
-            <div class="stack" style="margin-top:10px">
-              <div>
-                <label for="title">Event title</label>
-                <input id="title" type="text" placeholder="e.g. P6 Mock Round 1" />
+      <div class="dash">
+        <div class="dash__side">
+          <section class="card" aria-labelledby="newEventHeading">
+            <div class="section-heading">
+              <h2 id="newEventHeading">New event</h2>
+            </div>
+            <div class="form-grid">
+              <div class="field field--full">
+                <label for="title">Title</label>
+                <input id="title" type="text" placeholder="P6 Mock Round 1" />
               </div>
-              <div>
+              <div class="field field--full">
                 <label for="selectionMode">Question set</label>
                 <select id="selectionMode">
                   <optgroup label="CT Quest core">
@@ -874,46 +867,46 @@
                   </optgroup>
                 </select>
               </div>
-              <div>
-                <label for="joinCode">Join code (optional)</label>
-                <input id="joinCode" type="text" placeholder="Auto-generate if blank" />
+              <div class="field">
+                <label for="joinCode">Join code <span class="field__hint">optional</span></label>
+                <input id="joinCode" type="text" placeholder="Made for you" autocapitalize="characters" spellcheck="false" />
               </div>
-              <div>
-                <label for="durationMinutes">Time limit in minutes (optional)</label>
-                <input id="durationMinutes" type="number" min="1" placeholder="e.g. 45" />
+              <div class="field">
+                <label for="durationMinutes">Time limit, min <span class="field__hint">optional</span></label>
+                <input id="durationMinutes" type="number" min="1" placeholder="45" />
               </div>
-              <div>
-                <label for="startAt">Open time (optional)</label>
+              <div class="field">
+                <label for="startAt">Opens <span class="field__hint">optional</span></label>
                 <input id="startAt" type="datetime-local" />
               </div>
-              <div>
-                <label for="endAt">Deadline (optional)</label>
+              <div class="field">
+                <label for="endAt">Deadline <span class="field__hint">optional</span></label>
                 <input id="endAt" type="datetime-local" />
               </div>
 
               <details id="advancedPicker">
-                <summary>Advanced: choose what to test</summary>
+                <summary>Choose what to test</summary>
                 <div id="advancedPickerBody">${renderAdvancedPicker()}</div>
               </details>
             </div>
 
-            <div class="nav">
-              <span class="pill">Join code ready instantly</span>
-              <button id="createEventBtn" class="primary">Create event</button>
+            <div class="form-actions">
+              <button id="createEventBtn" class="btn btn--accent">Create event</button>
             </div>
-          </div>
+          </section>
+
+          <section class="card card--flush" aria-labelledby="eventsHeading">
+            <div class="section-heading card__pad">
+              <h2 id="eventsHeading">Your events</h2>
+            </div>
+            ${eventCards ? `<ul class="event-list">${eventCards}</ul>` : `<p class="muted card__pad">No events yet. Create one with the form above.</p>`}
+          </section>
         </div>
 
-        <div class="results-summary">
-          <p class="panel-label">Your Events</p>
-          <h3>Live Join Codes</h3>
-          <div class="event-grid" style="margin-top:14px">
-            ${eventCards || `<p class="muted">No events yet. Create your first one above.</p>`}
-          </div>
+        <div class="dash__main">
+          ${resultsBlock}
         </div>
-
-        ${resultsBlock}
-      </section>
+      </div>
     `;
 
     document.getElementById("logoutBtn").addEventListener("click", () => {
@@ -1090,8 +1083,6 @@
   }
 
   async function boot() {
-    initTheme();
-
     if (!state.token) {
       renderLogin();
       return;
