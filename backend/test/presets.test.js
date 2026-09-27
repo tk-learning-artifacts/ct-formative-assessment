@@ -272,7 +272,10 @@ test("the presets file is validated at boot", () => {
     [data => { presetById(data, "rgs-s2").description = ""; }, /needs a description/],
     [data => { presetById(data, "rgs-s2").levelRequired = true; }, /levelRequired must be true or false, and needs the "who" knob/],
     [data => { presetById(data, "rgs-s2").colour = "blue"; }, /unknown key "colour"/],
-    [data => { data.shortLength = 0; }, /shortLength must be a positive integer/]
+    [data => { data.shortLength = 0; }, /shortLength must be an integer from 1 to 100/],
+    // An event's filter.limit tops out at 100, so a longer "short" setting
+    // would compile to a filter no event accepts.
+    [data => { data.shortLength = 101; }, /shortLength must be an integer from 1 to 100/]
   ];
 
   cases.forEach(([edit, pattern]) => {

@@ -148,12 +148,13 @@ function compilePreset(choice, content) {
 
 // Structural checks, run by content.js at boot. normalizeFilter is passed in
 // (from selection.js) to check each preset's filter like an event filter.
-// isAiType tells whether a question type is AI-scored.
-function validatePresets(file, content, { normalizeFilter, isAiType }, errors) {
+// isAiType tells whether a question type is AI-scored. maxLimit is the
+// largest filter.limit an event accepts, which bounds shortLength.
+function validatePresets(file, content, { normalizeFilter, isAiType, maxLimit }, errors) {
   const where = "presets.json";
 
-  if (!Number.isInteger(file.shortLength) || file.shortLength < 1) {
-    errors.push(`${where}: shortLength must be a positive integer`);
+  if (!Number.isInteger(file.shortLength) || file.shortLength < 1 || file.shortLength > maxLimit) {
+    errors.push(`${where}: shortLength must be an integer from 1 to ${maxLimit}`);
   }
 
   if (!Array.isArray(file.presets) || !file.presets.length) {
@@ -252,6 +253,58 @@ function describePresets(content) {
   }));
 }
 
+// The knob values a choice settles on, with the preset's defaults filled in
+// for any left out: what an event records as its preset_offeredjson.
+function choiceOptions(choice, content) {
+  const preset = findPreset(content, String((choice && choice.id) || ""));
+
+  if (!preset) {
+    return null;
+  }
+
+  const defaults = defaultChoice(preset, content);
+  const options = {};
+
+  preset.knobs.forEach(knob => {
+    options[knob] = choice[knob] === undefined || choice[knob] === null ? defaults[knob] : String(choice[knob]);
+  });
+
+  return options;
+}
+
+// "Loops and conditionals (RGSynapse Secondary 1, short)": the preset's
+// label and the knob values that differ from a plain full set. A preset
+// since removed from presets.json is named by its id.
+function describeChoice(content, presetId, options) {
+  const preset = findPreset(content, presetId);
+
+  if (!preset) {
+    return presetId;
+  }
+
+  const parts = [];
+  const opts = options || {};
+
+  // "Core, all levels" on a core-only preset says nothing the label does not.
+  const offered = whoOptions(preset, content);
+  const option = opts.who ? offered.find(item => item.value === opts.who) : null;
+  const oneAudience = new Set(offered.map(item => item.audience)).size === 1;
+
+  if (opts.who && !(option && oneAudience && !option.level)) {
+    parts.push(option ? option.label : opts.who);
+  }
+
+  if (opts.emphasis && opts.emphasis !== "all") {
+    parts.push(EMPHASIS_LABELS[opts.emphasis] || opts.emphasis);
+  }
+
+  if (opts.length === "short") {
+    parts.push("short");
+  }
+
+  return parts.length ? `${preset.label} (${parts.join(", ")})` : preset.label;
+}
+
 module.exports = {
   KNOBS,
   EMPHASIS,
@@ -260,6 +313,8 @@ module.exports = {
   whoOptions,
   defaultChoice,
   compilePreset,
+  choiceOptions,
+  describeChoice,
   validatePresets,
   describePresets
 };

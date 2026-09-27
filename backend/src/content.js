@@ -367,7 +367,8 @@ function loadContent(contentDir = DEFAULT_CONTENT_DIR) {
   const presetContent = { levels: catalog.levels, audiences: catalog.audiences, nodes, outcomes, questions };
   validatePresets(presetFile, presetContent, {
     normalizeFilter: selection.normalizeFilter,
-    isAiType: type => Boolean(scoring.getType(type) && scoring.getType(type).requiresAi)
+    isAiType: type => Boolean(scoring.getType(type) && scoring.getType(type).requiresAi),
+    maxLimit: selection.MAX_LIMIT
   }, errors);
 
   if (errors.length) {

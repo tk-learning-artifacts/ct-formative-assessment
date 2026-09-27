@@ -27,6 +27,32 @@ function generateJoinCode(length = 6) {
   return code;
 }
 
+// The event columns a teacher may change after creating the event
+// (event_setting_changes.field). The question set is not among them: it is a
+// snapshot that students' answers refer to.
+const SETTING_FIELDS = ["title", "feedback_mode", "navigation_mode", "duration_minutes", "start_at", "end_at"];
+
+// An attempt's deadline: the earlier of start + time limit and the event's
+// deadline, or null when neither is set. Used at start and whenever the
+// teacher changes either setting.
+function attemptDeadline(event, startedAtMs) {
+  const candidates = [];
+
+  if (event.duration_minutes) {
+    candidates.push(startedAtMs + event.duration_minutes * 60 * 1000);
+  }
+
+  if (event.end_at) {
+    candidates.push(Date.parse(event.end_at));
+  }
+
+  return candidates.length ? new Date(Math.min(...candidates)).toISOString() : null;
+}
+
+function auditText(value) {
+  return value === null || value === undefined ? null : String(value);
+}
+
 function httpError(status, message, extra = {}) {
   const error = new Error(message);
   error.status = status;
@@ -195,6 +221,7 @@ function createStore(db, content) {
     endAt = null,
     feedbackMode = policy.DEFAULT_FEEDBACK_MODE,
     navigationMode = policy.DEFAULT_NAVIGATION_MODE,
+    preset = null,
     createdBy
   }) {
     const resolvedFilter = filter || selection.legacyModeToFilter(selectionMode, content);
@@ -206,9 +233,9 @@ function createStore(db, content) {
 
     const insertEvent = db.prepare(`
       INSERT INTO events (title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at,
-                          feedback_mode, navigation_mode, created_by, created_at)
+                          feedback_mode, navigation_mode, preset_id, preset_options_json, preset_customised, created_by, created_at)
       VALUES (@title, @join_code, 'active', @selection_mode, @filter_json, @duration_minutes, @start_at, @end_at,
-              @feedback_mode, @navigation_mode, @created_by, @created_at)
+              @feedback_mode, @navigation_mode, @preset_id, @preset_options_json, @preset_customised, @created_by, @created_at)
     `);
 
     const insertQuestion = db.prepare(`
@@ -227,6 +254,9 @@ function createStore(db, content) {
         end_at: endAt,
         feedback_mode: feedbackMode,
         navigation_mode: navigationMode,
+        preset_id: preset ? preset.id : null,
+        preset_options_json: preset ? JSON.stringify(preset.options) : null,
+        preset_customised: preset && preset.customised ? 1 : 0,
         created_by: createdBy,
         created_at: nowIso()
       });
@@ -244,17 +274,35 @@ function createStore(db, content) {
     })();
   }
 
+  // Where an event's questions came from: { id, options, customised,
+  // summary } for a preset, or null (the advanced picker alone, the legacy
+  // question set, or an event from before presets were recorded).
+  function presetProvenance(row) {
+    if (!row.preset_id) {
+      return null;
+    }
+
+    const options = row.preset_options_json ? JSON.parse(row.preset_options_json) : {};
+
+    return {
+      id: row.preset_id,
+      options,
+      customised: Boolean(row.preset_customised),
+      summary: presets.describeChoice(content, row.preset_id, options)
+    };
+  }
+
   function eventRow(row) {
     if (!row) {
       return null;
     }
 
-    const { filter_json: filterJson, ...rest } = row;
+    const { filter_json: filterJson, preset_id: _presetId, preset_options_json: _presetOptions, preset_customised: _customised, ...rest } = row;
     const filter = filterJson ? JSON.parse(filterJson) : selection.legacyModeToFilter(row.selection_mode, content);
-    return { ...rest, filter, filter_summary: selection.summarizeFilter(filter) };
+    return { ...rest, filter, filter_summary: selection.summarizeFilter(filter), preset: presetProvenance(row) };
   }
 
-  const EVENT_COLUMNS = "id, title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at, results_released_at, feedback_mode, navigation_mode, created_by, created_at";
+  const EVENT_COLUMNS = "id, title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at, results_released_at, feedback_mode, navigation_mode, preset_id, preset_options_json, preset_customised, created_by, created_at";
 
   function getEventById(eventId) {
     return eventRow(db.prepare(`SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`).get(eventId));
@@ -268,7 +316,7 @@ function createStore(db, content) {
   function listEventsForTeacher(userId) {
     return db.prepare(`
       SELECT e.id, e.title, e.join_code, e.status, e.selection_mode, e.filter_json, e.duration_minutes, e.start_at, e.end_at,
-             e.results_released_at, e.feedback_mode, e.navigation_mode, e.created_at,
+             e.results_released_at, e.feedback_mode, e.navigation_mode, e.preset_id, e.preset_options_json, e.preset_customised, e.created_at,
              (SELECT COUNT(*) FROM attempts a WHERE a.event_id = e.id) AS attempt_count,
              (SELECT COUNT(*) FROM event_questions q WHERE q.event_id = e.id) AS question_count
       FROM events e
@@ -446,10 +494,15 @@ function createStore(db, content) {
   // yet committed) takes its answer from the body; the ones after it were
   // never shown, so they are stored blank. The caller shows the student only
   // what policy.js allows.
+  //
+  // An attempt that was running while the event still had free navigation
+  // (the teacher switched it to in order mid-attempt) may hold answers the
+  // student gave to any question then, so every uncommitted question takes
+  // its answer from the body, as under free navigation.
   function submitAttempt(attempt, rawAnswers, { late = false } = {}) {
     const questions = getEventQuestions(attempt.event_id);
     const answers = rawAnswers && typeof rawAnswers === "object" && !Array.isArray(rawAnswers) ? rawAnswers : {};
-    const linear = policy.navigationMode(attempt) === "linear";
+    const linear = policy.navigationMode(attempt) === "linear" && !ranUnderFreeNavigation(attempt);
 
     const clearUncommitted = db.prepare("DELETE FROM answers WHERE attempt_id = ? AND committed_at IS NULL");
     const totals = db.prepare("SELECT COALESCE(SUM(earned_points), 0) AS score, COALESCE(SUM(max_points), 0) AS max FROM answers WHERE attempt_id = ?");
@@ -485,6 +538,16 @@ function createStore(db, content) {
     })();
 
     return { score: result.score, max: result.max };
+  }
+
+  // Whether the event's navigation was switched away from free after this
+  // attempt started.
+  function ranUnderFreeNavigation(attempt) {
+    return Boolean(db.prepare(`
+      SELECT 1 FROM event_setting_changes
+      WHERE event_id = ? AND field = 'navigation_mode' AND old_value = 'free' AND changed_at >= ?
+      LIMIT 1
+    `).get(attempt.event_id, attempt.started_at));
   }
 
   function answersFor(attemptId) {
@@ -610,7 +673,9 @@ function createStore(db, content) {
   }
 
   // The oldest pending answers not already being scored. Pending rows are the
-  // queue, so after a restart they are simply found again.
+  // queue, so after a restart they are simply found again. Answers on a reset
+  // attempt are left alone: nobody will see their score, so they are not
+  // sent to the AI provider.
   function listPendingAnswers(limit, skipIds = []) {
     const skip = new Set(skipIds);
 
@@ -619,7 +684,7 @@ function createStore(db, content) {
              a.event_id, a.student_name, a.student_group
       FROM answers an
       JOIN attempts a ON a.id = an.attempt_id
-      WHERE an.score_status = 'pending'
+      WHERE an.score_status = 'pending' AND a.reset_at IS NULL
       ORDER BY an.id ASC
       LIMIT ?
     `).all(limit + skip.size).filter(row => !skip.has(row.id)).slice(0, limit);
@@ -642,12 +707,17 @@ function createStore(db, content) {
     })();
   }
 
-  function getSubmittedAnswer(eventId, attemptId, questionId) {
+  // An answer the teacher may mark: any answer of a submitted attempt, or a
+  // committed one of an attempt still in progress (so "after each question"
+  // with AI off need not leave a student waiting until they submit). Answers
+  // on a reset attempt cannot be marked.
+  function getMarkableAnswer(eventId, attemptId, questionId) {
     return db.prepare(`
       SELECT an.id, an.attempt_id, an.question_id, an.question_type, an.max_points, an.score_status, an.detail_json
       FROM answers an
       JOIN attempts a ON a.id = an.attempt_id
-      WHERE a.event_id = ? AND a.id = ? AND a.status = 'submitted' AND an.question_id = ?
+      WHERE a.event_id = ? AND a.id = ? AND an.question_id = ? AND a.reset_at IS NULL
+        AND (a.status = 'submitted' OR (a.status = 'started' AND an.committed_at IS NOT NULL))
     `).get(eventId, attemptId, questionId) || null;
   }
 
@@ -678,6 +748,64 @@ function createStore(db, content) {
     `).run(nowIso(), userId, attemptId, eventId);
 
     return result.changes === 1;
+  }
+
+  // Applies a teacher's edit to an event's settings. changes maps column
+  // names (the fields event_setting_changes allows) to their new values; only
+  // those that differ from the stored value are written, each with an audit
+  // row. When the time limit or deadline changes, every attempt still in
+  // progress gets its deadline recomputed as the earlier of start + time
+  // limit and the deadline, the same rule as at start. A deadline that has
+  // now passed is not enforced here: the attempt's next commit is refused as
+  // time-up, and its submit is stored and flagged late under the usual grace
+  // rules. Returns { changes: [{ field, oldValue, newValue }], attemptsUpdated }.
+  function updateEventSettings(eventId, userId, changes) {
+    return db.transaction(() => {
+      const current = db.prepare(`SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`).get(eventId);
+      const at = nowIso();
+      const applied = Object.keys(changes)
+        .filter(field => SETTING_FIELDS.includes(field) && changes[field] !== current[field])
+        .map(field => ({ field, oldValue: current[field], newValue: changes[field] }));
+      const insertChange = db.prepare(`
+        INSERT INTO event_setting_changes (event_id, changed_by, field, old_value, new_value, changed_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+
+      applied.forEach(change => {
+        db.prepare(`UPDATE events SET ${change.field} = ? WHERE id = ?`).run(change.newValue, eventId);
+        insertChange.run(eventId, userId, change.field, auditText(change.oldValue), auditText(change.newValue), at);
+      });
+
+      let attemptsUpdated = 0;
+
+      if (applied.some(change => change.field === "duration_minutes" || change.field === "end_at")) {
+        const updated = { ...current, ...changes };
+        const setDeadline = db.prepare("UPDATE attempts SET deadline_at = ? WHERE id = ?");
+
+        db.prepare("SELECT id, started_at, deadline_at FROM attempts WHERE event_id = ? AND status = 'started' AND reset_at IS NULL")
+          .all(eventId)
+          .forEach(attempt => {
+            const deadlineAt = attemptDeadline(updated, Date.parse(attempt.started_at));
+
+            if (deadlineAt !== attempt.deadline_at) {
+              setDeadline.run(deadlineAt, attempt.id);
+              attemptsUpdated += 1;
+            }
+          });
+      }
+
+      return { changes: applied, attemptsUpdated };
+    })();
+  }
+
+  function listSettingChanges(eventId) {
+    return db.prepare(`
+      SELECT c.id, c.field, c.old_value, c.new_value, c.changed_at, u.email AS changed_by_email
+      FROM event_setting_changes c
+      LEFT JOIN users u ON u.id = c.changed_by
+      WHERE c.event_id = ?
+      ORDER BY c.id DESC
+    `).all(eventId);
   }
 
   function releaseResults(eventId) {
@@ -839,10 +967,12 @@ function createStore(db, content) {
     recomputeAttemptScore,
     listPendingAnswers,
     completePendingAnswer,
-    getSubmittedAnswer,
+    getMarkableAnswer,
     reviewAnswer,
     resetAttempt,
     releaseResults,
+    updateEventSettings,
+    listSettingChanges,
     findUserByEmail,
     findUserById,
     updatePasswordHash,
@@ -857,6 +987,8 @@ function createStore(db, content) {
 }
 
 module.exports = {
+  SETTING_FIELDS,
+  attemptDeadline,
   openDatabase,
   syncContent,
   generateJoinCode

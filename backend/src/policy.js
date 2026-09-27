@@ -29,6 +29,12 @@
 // Answers are committed one at a time only when a setting needs it
 // (locksAnswers); otherwise everything arrives at submit, as before.
 //
+// A teacher may change both settings mid-event (ADR 0003 §10). Every
+// function here is given the event as it is now, so the new rule applies
+// from a student's next request: loosening shows results already earned,
+// tightening hides them again until the new rule allows. A committed answer
+// is never reopened by any change; db.js keeps it whatever the mode.
+//
 // Every route that shows a student their result, or a committed answer, goes
 // through studentResultView() or committedAnswerView(), so this file is the
 // only place these rules live.

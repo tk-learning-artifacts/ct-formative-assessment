@@ -3,7 +3,7 @@ const path = require("path");
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const { loadConfig } = require("./config");
-const { openDatabase } = require("./db");
+const { openDatabase, attemptDeadline } = require("./db");
 const { verifyPassword, hashPassword, createAttemptToken, verifyAttemptToken } = require("./security");
 const scoring = require("./scoring");
 const selection = require("./selection");
@@ -85,22 +85,6 @@ function ensureEventAccessible(event) {
   return null;
 }
 
-// The attempt's deadline: the earlier of start + duration and the event's
-// end_at, or null when neither is set.
-function computeDeadline(event, startedAtMs) {
-  const candidates = [];
-
-  if (event.duration_minutes) {
-    candidates.push(startedAtMs + event.duration_minutes * 60 * 1000);
-  }
-
-  if (event.end_at) {
-    candidates.push(Date.parse(event.end_at));
-  }
-
-  return candidates.length ? new Date(Math.min(...candidates)).toISOString() : null;
-}
-
 function publicEvent(event) {
   return {
     id: event.id,
@@ -122,6 +106,166 @@ function parseSetting(value, allowed, fallback, label) {
   }
 
   return allowed.includes(value) ? { value } : { error: `${label} must be one of: ${allowed.join(", ")}.` };
+}
+
+// A time limit from the request body: null for none (left out, empty or 0,
+// as the form sends), a number of minutes, or an error message.
+function parseDuration(value) {
+  const minutes = value ? Number(value) : null;
+
+  if (minutes !== null && (!Number.isFinite(minutes) || minutes <= 0 || minutes > MAX_DURATION_MINUTES)) {
+    return { error: `Duration must be a positive number of minutes, at most ${MAX_DURATION_MINUTES} (24 hours).` };
+  }
+
+  return { value: minutes };
+}
+
+// A filter with its lists sorted and keys in order, so two filters that
+// select the same questions compare equal as JSON.
+function canonicalFilter(filter) {
+  if (Array.isArray(filter)) {
+    return filter.slice().sort();
+  }
+
+  if (filter && typeof filter === "object") {
+    return Object.keys(filter).sort().reduce((acc, key) => ({ ...acc, [key]: canonicalFilter(filter[key]) }), {});
+  }
+
+  return filter;
+}
+
+// Which preset an event comes from (ADR 0003 §11), from the create body:
+// { preset } alone, or { filter, basedOnPreset } when the teacher opened
+// Customise after choosing a card. The event counts as customised only if
+// the filter differs from what the preset gives, so opening Customise and
+// changing nothing still reads as the preset. Returns { preset } (null for
+// no preset) or { error }.
+function presetProvenance(body, filter, content) {
+  const fromCard = body.filter === undefined || body.filter === null;
+  const choice = fromCard ? body.preset : body.basedOnPreset;
+
+  if (choice === undefined || choice === null) {
+    return { preset: null };
+  }
+
+  const options = presets.choiceOptions(choice, content);
+
+  if (fromCard) {
+    return { preset: { id: choice.id, options, customised: false } };
+  }
+
+  const compiled = selection.resolveSelection({ preset: choice }, content);
+
+  if (compiled.errors.length) {
+    return { error: `basedOnPreset: ${compiled.errors.join("; ")}` };
+  }
+
+  const customised = JSON.stringify(canonicalFilter(compiled.filter)) !== JSON.stringify(canonicalFilter(filter));
+  return { preset: { id: choice.id, options, customised } };
+}
+
+// What PATCH /api/events/:id accepts, by body key, with the column each one
+// sets. Anything else is refused: above all the question set, because
+// students' answers refer to that snapshot.
+const EDITABLE_SETTINGS = {
+  title: "title",
+  feedbackMode: "feedback_mode",
+  navigationMode: "navigation_mode",
+  durationMinutes: "duration_minutes",
+  startAt: "start_at",
+  endAt: "end_at"
+};
+const QUESTION_SET_KEYS = ["filter", "preset", "basedOnPreset", "selectionMode", "questionIds", "questions"];
+
+// Validates a settings edit against the event it changes. Returns
+// { changes } (column name to new value) or { error }.
+function parseSettingsEdit(body, event) {
+  const keys = Object.keys(body || {});
+
+  if (keys.some(key => QUESTION_SET_KEYS.includes(key))) {
+    return { error: "The questions cannot be changed after an event is created, because students' answers refer to them. Create a new event instead." };
+  }
+
+  const unknown = keys.filter(key => !Object.prototype.hasOwnProperty.call(EDITABLE_SETTINGS, key));
+
+  if (unknown.length) {
+    return { error: `These cannot be changed: ${unknown.join(", ")}. You can change: ${Object.keys(EDITABLE_SETTINGS).join(", ")}.` };
+  }
+
+  if (!keys.length) {
+    return { error: "Nothing to change." };
+  }
+
+  const changes = {};
+
+  if (keys.includes("title")) {
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+
+    if (!title) {
+      return { error: "Event title is required." };
+    }
+
+    changes.title = title;
+  }
+
+  if (keys.includes("feedbackMode")) {
+    if (!policy.FEEDBACK_MODES.includes(body.feedbackMode)) {
+      return { error: `feedbackMode must be one of: ${policy.FEEDBACK_MODES.join(", ")}.` };
+    }
+
+    changes.feedback_mode = body.feedbackMode;
+  }
+
+  if (keys.includes("navigationMode")) {
+    if (!policy.NAVIGATION_MODES.includes(body.navigationMode)) {
+      return { error: `navigationMode must be one of: ${policy.NAVIGATION_MODES.join(", ")}.` };
+    }
+
+    changes.navigation_mode = body.navigationMode;
+  }
+
+  if (keys.includes("durationMinutes")) {
+    const duration = parseDuration(body.durationMinutes);
+
+    if (duration.error) {
+      return { error: duration.error };
+    }
+
+    changes.duration_minutes = duration.value;
+  }
+
+  try {
+    if (keys.includes("startAt")) {
+      changes.start_at = parseOptionalDate(body.startAt, "Start time");
+    }
+
+    if (keys.includes("endAt")) {
+      changes.end_at = parseOptionalDate(body.endAt, "Deadline");
+    }
+  } catch (error) {
+    return { error: error.message };
+  }
+
+  const startAt = keys.includes("startAt") ? changes.start_at : event.start_at;
+  const endAt = keys.includes("endAt") ? changes.end_at : event.end_at;
+
+  if (startAt && endAt && Date.parse(startAt) >= Date.parse(endAt)) {
+    return { error: "Deadline must be later than the start time." };
+  }
+
+  return { changes };
+}
+
+// One audit row as the teacher's page shows it.
+function settingChangeView(row) {
+  return {
+    id: row.id,
+    field: row.field,
+    oldValue: row.old_value,
+    newValue: row.new_value,
+    changedAt: row.changed_at,
+    changedBy: row.changed_by_email
+  };
 }
 
 function countBy(items, key) {
@@ -417,7 +561,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
 
   app.post("/api/events", requireAuth, (req, res) => {
     const title = String(req.body.title || "").trim();
-    const durationMinutes = req.body.durationMinutes ? Number(req.body.durationMinutes) : null;
+    const duration = parseDuration(req.body.durationMinutes);
     const joinCode = normalizeJoinCode(req.body.joinCode) || db.createUniqueJoinCode();
 
     if (!title) {
@@ -432,8 +576,15 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       return;
     }
 
-    if (durationMinutes !== null && (!Number.isFinite(durationMinutes) || durationMinutes <= 0 || durationMinutes > MAX_DURATION_MINUTES)) {
-      res.status(400).json({ error: `Duration must be a positive number of minutes, at most ${MAX_DURATION_MINUTES} (24 hours).` });
+    if (duration.error) {
+      res.status(400).json({ error: duration.error });
+      return;
+    }
+
+    const provenance = presetProvenance(req.body, resolved.filter, db.content);
+
+    if (provenance.error) {
+      res.status(400).json({ error: provenance.error });
       return;
     }
 
@@ -460,11 +611,12 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
         joinCode,
         selectionMode: resolved.selectionMode,
         filter: resolved.filter,
-        durationMinutes,
+        durationMinutes: duration.value,
         startAt,
         endAt,
         feedbackMode: feedbackMode.value,
         navigationMode: navigationMode.value,
+        preset: provenance.preset,
         createdBy: req.user.sub
       });
 
@@ -492,8 +644,35 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
 
     res.json({
       event: teacherEvent(event),
-      attempts: db.getResults(event.id)
+      attempts: db.getResults(event.id),
+      settingChanges: db.listSettingChanges(event.id).map(settingChangeView)
     });
+  });
+
+  // Changes an event's settings, even while students are taking it (ADR 0003
+  // §10). Owner only. The question set cannot change. policy.js reads the
+  // event's current settings on every request, so a student's next request
+  // follows the new rules; attempts in progress get their deadline
+  // recomputed in the store.
+  app.patch("/api/events/:id", requireAuth, (req, res) => {
+    const event = ownEvent(req, res);
+
+    if (!event) {
+      return;
+    }
+
+    const edit = parseSettingsEdit(req.body, event);
+
+    if (edit.error) {
+      res.status(400).json({ error: edit.error });
+      return;
+    }
+
+    const { changes, attemptsUpdated } = db.updateEventSettings(event.id, req.user.sub, edit.changes);
+    const updated = teacherEvent(db.getEventById(event.id));
+    updated.question_count = db.getEventQuestions(event.id).length;
+
+    res.json({ event: updated, changes, attemptsUpdated });
   });
 
   // Per-learning-outcome and per-ontology-node results, for the teacher's
@@ -538,7 +717,10 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
 
   // A teacher marks an AI-scored answer by hand: one still waiting, one the
   // AI could not score (needs-review), or one whose AI score they disagree
-  // with. Owner only; the attempt total is recomputed.
+  // with. Owner only; the attempt total is recomputed. A committed answer of
+  // an attempt still in progress can be marked too, so a student under
+  // "after each question" sees the mark straight away; the attempt's total
+  // still only appears once it is submitted.
   app.post("/api/events/:id/attempts/:attemptId/answers/:questionId/review", requireAuth, (req, res) => {
     const event = ownEvent(req, res);
 
@@ -547,10 +729,10 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     }
 
     const attemptId = Number(req.params.attemptId);
-    const answer = Number.isInteger(attemptId) ? db.getSubmittedAnswer(event.id, attemptId, String(req.params.questionId)) : null;
+    const answer = Number.isInteger(attemptId) ? db.getMarkableAnswer(event.id, attemptId, String(req.params.questionId)) : null;
 
     if (!answer) {
-      res.status(404).json({ error: "No submitted answer to that question in this event." });
+      res.status(404).json({ error: "No submitted or committed answer to that question in this event." });
       return;
     }
 
@@ -622,7 +804,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     }
 
     const startedAtMs = Date.now();
-    const deadlineAt = computeDeadline(event, startedAtMs);
+    const deadlineAt = attemptDeadline(event, startedAtMs);
     const { token, tokenHash } = createAttemptToken();
     let attemptId;
 
