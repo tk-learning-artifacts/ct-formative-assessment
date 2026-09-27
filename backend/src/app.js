@@ -564,6 +564,13 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
   });
 
   app.post("/api/question-bank/preview", requireAuth, (req, res) => {
+    const include = req.body && req.body.include;
+
+    if (include !== undefined && include !== "questions") {
+      res.status(400).json({ error: 'Unsupported "include" value.' });
+      return;
+    }
+
     const resolved = selection.resolveSelection(req.body || {}, db.content);
 
     if (resolved.errors.length) {
@@ -582,17 +589,23 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       byType: countBy(questions, "type"),
       byAudience: countBy(questions, "audience"),
       ...aiStatus(questions, ai),
-      questions: questions.map(question => ({
-        id: question.id,
-        title: question.title,
-        type: question.type,
-        audience: question.audience,
-        level: question.level,
-        difficulty: question.difficulty,
-        points: question.points,
-        ontology: question.ontology,
-        outcomes: question.outcomes
-      }))
+      // include: "questions" swaps the summary list for full teacher views
+      // (answer key, rubric and the rest), for the compact question preview
+      // in the create-event picker. Same selection as above, so the count
+      // matches either way.
+      questions: include === "questions"
+        ? questions.map(scoring.toTeacherQuestion)
+        : questions.map(question => ({
+          id: question.id,
+          title: question.title,
+          type: question.type,
+          audience: question.audience,
+          level: question.level,
+          difficulty: question.difficulty,
+          points: question.points,
+          ontology: question.ontology,
+          outcomes: question.outcomes
+        }))
     });
   });
 
@@ -692,6 +705,20 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       attempts: db.getResults(event.id),
       settingChanges: db.listSettingChanges(event.id).map(settingChangeView)
     });
+  });
+
+  // The event's frozen question snapshot, in order, as full teacher views
+  // (answer key, rubric and the teacher-only "details" note included). A
+  // read like /results and /outcomes-summary: owner and admin both get it
+  // (ADR 0004 §8).
+  app.get("/api/events/:id/questions", requireAuth, (req, res) => {
+    const event = eventForRequest(req, res);
+
+    if (!event) {
+      return;
+    }
+
+    res.json({ questions: db.getEventQuestions(event.id).map(scoring.toTeacherQuestion) });
   });
 
   // Changes an event's settings, even while students are taking it (ADR 0003

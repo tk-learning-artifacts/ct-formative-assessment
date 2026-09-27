@@ -53,6 +53,7 @@ function auth(token) {
 const EVENT_ROUTES = [
   { name: "GET results", write: false, send: (app, ev) => request(app).get(`/api/events/${ev.id}/results`) },
   { name: "GET outcomes-summary", write: false, send: (app, ev) => request(app).get(`/api/events/${ev.id}/outcomes-summary`) },
+  { name: "GET questions", write: false, send: (app, ev) => request(app).get(`/api/events/${ev.id}/questions`) },
   { name: "PATCH settings", write: true, send: (app, ev) => request(app).patch(`/api/events/${ev.id}`).send({ title: "Renamed" }) },
   { name: "POST release", write: true, send: (app, ev) => request(app).post(`/api/events/${ev.id}/release`) },
   { name: "POST reset", write: true, send: (app, ev) => request(app).post(`/api/events/${ev.id}/attempts/${ev.attemptId}/reset`) },
