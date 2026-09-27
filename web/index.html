@@ -4,41 +4,19 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>CT Quest</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <header class="bar">
+    <div class="bar__inner">
+      <h1 class="bar__title">CT Quest</h1>
+      <a class="bar__link" href="/admin.html">Teacher sign-in</a>
+    </div>
+  </header>
+
   <main class="wrap">
-    <div class="bg-orb bg-orb-a"></div>
-    <div class="bg-orb bg-orb-b"></div>
-    <div class="bg-grid"></div>
-
-    <header class="top">
-      <div>
-        <p class="eyebrow">Student Test Space</p>
-        <h1>Computational Thinking Ability Test</h1>
-        <p class="sub">Enter your event join code, load the right question set, and submit your answers online.</p>
-      </div>
-
-      <div class="row">
-        <a class="link-chip" href="/admin.html">Teacher Portal</a>
-        <button id="themeToggle" class="theme-toggle" type="button" aria-label="Toggle color theme" aria-pressed="false">
-          <span class="theme-toggle__text theme-toggle__text--sun">Light</span>
-          <span class="theme-toggle__track" aria-hidden="true">
-            <span class="theme-toggle__thumb"></span>
-          </span>
-          <span class="theme-toggle__text theme-toggle__text--moon">Dark</span>
-        </button>
-      </div>
-    </header>
-
     <section id="screen" class="screen"></section>
-
-    <footer class="foot">
-      <small></small>
-    </footer>
   </main>
 
   <script src="type-registry.js"></script>

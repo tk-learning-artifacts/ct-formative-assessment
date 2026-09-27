@@ -20,10 +20,11 @@
       const text = typeof response === "string" ? response : "";
 
       return `
-        <label class="panel-label" for="openResponse">Your Answer</label>
+        <label class="answer-label" for="openResponse">Your answer</label>
         <textarea id="openResponse" class="open-response" rows="7" maxlength="${maxChars}"
-          placeholder="Write your answer in a few sentences." autocomplete="off" spellcheck="true">${h.escapeHtml(text)}</textarea>
-        <p class="muted open-response__hint">Up to ${maxChars} characters. This answer is marked after you submit, so your score may go up later. Don't include your name or other personal details.</p>
+          placeholder="Write your answer in a few sentences." autocomplete="off" spellcheck="true"
+          aria-describedby="openResponseHint">${h.escapeHtml(text)}</textarea>
+        <p class="open-response__hint" id="openResponseHint">Up to ${maxChars} characters. This is marked after you submit, so your score may go up later. Leave out your name and other personal details.</p>
       `;
     },
 

@@ -11,8 +11,10 @@
       `).join("");
 
       return `
-        <p class="panel-label">Choose One Answer</p>
-        <div class="options">${options}</div>
+        <fieldset>
+          <legend class="answer-label">Choose one answer</legend>
+          <div class="options">${options}</div>
+        </fieldset>
       `;
     },
 

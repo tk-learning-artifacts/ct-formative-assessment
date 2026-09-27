@@ -32,10 +32,10 @@
         <span class="pa-handle" aria-hidden="true" title="Drag to move">&#8942;&#8942;</span>
         <code class="pa-text">${escapeHtml(line.text)}</code>
         <span class="pa-controls">
-          <button type="button" class="secondary pa-btn pa-add" data-pa-action="add" aria-label="Add to program: ${label}">Add</button>
-          <button type="button" class="secondary pa-btn pa-up" data-pa-action="up" aria-label="Move up: ${label}" ${i === 0 ? "disabled" : ""}>&#8593;</button>
-          <button type="button" class="secondary pa-btn pa-down" data-pa-action="down" aria-label="Move down: ${label}" ${i === count - 1 ? "disabled" : ""}>&#8595;</button>
-          <button type="button" class="secondary pa-btn pa-remove" data-pa-action="remove" aria-label="Remove from program: ${label}">&#10005;</button>
+          <button type="button" class="btn btn--secondary pa-btn pa-add" data-pa-action="add" aria-label="Add to program: ${label}">Add</button>
+          <button type="button" class="btn btn--secondary pa-btn pa-up" data-pa-action="up" aria-label="Move up: ${label}" ${i === 0 ? "disabled" : ""}>&#8593;</button>
+          <button type="button" class="btn btn--secondary pa-btn pa-down" data-pa-action="down" aria-label="Move down: ${label}" ${i === count - 1 ? "disabled" : ""}>&#8595;</button>
+          <button type="button" class="btn btn--secondary pa-btn pa-remove" data-pa-action="remove" aria-label="Remove from program: ${label}">&#10005;</button>
         </span>
       </li>
     `;
@@ -204,8 +204,8 @@
 
       return `
         <div class="pa" data-parsons>
-          <p class="panel-label">Build the program</p>
-          <p class="muted pa-help">Add lines with Add, or drag them by the handle. Leave out any line that is not needed. Indentation is already in each line.</p>
+          <p class="answer-label">Build the program</p>
+          <p class="pa-help">Press Add to put a line in your program, or drag it by the handle. Leave out lines you don't need. The indentation is already in each line.</p>
           ${target}
 
           <p class="code-label" id="paProgramLabel">Your program (${language})</p>

@@ -1,8 +1,5 @@
 (function () {
   const screen = document.getElementById("screen");
-  const themeToggle = document.getElementById("themeToggle");
-  const root = document.documentElement;
-  const THEME_KEY = "ct-quest-theme";
   const ATTEMPT_KEY = "ct-quest-attempt";
   const Types = window.CTQuestTypes;
   const h = { escapeHtml };
@@ -99,38 +96,6 @@
     }
   }
 
-  // ---------- Theme ----------
-
-  function getPreferredTheme() {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === "light" || saved === "dark") {
-      return saved;
-    }
-
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  }
-
-  function updateThemeButton(theme) {
-    const pressed = theme === "dark";
-    themeToggle.setAttribute("aria-pressed", pressed ? "true" : "false");
-    themeToggle.setAttribute("aria-label", pressed ? "Switch to light mode" : "Switch to dark mode");
-  }
-
-  function applyTheme(theme) {
-    root.setAttribute("data-theme", theme);
-    localStorage.setItem(THEME_KEY, theme);
-    updateThemeButton(theme);
-  }
-
-  function initTheme() {
-    applyTheme(getPreferredTheme());
-
-    themeToggle.addEventListener("click", () => {
-      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-      applyTheme(next);
-    });
-  }
-
   // ---------- API ----------
 
   async function api(path, options) {
@@ -185,7 +150,7 @@
 
     const remaining = state.deadlineMs - Date.now();
     pill.textContent = remaining > 0 ? `${formatRemaining(remaining)} left` : "Time is up";
-    pill.classList.toggle("pill--timer-low", remaining <= 60 * 1000);
+    pill.classList.toggle("timer--low", remaining <= 60 * 1000);
   }
 
   // The server sends its own clock with the deadline, so a student whose
@@ -293,66 +258,57 @@
   function renderStart(errorMessage) {
     stopTimer();
     screen.innerHTML = `
-      <section class="card start-layout">
-        <div class="panel">
-          <p class="panel-label">Student Entry</p>
-          <h2>Join Your Assigned Test</h2>
-          <p class="muted">Enter the join code from your teacher so we can load the correct question set for your event.</p>
-
-          <div class="stack" style="margin-top:20px">
-            <div>
-              <label for="joinCode">Join Code</label>
-              <input id="joinCode" type="text" placeholder="e.g. DEMO123" autocomplete="off" />
-            </div>
-
-            <div>
-              <label for="name">Name</label>
-              <input id="name" type="text" placeholder="e.g. Joe Tan" autocomplete="off" />
-            </div>
-
-            <div>
-              <label for="group">Class / Group</label>
-              <input id="group" type="text" placeholder="e.g. P6-3 / S1-2" autocomplete="off" />
-            </div>
+      <section class="card join">
+        <form class="stack" id="joinForm" novalidate>
+          <div class="section-heading">
+            <h2>Join a test</h2>
+            <p>Type the join code your teacher gave your class.</p>
           </div>
 
-          ${errorMessage ? `<p class="notice notice--danger">${escapeHtml(errorMessage)}</p>` : ""}
-
-          <div class="nav">
-            <span class="pill">Demo code: DEMO123</span>
-            <button class="primary" id="startBtn">Launch challenge</button>
+          <div class="field">
+            <label for="joinCode">Join code <span class="field__hint">try DEMO123</span></label>
+            <input id="joinCode" type="text" placeholder="DEMO123" autocomplete="off" autocapitalize="characters" spellcheck="false" />
           </div>
-        </div>
 
-        <div class="panel panel--accent">
-          <p class="panel-label">Challenge Rules</p>
-          <h2>Play Fair, Think Deep</h2>
-          <p class="muted">Each join code links to a specific event, so every student sees the right paper.</p>
+          <div class="field">
+            <label for="name">Your name</label>
+            <input id="name" type="text" placeholder="Joe Tan" autocomplete="off" />
+          </div>
 
-          <ul class="rule-list">
-            <li>Use only the code shared for your class event.</li>
-            <li>You get one attempt, so read every question carefully.</li>
-            <li>You can submit from any question; unanswered questions score zero.</li>
-          </ul>
-        </div>
+          <div class="field">
+            <label for="group">Class</label>
+            <input id="group" type="text" placeholder="P6-3 or S1-2" autocomplete="off" />
+          </div>
+
+          ${errorMessage ? `<p class="error-text" role="alert">${escapeHtml(errorMessage)}</p>` : ""}
+
+          <button type="submit" class="btn btn--accent btn--block" id="startBtn">Start test</button>
+        </form>
+
+        <ul class="join__rules">
+          <li>You get one attempt, so read each question carefully.</li>
+          <li>You can submit from any question. Blank answers score zero.</li>
+        </ul>
       </section>
     `;
 
     const button = document.getElementById("startBtn");
 
-    button.addEventListener("click", async () => {
+    // A form, so Enter in any field starts the test too.
+    document.getElementById("joinForm").addEventListener("submit", async event => {
+      event.preventDefault();
       const joinCode = document.getElementById("joinCode").value.trim().toUpperCase();
       const name = document.getElementById("name").value.trim();
       const group = document.getElementById("group").value.trim();
 
       if (!joinCode || !name || !group) {
-        renderStart("Please enter your join code, name, and class/group.");
+        renderStart("Fill in your join code, name and class.");
         return;
       }
 
       try {
         button.disabled = true;
-        button.textContent = "Loading...";
+        button.textContent = "Starting...";
 
         const payload = await api("/api/attempts", {
           method: "POST",
@@ -448,15 +404,22 @@
     const renderer = Types.get(q.type);
     const currentNumber = state.i + 1;
     const isLast = state.i === ACTIVE_BANK.length - 1;
-    const progressPct = Math.round((currentNumber / ACTIVE_BANK.length) * 100);
+    const answered = answeredCount();
 
-    const metaPills = `
-      <div class="row" style="margin-top:12px">
-        ${q.level ? `<span class="pill">${escapeHtml(q.level)}</span>` : ""}
-        ${q.topic ? `<span class="pill">${escapeHtml(q.topic)}</span>` : ""}
-        ${q.qType ? `<span class="pill">${escapeHtml(q.qType)}</span>` : ""}
-      </div>
-    `;
+    const meta = [q.level, q.topic, q.qType].filter(Boolean)
+      .map(label => `<span class="concept-tag">${escapeHtml(label)}</span>`).join("");
+
+    // One dot per question: filled once answered, ringed for this one.
+    const dots = ACTIVE_BANK.map((item, idx) => {
+      const classes = ["progress__dot"];
+      if (state.answers[item.id] !== undefined) {
+        classes.push("progress__dot--done");
+      }
+      if (idx === state.i) {
+        classes.push("progress__dot--current");
+      }
+      return `<li class="${classes.join(" ")}">${idx + 1}</li>`;
+    }).join("");
 
     const art = q.art ? `<pre>${escapeHtml(q.art)}</pre>` : "";
     const code = !q.code ? "" : renderer.renderCode
@@ -464,61 +427,41 @@
       : `<p class="code-label">${escapeHtml(q.code.language)}</p><pre><code>${escapeHtml(q.code.source)}</code></pre>`;
 
     screen.innerHTML = `
-      <section class="card question-card">
-        <div class="question-top">
-          <div class="question-banner">
-            <p class="panel-label">Current Mission</p>
-            <h2>${escapeHtml(q.title)}</h2>
-            <p class="muted">${escapeHtml(state.eventTitle)}</p>
-            ${metaPills}
+      <div class="q-strip">
+        <span class="q-strip__count">Question ${currentNumber} of ${ACTIVE_BANK.length}</span>
+        <ol class="progress" aria-hidden="true">${dots}</ol>
+        <span class="muted small">${answered} answered</span>
+        ${state.deadlineMs !== null ? `<span class="timer" id="timerPill" role="timer" aria-live="off"></span>` : ""}
+        <span class="q-strip__event">${escapeHtml(state.eventTitle)} <span class="mono">${escapeHtml(state.joinCode)}</span></span>
+      </div>
+
+      <div class="q-layout">
+        <section class="card" aria-labelledby="questionTitle">
+          <div class="q-head">
+            <h2 id="questionTitle">${escapeHtml(q.title)}</h2>
+            <span class="q-points">${q.points} point${q.points === 1 ? "" : "s"}</span>
           </div>
+          <div class="concept-tags q-meta">${meta}<span class="muted small mono">${escapeHtml(q.id)}</span></div>
 
-          <div class="progress-panel">
-            <p class="panel-label">Challenge Progress</p>
-            <h3>${currentNumber} of ${ACTIVE_BANK.length}</h3>
-            <p class="muted">${answeredCount()} answered so far / ${q.points} points for this question</p>
-            <div class="progress-track" aria-hidden="true">
-              <span style="width:${progressPct}%"></span>
-            </div>
-            <div class="row" style="margin-top:16px">
-              <span class="pill">${progressPct}% complete</span>
-              <span class="pill">${escapeHtml(state.joinCode)}</span>
-              ${state.deadlineMs !== null ? `<span class="pill pill--timer" id="timerPill" role="timer" aria-live="off"></span>` : ""}
-            </div>
-          </div>
-        </div>
+          <p class="prompt-text">${escapeHtml(q.prompt)}</p>
+          ${art}
+          ${code}
+        </section>
 
-        <div class="qbody">
-          <div class="prompt-card">
-            <div class="qhead">
-              <div>
-                <p class="panel-label">Question Prompt</p>
-                <h3>${escapeHtml(q.id)}</h3>
-              </div>
-              <span class="pill">${q.points} pts</span>
-            </div>
+        <section class="card" aria-label="Your answer">
+          <div id="answerArea">${renderer.renderInput(q, state.answers[q.id], h)}</div>
 
-            <p class="prompt-text">${escapeHtml(q.prompt)}</p>
-            ${art}
-            ${code}
-          </div>
+          <p class="notice q-status" id="submitStatus" role="status" hidden></p>
 
-          <div class="options-card">
-            <div id="answerArea">${renderer.renderInput(q, state.answers[q.id], h)}</div>
-
-            <p class="notice" id="submitStatus" hidden></p>
-
-            <div class="nav">
-              <button id="backBtn" class="secondary" ${state.i === 0 ? "disabled" : ""}>Back</button>
-              <div class="row">
-                <span class="pill">Answered: ${answeredCount()} / ${ACTIVE_BANK.length}</span>
-                ${isLast ? "" : `<button class="secondary" id="nextBtn">Next mission</button>`}
-                <button class="primary" id="submitBtn">Submit challenge</button>
-              </div>
+          <div class="q-nav">
+            <button id="backBtn" class="btn btn--secondary" ${state.i === 0 ? "disabled" : ""}>Back</button>
+            <div class="row">
+              ${isLast ? "" : `<button class="btn btn--primary" id="nextBtn">Next</button>`}
+              <button class="btn ${isLast ? "btn--accent" : "btn--secondary"}" id="submitBtn">Submit test</button>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     `;
 
     updateTimerPill();
@@ -643,75 +586,82 @@
       const statusNote = item.status === "pending"
         ? "Being marked. Check back soon."
         : item.status === "needs-review" ? "Waiting for your teacher to mark this." : "";
-      const meta = [item.level, item.topic, item.qType].filter(Boolean).join(" / ");
+      const meta = [item.level, item.topic, item.qType].filter(Boolean).join(" · ");
+      // Typed output and ordered lines are code, so they keep a code font.
+      const isCode = item.type === "code-trace" || item.type === "parsons";
+      const asCode = text => isCode ? `<code>${escapeHtml(text)}</code>` : escapeHtml(text);
+      // Colour is never the only signal: each score has a word beside it.
+      const status = item.status === "pending"
+        ? { tone: "pending", label: "Being marked" }
+        : item.status === "needs-review" ? { tone: "warning", label: "Waiting for teacher" }
+          : item.correct ? { tone: "positive", label: "Correct" }
+            : item.earned > 0 ? { tone: "warning", label: "Part marks" }
+              : { tone: "critical", label: "Incorrect" };
 
       return `
-        <div class="result-row">
+        <li class="result-row">
           <div>
-            <strong>${escapeHtml(item.id)}</strong> ${escapeHtml(item.title || "")}
+            <strong>${escapeHtml(item.title || item.id)}</strong> <span class="muted small mono">${escapeHtml(item.id)}</span>
             ${meta ? `<div class="result-meta">${escapeHtml(meta)}</div>` : ""}
-            <div class="result-meta result-answer">Your answer: ${escapeHtml(chosen)}</div>
-            ${correct && !item.correct ? `<div class="result-meta result-answer">Correct: ${escapeHtml(correct)}</div>` : ""}
+            <div class="result-meta result-answer">Your answer: ${asCode(chosen)}</div>
+            ${correct && !item.correct ? `<div class="result-meta result-answer">Correct answer: ${asCode(correct)}</div>` : ""}
             ${feedback ? `<div class="result-meta">${feedbackLabel}: ${escapeHtml(feedback)}</div>` : ""}
             ${statusNote ? `<div class="result-meta">${statusNote}</div>` : ""}
           </div>
-          <div>${item.correct ? `<span class="good">${item.earned}/${item.max}</span>` : `<span class="bad">${item.earned}/${item.max}</span>`}</div>
-        </div>
+          <div class="result-row__side">
+            <span class="result-row__score tone-${status.tone === "pending" ? "neutral" : status.tone}">${item.earned}/${item.max}</span>
+            <span class="tag status status--${status.tone}">${status.label}</span>
+          </div>
+        </li>
       `;
     }).join("") : "";
 
     screen.innerHTML = `
-      <section class="card results-card">
-        <div class="results-summary">
-          <p class="panel-label">Challenge Complete</p>
-          <h2>Nice Work, ${escapeHtml(state.name)}</h2>
-          <p class="muted">${escapeHtml(state.group)} / ${escapeHtml(state.eventTitle)} / code ${escapeHtml(state.joinCode)}</p>
-
-          <div class="summary-grid">
-            <div class="summary-chip summary-chip--score">
-              Score
-              <strong>${result.score} / ${result.max}</strong>
-            </div>
-            <div class="summary-chip summary-chip--pace">
-              Time
-              <strong>${mins ? `${mins} min` : "N/A"}</strong>
-            </div>
-            <div class="summary-chip summary-chip--level">
-              Answered
-              <strong>${Object.keys(state.answers).length}</strong>
-            </div>
+      <div class="stack">
+        <section class="card">
+          <div class="section-heading">
+            <h2>Your answers are in, ${escapeHtml(state.name)}</h2>
+            <p class="muted small">${escapeHtml(state.group)} · ${escapeHtml(state.eventTitle)} · <span class="mono">${escapeHtml(state.joinCode)}</span></p>
           </div>
-        </div>
 
-        <div class="results-breakdown" style="margin-top:18px">
-          <p class="panel-label">Submission Status</p>
-          <h3>Saved Online</h3>
-          ${auto ? `<p class="notice">Time ran out, so your answers were submitted automatically.</p>` : ""}
-          ${late ? `<p class="notice">This was submitted after the time limit, so your teacher will see it marked late.</p>` : ""}
-          ${pendingCount ? `<p class="notice">${pendingCount} written answer${pendingCount === 1 ? " is" : "s are"} still being marked, so your score may go up. This page checks again every ${MARKING_POLL_SECONDS} seconds.</p>` : ""}
-          <p class="muted">Your answers were submitted successfully. Your teacher can see them on the event dashboard.</p>
-        </div>
+          <dl class="stats">
+            <div class="stat"><dt>Score</dt><dd>${result.score} / ${result.max}</dd></div>
+            <div class="stat"><dt>Time</dt><dd>${mins ? `${mins} min` : "Not known"}</dd></div>
+            <div class="stat"><dt>Answered</dt><dd>${Object.keys(state.answers).length}</dd></div>
+          </dl>
 
-        <div class="results-breakdown" style="margin-top:18px">
-          <p class="panel-label">Per Question</p>
-          <h3>Breakdown</h3>
+          <div class="stack stack--tight mt-m">
+            ${auto ? `<p class="notice notice--warning">Time ran out, so your answers were sent automatically.</p>` : ""}
+            ${late ? `<p class="notice notice--warning">This came in after the time limit, so your teacher will see it marked late.</p>` : ""}
+            ${pendingCount ? `<p class="notice">${pendingCount} written answer${pendingCount === 1 ? " is" : "s are"} still being marked, so your score may go up. This page checks again every ${MARKING_POLL_SECONDS} seconds.</p>` : ""}
+            <p class="muted small">Your teacher can see your answers now.</p>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-heading">
+            <h2>Question by question</h2>
+          </div>
           ${perQ
-            ? `<div style="margin-top:12px">${rows}</div>`
-            : `<p class="muted">Your teacher will release the breakdown of each question later. Come back to this page, or ask your teacher.</p>`}
-        </div>
+            ? `<ol class="breakdown">${rows}</ol>`
+            : `<p class="muted">Your teacher will show you which questions you got right later. Come back to this page, or ask your teacher.</p>`}
+        </section>
 
-        <div class="results-breakdown" style="margin-top:18px">
-          <p class="panel-label">Backup Result Code</p>
-          <h3>Copy If Needed</h3>
-          <p class="muted">This backup code is optional, but it can help if you want an extra submission record.</p>
-          <div class="codebox">${code}</div>
+        <section class="card card--raised">
+          <details class="backup">
+            <summary>Backup code</summary>
+            <p class="muted small mt-s">You won't usually need this. It holds a copy of your answers and score, in case your teacher asks for it.</p>
+            <div class="codebox">${code}</div>
+            <div class="row mt-s">
+              <button class="btn btn--secondary btn--sm" id="copyBtn">Copy code</button>
+            </div>
+          </details>
+        </section>
 
-          <div class="nav">
-            <button id="restartBtn" class="secondary">Start another event</button>
-            <button class="primary" id="copyBtn">Copy code</button>
-          </div>
+        <div class="row">
+          <button id="restartBtn" class="btn btn--secondary">Start another test</button>
         </div>
-      </section>
+      </div>
     `;
 
     pollWhileMarking(pendingCount, { auto, polls });
@@ -745,12 +695,10 @@
   }
 
   async function boot() {
-    initTheme();
-
     try {
       await Types.load();
     } catch (_error) {
-      screen.innerHTML = `<section class="card"><p class="notice notice--danger">Could not load the test. Check your connection and refresh.</p></section>`;
+      screen.innerHTML = `<section class="card"><p class="notice notice--critical">Could not load the test. Check your connection and refresh.</p></section>`;
       return;
     }
 

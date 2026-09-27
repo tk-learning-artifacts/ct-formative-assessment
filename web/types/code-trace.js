@@ -29,11 +29,11 @@
       const text = typeof response === "string" ? response : "";
 
       return `
-        <p class="panel-label"><label for="codeTraceOutput">Type the exact output</label></p>
+        <label class="answer-label" for="codeTraceOutput">Type the exact output</label>
         <textarea id="codeTraceOutput" class="ct-output" data-code-trace-output rows="6"
           spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
           aria-describedby="codeTraceHint">${h.escapeHtml(text)}</textarea>
-        <p class="muted ct-hint" id="codeTraceHint">One printed line per line. Spaces at the end of a line do not matter.</p>
+        <p class="ct-hint" id="codeTraceHint">One printed line per line. Spaces at the end of a line don't matter.</p>
       `;
     },
 
