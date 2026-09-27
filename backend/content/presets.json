@@ -1,0 +1,61 @@
+{
+  "description": "Quick setup cards on the teacher's New event form. Each preset is a question filter (the same shape as an event filter) plus the coarse knobs a teacher may turn on it: who (audience and level), emphasis (Brennan & Resnick dimension) and length (short or full). Validated at boot by src/content.js.",
+  "shortLength": 10,
+  "presets": [
+    {
+      "id": "core-ct-check",
+      "label": "Core CT check (P5 to S2)",
+      "description": "Bebras-style puzzles on sequences, patterns, logic, paths and data. No coding needed.",
+      "filter": { "audiences": ["core"], "types": ["mcq"] },
+      "knobs": ["who", "emphasis", "length"]
+    },
+    {
+      "id": "rgs-s1-starter",
+      "label": "RGSynapse Sec 1 starter",
+      "description": "Gentler Sec 1 questions (difficulty 1 to 2): reading code, events, remixing and checking AI answers.",
+      "filter": { "audiences": ["rgsynapse"], "levels": ["S1"], "difficulty": { "max": 2 } },
+      "knobs": ["emphasis", "length"]
+    },
+    {
+      "id": "rgs-s2",
+      "label": "RGSynapse Sec 2",
+      "description": "The full Sec 2 set: tracing, translating, parallelism, iterating with AI and reviewing its code.",
+      "filter": { "audiences": ["rgsynapse"], "levels": ["S2"] },
+      "knobs": ["emphasis", "length"]
+    },
+    {
+      "id": "debugging-ai-review",
+      "label": "Debugging and AI-code review",
+      "description": "Find the bug, spot the missing edge case, question what an AI wrote. Includes written answers marked by AI.",
+      "filter": {
+        "audiences": ["rgsynapse"],
+        "nodes": ["practice.testing-debugging.edge-cases", "practice.testing-debugging.reviewing-ai-code", "perspective.questioning.ai-output"],
+        "types": ["mcq", "code-trace", "parsons", "open-response-ai"]
+      },
+      "aiScored": true,
+      "knobs": ["who", "length"]
+    },
+    {
+      "id": "loops-conditionals",
+      "label": "Loops and conditionals",
+      "description": "Repetition and decisions: predict what a loop does, follow an if, combine conditions.",
+      "filter": { "audiences": ["core", "rgsynapse"], "nodes": ["concept.loops", "concept.conditionals"] },
+      "knobs": ["who", "length"]
+    },
+    {
+      "id": "ordering-tracing",
+      "label": "Code ordering and tracing practice",
+      "description": "Put lines of code in order (Parsons) and type the exact output of a program.",
+      "filter": { "audiences": ["core", "rgsynapse"], "types": ["code-trace", "parsons"] },
+      "knobs": ["who"]
+    },
+    {
+      "id": "mixed-level",
+      "label": "Mixed: everything for a level",
+      "description": "Every question for one level, all types except AI-scored ones.",
+      "filter": { "audiences": ["core", "rgsynapse"] },
+      "knobs": ["who", "emphasis", "length"],
+      "levelRequired": true
+    }
+  ]
+}

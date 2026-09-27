@@ -8,7 +8,9 @@ const { DEFAULT_DB_PATH, DEFAULT_TEACHER_EMAIL, DEFAULT_TEACHER_PASSWORD } = req
 const { hashPassword, verifyPassword } = require("./security");
 const scoring = require("./scoring");
 const selection = require("./selection");
-const { studentKey } = require("./policy");
+const presets = require("./presets");
+const policy = require("./policy");
+const { studentKey } = policy;
 
 function nowIso() {
   return new Date().toISOString();
@@ -108,6 +110,20 @@ function syncContent(db, content) {
   })();
 }
 
+// Every preset must match at least one question with its default settings,
+// or its card would offer an event that cannot be created. Checked at boot,
+// after the content tables are filled, because matching runs as SQL.
+function assertPresetsMatch(db, content) {
+  const empty = content.presets.filter(preset => {
+    const resolved = selection.resolveSelection({ preset: presets.defaultChoice(preset, content) }, content);
+    return resolved.errors.length || !selection.selectQuestions(db, resolved.filter).length;
+  });
+
+  if (empty.length) {
+    throw new Error(`Content is invalid:\n- presets.json: ${empty.map(preset => `preset "${preset.id}" matches no questions with its default settings`).join("\n- ")}`);
+  }
+}
+
 function openDatabase({
   dbPath = DEFAULT_DB_PATH,
   contentDir = DEFAULT_CONTENT_DIR,
@@ -137,6 +153,7 @@ function openDatabase({
   try {
     const migration = migrate(db, { dbPath: resolvedPath, ctx: { content, log }, log });
     syncContent(db, content);
+    assertPresetsMatch(db, content);
 
     store = createStore(db, content);
     store.migration = migration;
@@ -176,6 +193,8 @@ function createStore(db, content) {
     durationMinutes = null,
     startAt = null,
     endAt = null,
+    feedbackMode = policy.DEFAULT_FEEDBACK_MODE,
+    navigationMode = policy.DEFAULT_NAVIGATION_MODE,
     createdBy
   }) {
     const resolvedFilter = filter || selection.legacyModeToFilter(selectionMode, content);
@@ -186,8 +205,10 @@ function createStore(db, content) {
     }
 
     const insertEvent = db.prepare(`
-      INSERT INTO events (title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at, created_by, created_at)
-      VALUES (@title, @join_code, 'active', @selection_mode, @filter_json, @duration_minutes, @start_at, @end_at, @created_by, @created_at)
+      INSERT INTO events (title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at,
+                          feedback_mode, navigation_mode, created_by, created_at)
+      VALUES (@title, @join_code, 'active', @selection_mode, @filter_json, @duration_minutes, @start_at, @end_at,
+              @feedback_mode, @navigation_mode, @created_by, @created_at)
     `);
 
     const insertQuestion = db.prepare(`
@@ -204,6 +225,8 @@ function createStore(db, content) {
         duration_minutes: durationMinutes,
         start_at: startAt,
         end_at: endAt,
+        feedback_mode: feedbackMode,
+        navigation_mode: navigationMode,
         created_by: createdBy,
         created_at: nowIso()
       });
@@ -231,7 +254,7 @@ function createStore(db, content) {
     return { ...rest, filter, filter_summary: selection.summarizeFilter(filter) };
   }
 
-  const EVENT_COLUMNS = "id, title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at, results_released_at, created_by, created_at";
+  const EVENT_COLUMNS = "id, title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at, results_released_at, feedback_mode, navigation_mode, created_by, created_at";
 
   function getEventById(eventId) {
     return eventRow(db.prepare(`SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`).get(eventId));
@@ -245,7 +268,7 @@ function createStore(db, content) {
   function listEventsForTeacher(userId) {
     return db.prepare(`
       SELECT e.id, e.title, e.join_code, e.status, e.selection_mode, e.filter_json, e.duration_minutes, e.start_at, e.end_at,
-             e.results_released_at, e.created_at,
+             e.results_released_at, e.feedback_mode, e.navigation_mode, e.created_at,
              (SELECT COUNT(*) FROM attempts a WHERE a.event_id = e.id) AS attempt_count,
              (SELECT COUNT(*) FROM event_questions q WHERE q.event_id = e.id) AS question_count
       FROM events e
@@ -265,7 +288,8 @@ function createStore(db, content) {
 
   function getEventByJoinCode(joinCode) {
     return db.prepare(`
-      SELECT id, title, join_code, status, selection_mode, duration_minutes, start_at, end_at, results_released_at
+      SELECT id, title, join_code, status, selection_mode, duration_minutes, start_at, end_at, results_released_at,
+             feedback_mode, navigation_mode
       FROM events
       WHERE join_code = ?
     `).get(joinCode) || null;
@@ -320,7 +344,8 @@ function createStore(db, content) {
     return db.prepare(`
       SELECT a.id, a.event_id, a.student_name, a.student_group, a.status, a.started_at, a.submitted_at, a.deadline_at,
              a.late, a.reset_at, a.score, a.max_score, a.token_hash,
-             e.title, e.join_code, e.duration_minutes, e.start_at, e.end_at, e.results_released_at
+             e.title, e.join_code, e.duration_minutes, e.start_at, e.end_at, e.results_released_at,
+             e.feedback_mode, e.navigation_mode
       FROM attempts a
       JOIN events e ON e.id = a.event_id
       WHERE a.id = ?
@@ -335,71 +360,180 @@ function createStore(db, content) {
       duration_minutes: attempt.duration_minutes,
       start_at: attempt.start_at,
       end_at: attempt.end_at,
-      results_released_at: attempt.results_released_at
+      results_released_at: attempt.results_released_at,
+      feedback_mode: attempt.feedback_mode,
+      navigation_mode: attempt.navigation_mode
     };
   }
 
-  // Scores every question of the event through the scorer registry and stores
-  // the result. The caller shows the student only what policy.js allows.
+  const insertAnswerRow = db.prepare(`
+    INSERT INTO answers (attempt_id, question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status, detail_json, committed_at)
+    VALUES (@attempt_id, @question_id, @question_type, @response_json, @chosen_index, @correct_index, @earned_points, @max_points, @score_status, @detail_json, @committed_at)
+  `);
+
+  // Scores one response through the scorer registry and stores it.
+  function storeAnswer(attemptId, question, raw, committedAt = null) {
+    const { recorded, result, legacy } = scoring.scoreResponse(question, raw);
+
+    insertAnswerRow.run({
+      attempt_id: attemptId,
+      question_id: question.id,
+      question_type: question.type,
+      response_json: JSON.stringify(recorded),
+      chosen_index: legacy.chosenIndex,
+      correct_index: legacy.correctIndex,
+      earned_points: result.earned,
+      max_points: result.max,
+      score_status: result.status,
+      detail_json: result.detail ? JSON.stringify(result.detail) : null,
+      committed_at: committedAt
+    });
+  }
+
+  function committedIds(attemptId) {
+    return new Set(db.prepare("SELECT question_id FROM answers WHERE attempt_id = ? AND committed_at IS NOT NULL").all(attemptId)
+      .map(row => row.question_id));
+  }
+
+  // Commits one answer before submit (policy.locksAnswers). It is final: a
+  // second commit, and anything submit later sends for the question, are
+  // refused or ignored. Under in-order navigation only the first question
+  // not yet committed may be committed. The caller checks the event allows
+  // commits and that time is not up. Returns the stored answer in the
+  // perQuestion shape; policy.js decides what the student sees of it.
+  function commitAnswer(attempt, questionId, raw) {
+    const questions = getEventQuestions(attempt.event_id);
+    const index = questions.findIndex(question => question.id === questionId);
+
+    if (index < 0) {
+      throw httpError(404, "That question is not in this test.");
+    }
+
+    db.transaction(() => {
+      const current = db.prepare("SELECT status, reset_at FROM attempts WHERE id = ?").get(attempt.id);
+
+      if (current.reset_at) {
+        throw httpError(409, "Your teacher reset this attempt. Start the test again.", { code: "attempt-reset" });
+      }
+
+      if (current.status !== "started") {
+        throw httpError(409, "This attempt has already been submitted.", { code: "already-submitted" });
+      }
+
+      const done = committedIds(attempt.id);
+
+      if (done.has(questionId)) {
+        throw httpError(409, "This answer is locked, so it cannot be changed.", { code: "answer-locked" });
+      }
+
+      if (policy.navigationMode(attempt) === "linear") {
+        const next = questions.findIndex(question => !done.has(question.id));
+
+        if (index !== next) {
+          throw httpError(409, "This test goes in order. Answer or skip the current question first; earlier ones cannot be changed.", { code: "out-of-order" });
+        }
+      }
+
+      storeAnswer(attempt.id, questions[index], raw, nowIso());
+    })();
+
+    return getCommittedItems(attempt).find(item => item.id === questionId);
+  }
+
+  // Scores every question of the event and stores the result. Committed
+  // answers stay as they are, whatever the body says about them. Under
+  // in-order navigation only the question the student is on (the first not
+  // yet committed) takes its answer from the body; the ones after it were
+  // never shown, so they are stored blank. The caller shows the student only
+  // what policy.js allows.
   function submitAttempt(attempt, rawAnswers, { late = false } = {}) {
     const questions = getEventQuestions(attempt.event_id);
     const answers = rawAnswers && typeof rawAnswers === "object" && !Array.isArray(rawAnswers) ? rawAnswers : {};
+    const linear = policy.navigationMode(attempt) === "linear";
 
-    const clearAnswers = db.prepare("DELETE FROM answers WHERE attempt_id = ?");
-    const insertAnswer = db.prepare(`
-      INSERT INTO answers (attempt_id, question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status, detail_json)
-      VALUES (@attempt_id, @question_id, @question_type, @response_json, @chosen_index, @correct_index, @earned_points, @max_points, @score_status, @detail_json)
-    `);
+    const clearUncommitted = db.prepare("DELETE FROM answers WHERE attempt_id = ? AND committed_at IS NULL");
+    const totals = db.prepare("SELECT COALESCE(SUM(earned_points), 0) AS score, COALESCE(SUM(max_points), 0) AS max FROM answers WHERE attempt_id = ?");
     const finalizeAttempt = db.prepare(`
       UPDATE attempts
       SET status = 'submitted', submitted_at = ?, score = ?, max_score = ?, late = ?
       WHERE id = ? AND status = 'started' AND reset_at IS NULL
     `);
 
-    let score = 0;
-    let max = 0;
+    let result;
 
     db.transaction(() => {
-      clearAnswers.run(attempt.id);
+      clearUncommitted.run(attempt.id);
+      const done = committedIds(attempt.id);
+      const current = linear ? questions.find(question => !done.has(question.id)) : null;
 
       questions.forEach(question => {
-        const raw = Object.prototype.hasOwnProperty.call(answers, question.id) ? answers[question.id] : undefined;
-        const { recorded, result, legacy } = scoring.scoreResponse(question, raw);
+        if (done.has(question.id)) {
+          return;
+        }
 
-        score += result.earned;
-        max += result.max;
-
-        insertAnswer.run({
-          attempt_id: attempt.id,
-          question_id: question.id,
-          question_type: question.type,
-          response_json: JSON.stringify(recorded),
-          chosen_index: legacy.chosenIndex,
-          correct_index: legacy.correctIndex,
-          earned_points: result.earned,
-          max_points: result.max,
-          score_status: result.status,
-          detail_json: result.detail ? JSON.stringify(result.detail) : null
-        });
+        const accepted = !linear || question === current;
+        const raw = accepted && Object.prototype.hasOwnProperty.call(answers, question.id) ? answers[question.id] : undefined;
+        storeAnswer(attempt.id, question, raw);
       });
 
-      const updated = finalizeAttempt.run(nowIso(), score, max, late ? 1 : 0, attempt.id);
+      result = totals.get(attempt.id);
+      const updated = finalizeAttempt.run(nowIso(), result.score, result.max, late ? 1 : 0, attempt.id);
 
       if (updated.changes !== 1) {
         throw httpError(409, "This attempt has already been submitted.");
       }
     })();
 
-    return { score, max };
+    return { score: result.score, max: result.max };
   }
 
   function answersFor(attemptId) {
     return db.prepare(`
-      SELECT question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status, detail_json
+      SELECT question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status, detail_json, committed_at
       FROM answers
       WHERE attempt_id = ?
       ORDER BY id ASC
     `).all(attemptId);
+  }
+
+  // One stored answer in the perQuestion shape, from the event snapshot the
+  // student answered.
+  function resultItem(row, question) {
+    const correctText = Array.isArray(question.options) && row.correct_index !== null ? question.options[row.correct_index] : null;
+
+    return {
+      id: row.question_id,
+      title: question.title || null,
+      level: question.level || null,
+      topic: question.topic || null,
+      qType: question.qType || null,
+      type: row.question_type,
+      response: row.response_json === null ? null : JSON.parse(row.response_json),
+      correctResponse: row.correct_index === null ? scoring.keyResponse(question) : { index: row.correct_index, text: correctText },
+      earned: row.earned_points,
+      max: row.max_points,
+      correct: row.score_status === "scored" ? row.earned_points === row.max_points : null,
+      status: row.score_status,
+      detail: row.detail_json === null ? null : JSON.parse(row.detail_json)
+    };
+  }
+
+  // An attempt's stored answers in question order, optionally only the
+  // committed ones.
+  function attemptItems(attempt, { committedOnly = false } = {}) {
+    const questions = getEventQuestions(attempt.event_id);
+    const order = new Map(questions.map((question, index) => [question.id, index]));
+    const byId = new Map(questions.map(question => [question.id, question]));
+
+    return answersFor(attempt.id)
+      .filter(row => !committedOnly || row.committed_at !== null)
+      .sort((a, b) => (order.has(a.question_id) ? order.get(a.question_id) : Infinity) - (order.has(b.question_id) ? order.get(b.question_id) : Infinity))
+      .map(row => resultItem(row, byId.get(row.question_id) || { id: row.question_id }));
+  }
+
+  // The answers committed so far, for an attempt still in progress.
+  function getCommittedItems(attempt) {
+    return attemptItems(attempt, { committedOnly: true });
   }
 
   // The full per-question breakdown for one attempt, built from the stored
@@ -410,28 +544,7 @@ function createStore(db, content) {
       return null;
     }
 
-    const byId = new Map(getEventQuestions(attempt.event_id).map(question => [question.id, question]));
-
-    const perQuestion = answersFor(attempt.id).map(row => {
-      const question = byId.get(row.question_id) || { id: row.question_id };
-      const correctText = Array.isArray(question.options) && row.correct_index !== null ? question.options[row.correct_index] : null;
-
-      return {
-        id: row.question_id,
-        title: question.title || null,
-        level: question.level || null,
-        topic: question.topic || null,
-        qType: question.qType || null,
-        type: row.question_type,
-        response: row.response_json === null ? null : JSON.parse(row.response_json),
-        correctResponse: row.correct_index === null ? scoring.keyResponse(question) : { index: row.correct_index, text: correctText },
-        earned: row.earned_points,
-        max: row.max_points,
-        correct: row.score_status === "scored" ? row.earned_points === row.max_points : null,
-        status: row.score_status,
-        detail: row.detail_json === null ? null : JSON.parse(row.detail_json)
-      };
-    });
+    const perQuestion = attemptItems(attempt);
 
     return {
       score: attempt.score,
@@ -450,7 +563,7 @@ function createStore(db, content) {
     `).all(eventId);
 
     const answersByAttempt = db.prepare(`
-      SELECT attempt_id, question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status, detail_json
+      SELECT attempt_id, question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status, detail_json, committed_at
       FROM answers
       WHERE attempt_id IN (SELECT id FROM attempts WHERE event_id = ?)
       ORDER BY attempt_id ASC, id ASC
@@ -468,7 +581,8 @@ function createStore(db, content) {
         earnedPoints: row.earned_points,
         maxPoints: row.max_points,
         scoreStatus: row.score_status,
-        detail: row.detail_json === null ? null : JSON.parse(row.detail_json)
+        detail: row.detail_json === null ? null : JSON.parse(row.detail_json),
+        committedAt: row.committed_at
       });
 
       return acc;
@@ -716,6 +830,8 @@ function createStore(db, content) {
     getAttempt,
     attemptEvent,
     submitAttempt,
+    commitAnswer,
+    getCommittedItems,
     getAttemptResult,
     getResults,
     recomputeAttemptScore,

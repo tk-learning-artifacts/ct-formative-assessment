@@ -12,8 +12,11 @@
 //                                           or any node beneath them
 //     types:       ["mcq"],                 question.type is one of these
 //     difficulty:  { "min": 1, "max": 3 }   inclusive difficulty band
+//     limit:       10                       at most this many, balanced
+//                                           across learning outcomes
 //   }
-// Keys combine with AND; values inside one key combine with OR.
+// Keys combine with AND; values inside one key combine with OR. limit applies
+// last, to whatever the other keys matched (see balancedPick).
 //
 // AI-scored types are opt-in: a filter with no types and no questionIds
 // leaves them out, so a level or outcome filter never sends a class
@@ -23,13 +26,16 @@
 //
 // The legacy selectionMode values map onto explicit question ids listed in
 // backend/content/legacy-modes.json, so "ALL" still means the original 20
-// questions even as the core bank grows.
+// questions even as the core bank grows. A quick setup preset
+// (backend/content/presets.json) compiles to an ordinary filter first.
 
 const scoring = require("./scoring");
+const presets = require("./presets");
 
 const LEGACY_MODES = ["ALL", "P5", "P6", "S1", "S2"];
 const LIST_KEYS = ["audiences", "questionIds", "levels", "outcomes", "nodes", "types"];
 const DEFAULT_AUDIENCES = ["core"];
+const MAX_LIMIT = 100;
 
 function legacyModeToFilter(mode, content) {
   return { audiences: ["core"], questionIds: content.legacyModes[mode].slice() };
@@ -58,7 +64,7 @@ function normalizeFilter(input, content) {
   }
 
   Object.keys(input).forEach(key => {
-    if (!LIST_KEYS.includes(key) && key !== "difficulty") {
+    if (!LIST_KEYS.includes(key) && key !== "difficulty" && key !== "limit") {
       errors.push(`unknown filter key "${key}"`);
     }
   });
@@ -141,12 +147,32 @@ function normalizeFilter(input, content) {
     }
   }
 
+  if (input.limit !== undefined && input.limit !== null) {
+    if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > MAX_LIMIT) {
+      errors.push(`filter.limit must be an integer from 1 to ${MAX_LIMIT}`);
+    } else {
+      filter.limit = input.limit;
+    }
+  }
+
   return { filter: errors.length ? null : filter, errors };
 }
 
 // Accepts the body of POST /api/events (or the preview endpoint) and works out
-// which filter to use. Returns { selectionMode, filter, errors }.
+// which filter to use: a v2 filter, a quick setup preset choice, or a legacy
+// selectionMode, in that order. Returns { selectionMode, filter, errors }.
 function resolveSelection(body, content) {
+  if (body.preset !== undefined && body.preset !== null && (body.filter === undefined || body.filter === null)) {
+    const compiled = presets.compilePreset(body.preset, content);
+
+    if (compiled.errors.length) {
+      return { selectionMode: null, filter: null, errors: compiled.errors };
+    }
+
+    const { filter, errors } = normalizeFilter(compiled.filter, content);
+    return { selectionMode: "FILTER", filter, errors };
+  }
+
   if (body.filter !== undefined && body.filter !== null) {
     const { filter, errors } = normalizeFilter(body.filter, content);
     return { selectionMode: "FILTER", filter, errors };
@@ -234,7 +260,58 @@ function selectQuestions(db, filter) {
     ORDER BY CASE WHEN q.type IN (SELECT value FROM json_each(?)) THEN 1 ELSE 0 END, q.position ASC
   `;
 
-  return db.prepare(sql).all(...params, JSON.stringify(aiTypes)).map(row => JSON.parse(row.question_json));
+  const questions = db.prepare(sql).all(...params, JSON.stringify(aiTypes)).map(row => JSON.parse(row.question_json));
+  return filter.limit ? balancedPick(questions, filter.limit) : questions;
+}
+
+// Groups items by key, groups in order of first appearance.
+function groupBy(items, keyOf) {
+  const groups = new Map();
+
+  items.forEach(item => {
+    const key = keyOf(item);
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(item);
+  });
+
+  return Array.from(groups.values());
+}
+
+// The first item of each list, then the second of each, and so on.
+function interleave(lists) {
+  const longest = Math.max(0, ...lists.map(list => list.length));
+  const order = [];
+
+  for (let round = 0; round < longest; round += 1) {
+    lists.forEach(list => {
+      if (round < list.length) {
+        order.push(list[round]);
+      }
+    });
+  }
+
+  return order;
+}
+
+// Keeps at most `limit` questions, spread across levels and, within each
+// level, across learning outcomes (a question's first outcome). Each level's
+// questions are interleaved by outcome, the levels are interleaved with each
+// other, and the first `limit` are kept. The kept questions stay in their
+// original bank order, so AI-scored ones are still last. Deterministic: the
+// same filter always keeps the same questions.
+function balancedPick(questions, limit) {
+  if (questions.length <= limit) {
+    return questions;
+  }
+
+  const indexed = questions.map((question, index) => ({ question, index }));
+  const perLevel = groupBy(indexed, item => item.question.level || "")
+    .map(items => interleave(groupBy(items, item => (item.question.outcomes && item.question.outcomes[0]) || "")));
+  const kept = new Set(interleave(perLevel).slice(0, limit).map(item => item.index));
+
+  return questions.filter((_question, index) => kept.has(index));
 }
 
 function summarizeFilter(filter) {
@@ -256,15 +333,21 @@ function summarizeFilter(filter) {
     parts.push(`difficulty: ${filter.difficulty.min || 1}-${filter.difficulty.max || 5}`);
   }
 
+  if (filter.limit) {
+    parts.push(`at most ${filter.limit}`);
+  }
+
   return parts.length ? parts.join(" / ") : "all questions";
 }
 
 module.exports = {
   LEGACY_MODES,
+  MAX_LIMIT,
   legacyModeToFilter,
   normalizeFilter,
   resolveSelection,
   selectQuestions,
+  balancedPick,
   expandNodes,
   aiScoredTypes,
   summarizeFilter

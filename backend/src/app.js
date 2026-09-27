@@ -8,6 +8,7 @@ const { verifyPassword, hashPassword, createAttemptToken, verifyAttemptToken } =
 const scoring = require("./scoring");
 const selection = require("./selection");
 const policy = require("./policy");
+const presets = require("./presets");
 const { createAiProvider } = require("./ai");
 const { buildOutcomesSummary } = require("./outcomes-summary");
 const { createScoringQueue } = require("./ai/jobs");
@@ -107,8 +108,20 @@ function publicEvent(event) {
     joinCode: event.join_code,
     durationMinutes: event.duration_minutes,
     startAt: event.start_at,
-    endAt: event.end_at
+    endAt: event.end_at,
+    feedbackMode: policy.feedbackMode(event),
+    navigationMode: policy.navigationMode(event)
   };
+}
+
+// A per-event setting from the request body: the default when left out, an
+// error message when it is not one of the allowed values.
+function parseSetting(value, allowed, fallback, label) {
+  if (value === undefined || value === null || value === "") {
+    return { value: fallback };
+  }
+
+  return allowed.includes(value) ? { value } : { error: `${label} must be one of: ${allowed.join(", ")}.` };
 }
 
 function countBy(items, key) {
@@ -334,6 +347,21 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     res.json({ outcomes: db.listOutcomes({ level, audience }) });
   });
 
+  // Quick setup cards: each preset with its knobs, default settings and the
+  // number of questions those defaults select (the same path as preview).
+  app.get("/api/presets", requireAuth, (_req, res) => {
+    res.json({
+      shortLength: db.content.presetShortLength,
+      emphasis: Object.keys(presets.EMPHASIS).map(id => ({ id, label: presets.EMPHASIS_LABELS[id] })),
+      presets: presets.describePresets(db.content).map(preset => {
+        const resolved = selection.resolveSelection({ preset: preset.defaults }, db.content);
+        const questions = resolved.errors.length ? [] : db.previewQuestions(resolved.filter);
+
+        return { ...preset, count: questions.length, aiRequired: aiStatus(questions, ai).aiRequired };
+      })
+    });
+  });
+
   app.post("/api/question-bank/preview", requireAuth, (req, res) => {
     const resolved = selection.resolveSelection(req.body || {}, db.content);
 
@@ -395,6 +423,15 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       return;
     }
 
+    const feedbackMode = parseSetting(req.body.feedbackMode, policy.FEEDBACK_MODES, policy.DEFAULT_FEEDBACK_MODE, "feedbackMode");
+    const navigationMode = parseSetting(req.body.navigationMode, policy.NAVIGATION_MODES, policy.DEFAULT_NAVIGATION_MODE, "navigationMode");
+    const settingError = feedbackMode.error || navigationMode.error;
+
+    if (settingError) {
+      res.status(400).json({ error: settingError });
+      return;
+    }
+
     try {
       const startAt = parseOptionalDate(req.body.startAt, "Start time");
       const endAt = parseOptionalDate(req.body.endAt, "Deadline");
@@ -412,6 +449,8 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
         durationMinutes,
         startAt,
         endAt,
+        feedbackMode: feedbackMode.value,
+        navigationMode: navigationMode.value,
         createdBy: req.user.sub
       });
 
@@ -605,7 +644,8 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       },
       serverNow: new Date(startedAtMs).toISOString(),
       event: publicEvent(event),
-      questions: db.getEventQuestions(event.id).map(scoring.toPublicQuestion)
+      questions: db.getEventQuestions(event.id).map(scoring.toPublicQuestion),
+      progress: policy.studentProgressView(event, [])
     });
   });
 
@@ -620,13 +660,63 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
 
     const event = db.attemptEvent(attempt);
     const reset = Boolean(attempt.reset_at);
+    const inProgress = !reset && attempt.status === "started";
 
     res.json({
       attempt: attemptSummary(attempt),
       serverNow: new Date().toISOString(),
       event: publicEvent(event),
       questions: reset ? [] : db.getEventQuestions(attempt.event_id).map(scoring.toPublicQuestion),
+      progress: inProgress ? policy.studentProgressView(event, db.getCommittedItems(attempt)) : null,
       result: reset ? null : policy.studentResultView(event, db.getAttemptResult(attempt))
+    });
+  });
+
+  // Commits one answer before submit, when the event's settings lock answers
+  // question by question (feedback after each question, or in-order
+  // navigation). The answer is final. The response carries what policy.js
+  // lets the student see of it: its result under "each", otherwise only
+  // that it is recorded.
+  app.post("/api/attempts/:id/answers/:questionId/commit", (req, res) => {
+    const attempt = attemptFromRequest(req, res);
+
+    if (!attempt) {
+      return;
+    }
+
+    const event = db.attemptEvent(attempt);
+
+    if (!policy.locksAnswers(event)) {
+      res.status(409).json({ error: "This test takes all its answers when you submit.", code: "commit-not-used" });
+      return;
+    }
+
+    const deadlineMs = attempt.deadline_at ? Date.parse(attempt.deadline_at) : null;
+
+    if (deadlineMs !== null && Date.now() > deadlineMs + config.submitGraceMs) {
+      res.status(409).json({ error: "Time is up, so answers can no longer be checked one by one. Submit your test.", code: "time-up" });
+      return;
+    }
+
+    const response = req.body && Object.prototype.hasOwnProperty.call(req.body, "response") ? req.body.response : undefined;
+    let item;
+
+    try {
+      item = db.commitAnswer(attempt, String(req.params.questionId), response === null ? undefined : response);
+    } catch (error) {
+      if (!error.status) {
+        throw error;
+      }
+
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+
+    scoringQueue.kick();
+
+    res.json({
+      committed: policy.committedAnswerView(event, item),
+      progress: policy.studentProgressView(event, db.getCommittedItems(attempt))
     });
   });
 
@@ -677,7 +767,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       result: {
         score: totals.score,
         max: totals.max,
-        breakdownReleased: policy.breakdownReleased(event)
+        breakdownReleased: policy.studentMaySeeBreakdown(event)
       }
     });
   });

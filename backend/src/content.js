@@ -8,6 +8,8 @@
 const fs = require("fs");
 const path = require("path");
 const scoring = require("./scoring");
+const selection = require("./selection");
+const { validatePresets } = require("./presets");
 
 const DEFAULT_CONTENT_DIR = path.resolve(__dirname, "../content");
 const NODE_KINDS = ["concept", "practice", "perspective"];
@@ -359,6 +361,15 @@ function loadContent(contentDir = DEFAULT_CONTENT_DIR) {
     });
   });
 
+  // Quick setup presets, checked against everything above. Each preset's
+  // filter is validated like an event filter and stored normalised.
+  const presetFile = readJson(path.join(contentDir, "presets.json"));
+  const presetContent = { levels: catalog.levels, audiences: catalog.audiences, nodes, outcomes, questions };
+  validatePresets(presetFile, presetContent, {
+    normalizeFilter: selection.normalizeFilter,
+    isAiType: type => Boolean(scoring.getType(type) && scoring.getType(type).requiresAi)
+  }, errors);
+
   if (errors.length) {
     const error = new Error(`Content in ${contentDir} is invalid:\n- ${errors.join("\n- ")}`);
     error.contentErrors = errors;
@@ -372,7 +383,9 @@ function loadContent(contentDir = DEFAULT_CONTENT_DIR) {
     nodes,
     outcomes,
     questions,
-    legacyModes
+    legacyModes,
+    presets: Array.isArray(presetFile.presets) ? presetFile.presets : [],
+    presetShortLength: presetFile.shortLength
   };
 }
 
