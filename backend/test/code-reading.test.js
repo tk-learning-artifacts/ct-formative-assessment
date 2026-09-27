@@ -13,7 +13,7 @@ const assert = require("node:assert/strict");
 const request = require("supertest");
 const scoring = require("../src/scoring");
 const { loadContent } = require("../src/content");
-const { SPECS, SOLVERS, withLine } = require("./solvers/type-code-reading");
+const { SPECS, SOLVERS, withLine, lineFixes } = require("./solvers/type-code-reading");
 const { buildApp, login, startAttempt, submit, getAttempt, allKeys } = require("./helpers");
 
 const execFileAsync = promisify(execFile);
@@ -210,12 +210,14 @@ Object.entries(SPECS).filter(([, spec]) => spec.call).forEach(([id, spec]) => {
 
     assert.deepEqual(printed.map(line => parseOutput(language, line)), expected);
 
-    if (spec.followUp && spec.followUp.line) {
-      const fixed = withLine(question.code.source, spec.followUp.line, spec.followUp.replace);
-      const fixedPrinted = await runReal(language, harness(language, fixed, calls));
-      spec.inputs.forEach((input, i) => {
-        assert.ok(spec.followUp.goal(input, parseOutput(language, fixedPrinted[i])), `${id}: with line ${spec.followUp.line} changed, ${calls[i]} printed ${fixedPrinted[i]}`);
-      });
+    if (spec.followUp && typeof spec.followUp === "object") {
+      for (const fix of lineFixes(spec)) {
+        const fixed = withLine(question.code.source, fix.line, fix.replace);
+        const fixedPrinted = await runReal(language, harness(language, fixed, calls));
+        spec.inputs.forEach((input, i) => {
+          assert.ok(spec.followUp.goal(input, parseOutput(language, fixedPrinted[i])), `${id}: with line ${fix.line} changed, ${calls[i]} printed ${fixedPrinted[i]}`);
+        });
+      }
     }
   });
 });

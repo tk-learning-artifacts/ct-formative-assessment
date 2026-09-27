@@ -12,7 +12,10 @@
 //                   option is right, computed with run();
 //                   for kind "line": { line, replace, runFixed, goal }. The
 //                   code with that one line replaced must meet goal on every
-//                   input and the original must not.
+//                   input and the original must not. When more than one
+//                   line can be fixed on its own, give
+//                   { fixes: [{ line, replace, runFixed }], goal } instead;
+//                   every fix must work, and the key lists their lines.
 //   call(input)     optional: the input as a call in the code's own
 //                   language, so code-reading.test.js can run the real
 //                   program under python3 or swift and compare it with run().
@@ -276,10 +279,13 @@ const SPECS = {
       ),
       "Gives back the name with the most points for any scores, negative ones included": (s, out) => out === firstArgmax(s)
     },
+    // Either line fixes it alone: start best below any score, or let the
+    // first name through whatever its score.
     followUp: {
-      line: 3,
-      replace: "    best = float(\"-inf\")",
-      runFixed: scores => firstArgmax(scores),
+      fixes: [
+        { line: 3, replace: "    best = float(\"-inf\")", runFixed: scores => firstArgmax(scores) },
+        { line: 5, replace: "        if best_name is None or points > best:", runFixed: scores => firstArgmax(scores) }
+      ],
       goal: (s, out) => out === firstArgmax(s)
     }
   },
@@ -310,7 +316,7 @@ const SPECS = {
       }
       return out;
     },
-    inputs: ["aaab", "abca", "zz", "", "mississippi"],
+    inputs: ["aaab", "aaba", "abca", "zz", "", "mississippi"],
     call: text => `squash(${JSON.stringify(text)})`,
     claims: {
       "Each letter with how many times it appears anywhere in the text": (t, out) => {
@@ -331,6 +337,11 @@ const SPECS = {
   }
 };
 
+// A line follow-up's fixes, one or several.
+function lineFixes(spec) {
+  return spec.followUp.fixes || [{ line: spec.followUp.line, replace: spec.followUp.replace, runFixed: spec.followUp.runFixed }];
+}
+
 function solveCodeReading(id, spec) {
   return q => {
     expectSource(q, spec.source);
@@ -349,11 +360,12 @@ function solveCodeReading(id, spec) {
       return { describe, followUp: { pick: spec.followUp(q, spec.run) } };
     }
 
-    const { line, runFixed, goal } = spec.followUp;
-    const fixedWorks = spec.inputs.every(input => goal(input, runFixed(input)));
+    const { goal } = spec.followUp;
+    const fixes = lineFixes(spec);
     const originalFails = spec.inputs.some(input => !goal(input, spec.run(input)));
+    const working = fixes.filter(fix => spec.inputs.every(input => goal(input, fix.runFixed(input))));
 
-    return { describe, followUp: { lines: fixedWorks && originalFails ? [line] : [] } };
+    return { describe, followUp: { lines: originalFails ? working.map(fix => fix.line) : [] } };
   };
 }
 
@@ -431,5 +443,6 @@ SOLVERS["CR-AI-S2-01"] = q => {
 module.exports = {
   SOLVERS,
   SPECS,
-  withLine
+  withLine,
+  lineFixes
 };

@@ -381,7 +381,7 @@
       ],
       "answer": {
         "index": 2,
-        "followUp": 3
+        "followUp": [3, 5]
       },
       "followUp": {
         "kind": "line",
@@ -415,7 +415,7 @@
       },
       "topic": "Reading code",
       "qType": "What does it do?",
-      "details": "The best-so-far starts at 0 instead of the first score, so all-negative (or all-zero) scores give None. > rather than >= keeps the first of a tie. Fix line 3, for example best = float(\"-inf\")."
+      "details": "The best-so-far starts at 0 instead of the first score, so all-negative (or all-zero) scores give None. > rather than >= keeps the first of a tie. Either line 3 (best = float(\"-inf\")) or line 5 (if best_name is None or points > best:) fixes it on its own, so both earn the mark."
     },
     {
       "id": "CR-RGS-S2-02",
@@ -423,7 +423,7 @@
       "audience": "rgsynapse",
       "level": "S2",
       "title": "Squashing text",
-      "prompt": "What does this Python function give back, for any text? For example, work out squash(\"aaab\") first.",
+      "prompt": "What does this Python function give back, for any text? For example, work out squash(\"aaba\") first.",
       "code": {
         "language": "python",
         "source": "def squash(text):\n    out = \"\"\n    i = 0\n    while i < len(text):\n        j = i\n        while j < len(text) and text[j] == text[i]:\n            j += 1\n        out += text[i] + str(j - i)\n        i = j\n    return out"
@@ -529,7 +529,7 @@
       "audience": "rgsynapse",
       "level": "S2",
       "title": "Explain it: streak",
-      "prompt": "days has one true or false for each day, true if a habit was kept that day. In one or two sentences, explain what streak gives back. Say what the number means, not what each line does.",
+      "prompt": "days has one true or false for each day, true if a habit was kept that day. In one or two sentences, explain what streak gives back, including when the habit was never kept. Say what the number means, not what each line does.",
       "code": {
         "language": "swift",
         "source": "func streak(_ days: [Bool]) -> Int {\n    var best = 0\n    var current = 0\n    for d in days {\n        if d {\n            current += 1\n            best = max(best, current)\n        } else {\n            current = 0\n        }\n    }\n    return best\n}"
