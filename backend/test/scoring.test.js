@@ -64,11 +64,11 @@ test("every active type's public projection leaves out every secret field", () =
 
 test("reserved types are listed but cannot score", () => {
   const types = Object.fromEntries(scoring.listTypes().map(entry => [entry.type, entry.status]));
-  assert.equal(types.mcq, "active");
-  ["code-trace", "parsons", "short-answer", "open-response-ai", "multi-select"].forEach(type => {
+  ["mcq", "code-trace", "parsons"].forEach(type => assert.equal(types[type], "active", type));
+  ["short-answer", "open-response-ai", "multi-select"].forEach(type => {
     assert.equal(types[type], "reserved", type);
   });
-  assert.throws(() => scoring.scoreResponse({ ...mcqQuestion, type: "parsons" }, 1), /no active scorer/);
+  assert.throws(() => scoring.scoreResponse({ ...mcqQuestion, type: "multi-select" }, 1), /no active scorer/);
 });
 
 test("every file in scoring/types is a registered type", () => {
@@ -107,9 +107,9 @@ test("the content loader rejects a question of a reserved type", () => {
   fs.cpSync(DEFAULT_CONTENT_DIR, dir, { recursive: true });
   const bankPath = path.join(dir, "questions/core.json");
   const bank = JSON.parse(fs.readFileSync(bankPath, "utf8"));
-  bank.questions[0].type = "parsons";
+  bank.questions[0].type = "multi-select";
   fs.writeFileSync(bankPath, JSON.stringify(bank));
 
-  assert.throws(() => loadContent(dir), /reserved type "parsons"/);
+  assert.throws(() => loadContent(dir), /reserved type "multi-select"/);
   fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -86,15 +86,18 @@ Each LO has `id`, `statement`, `nodes` (at least one ontology node), `levels` (a
 | `crosswalk` | no | `{ bebrasCategory }` |
 | `topic`, `qType` | no | Display labels kept from v1. `qType` is a puzzle-style label, not the scoring type |
 | `details` | no | Teacher-only focus note. Never sent to students, because it often names the method or the answer |
-| type-specific | per type | For `mcq`: `options` (at least 2, distinct) and `answer: { index }` |
+| type-specific | per type | For `mcq`: `options` (at least 2, distinct) and `answer: { index }`. For `code-trace` and `parsons`, see below |
 
 Correct-answer positions in the shipped banks are balanced (six keys at each of positions 0 to 3), so "always pick B" earns nothing in particular.
+
+Two more types became active in Phase 2 (2026-09-27):
+
+- `code-trace`: the student types the output of `code`. `answer: { output, accepted? }`, optional `marking: { collapseSpaces?, partial?: "lines" }`. Line endings are unified and trailing whitespace dropped before comparing. The response is stored as `{ text }`.
+- `parsons`: the student orders `lines: [{ id, text }]`, with indentation inside the text, and leaves out distractors. `language`, `answer: { order, alternatives? }`, optional `expectedOutput` (public) and `marking: { partial: "longest-run" }`. Students get the lines under opaque ids (a hash of question and line id), in a shuffle seeded by the question id that is never a correct order or the content order; validation rejects a question with no such order. The response is stored as `{ lines: [{ id, text }] }`.
 
 Reserved types have a module file each but no scorer, and the loader rejects questions that use them:
 
 - `multi-select`
-- `code-trace`: the student types the output
-- `parsons`: the student orders code lines
 - `short-answer`: matched against accepted answers
 - `open-response-ai`: scored by the AI provider against `rubric: [{ id, description, points }]`
 
@@ -110,12 +113,14 @@ Reserved types have a module file each but no scorer, and the loader rejects que
 - `recordResponse(question, response)`: the JSON stored in `answers.response_json`. It must describe what the student saw; MCQ stores `{ index, text }`
 - `score(question, response)`: returns `{ status, earned, max, correct, detail }`
 - `legacyColumns` (optional): fills the v1 `chosen_index` and `correct_index` columns
+- `projectPublic(question)` (optional): a copy with public fields rewritten before the allowlist is applied (Parsons shuffles here); only `publicFields` are taken from it
+- `keyResponse(question)` (optional): the correct answer in the recorded shape, shown in the released breakdown for types without `correct_index`
 
 A reserved type exports only `type`, `status: "reserved"`, `label` and `description`. Students only ever receive the base fields plus the type's `publicFields`, so secret fields (`answer`, `rubric`, `solution`, `details`) never leave the server unless a type lists them. A test builds each active type's `sample` with every secret field added and asserts the projection drops them all.
 
 `status` is `scored` for synchronous types. AI-scored types store `pending` at submit, and a background job later sets `scored` or `needs-review` and fills `answers.detail_json` (§10), so a submission never waits on a model.
 
-**Client.** `web/type-registry.js` loads every renderer in `web/types/`, as listed by `GET /api/web-types` (derived from the folder). A renderer registers `renderInput(question, response, h)`, `readResponse(container, question)` and `describeResponse(response, h)`, and the student page and the results view dispatch through it. `web/types/mcq.js` is the first renderer. The static allowlist is derived from `web/` too: its `.html`, `.css` and `.js` files except `*.config.js`, plus `web/types/*.js`.
+**Client.** `web/type-registry.js` loads every renderer in `web/types/`, as listed by `GET /api/web-types` (derived from the folder). A renderer registers `renderInput(question, response, h)`, `readResponse(container, question)` and `describeResponse(response, h)`, and the student page and the results view dispatch through it. `readResponse` may return `null` to clear a saved answer, and a renderer may add `renderCode(code, h)` to draw the code block itself (code-trace adds line numbers). Renderers exist for `mcq`, `code-trace` and `parsons`. The static allowlist is derived from `web/` too: its `.html`, `.css` and `.js` files except `*.config.js`, plus `web/types/*.js`.
 
 To add a type: add `backend/src/scoring/types/<type>.js`, `web/types/<type>.js`, and a solver or matcher in the answer-key test. No shared file changes.
 

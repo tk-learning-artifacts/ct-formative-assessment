@@ -1,0 +1,320 @@
+{
+  "bank": "type-samples",
+  "description": "Sample code-trace and Parsons questions, one of each kind per audience level. Not part of any legacy mode.",
+  "questions": [
+    {
+      "id": "TS-CT-01",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "S1",
+      "title": "Doubling in a loop",
+      "prompt": "This Python program repeats the indented lines 4 times (range(4) counts 0, 1, 2, 3). Type exactly what it prints, one number per line.",
+      "code": {
+        "language": "python",
+        "source": "x = 1\nfor step in range(4):\n    x = x * 2\n    print(x)"
+      },
+      "answer": {
+        "output": "2\n4\n8\n16"
+      },
+      "marking": {
+        "partial": "lines"
+      },
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.data.variables",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "Tracks one variable through a loop. The print is inside the loop, so every value is printed, and x doubles before the first print. One mark per correct line."
+    },
+    {
+      "id": "TS-CT-02",
+      "type": "code-trace",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Long words only",
+      "prompt": "Type exactly what this Python program prints.",
+      "code": {
+        "language": "python",
+        "source": "words = [\"loop\", \"if\", \"list\", \"print\"]\ncount = 0\nfor w in words:\n    if len(w) > 2:\n        count += 1\n        print(w.upper(), count)"
+      },
+      "answer": {
+        "output": "LOOP 1\nLIST 2\nPRINT 3"
+      },
+      "marking": {
+        "collapseSpaces": true,
+        "partial": "lines"
+      },
+      "points": 3,
+      "difficulty": 3,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "concept.data.structures",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "A filter inside a loop: the counter only moves when the condition holds, so \"if\" is skipped without using a number. print() with two arguments puts one space between them; extra spaces are forgiven. One mark per correct line."
+    },
+    {
+      "id": "TS-CT-03",
+      "type": "code-trace",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Repeated strings in a list",
+      "prompt": "Type exactly what this Python program prints. It prints two lines.",
+      "code": {
+        "language": "python",
+        "source": "def shout(word, times):\n    return (word + \"!\") * times\n\nresult = []\nfor n in range(1, 4):\n    result.append(shout(\"go\", n))\nprint(result)\nprint(len(result[-1]))"
+      },
+      "answer": {
+        "output": "['go!', 'go!go!', 'go!go!go!']\n9",
+        "accepted": [
+          "[\"go!\", \"go!go!\", \"go!go!go!\"]\n9"
+        ]
+      },
+      "points": 5,
+      "difficulty": 4,
+      "ontology": [
+        "concept.loops",
+        "concept.operators",
+        "concept.data.structures",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "String repetition with *, range() stopping before 4, how Python prints a list of strings, and negative indexing. Double quotes in the list are accepted as the same answer. All or nothing."
+    },
+    {
+      "id": "TS-PA-01",
+      "type": "parsons",
+      "audience": "core",
+      "level": "S1",
+      "title": "Countdown to launch",
+      "prompt": "Put these Python lines in order so the program counts down from 3 and then prints Go!. The indentation (spaces at the start of a line) is already correct.",
+      "language": "python",
+      "lines": [
+        {
+          "id": "start",
+          "text": "count = 3"
+        },
+        {
+          "id": "loop",
+          "text": "while count > 0:"
+        },
+        {
+          "id": "show",
+          "text": "    print(count)"
+        },
+        {
+          "id": "step",
+          "text": "    count = count - 1"
+        },
+        {
+          "id": "launch",
+          "text": "print(\"Go!\")"
+        }
+      ],
+      "answer": {
+        "order": [
+          "start",
+          "loop",
+          "show",
+          "step",
+          "launch"
+        ]
+      },
+      "expectedOutput": "3\n2\n1\nGo!",
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "concept.sequences",
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code ordering",
+      "qType": "Order the lines",
+      "details": "The variable must be set before the loop tests it, the print must come before the subtraction or the countdown starts at 2, and Go! goes after the loop. All or nothing."
+    },
+    {
+      "id": "TS-PA-02",
+      "type": "parsons",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Add up the even numbers",
+      "prompt": "Build a Python program that adds up the even numbers in the list and prints the total. Two of the lines are not needed; leave them out.",
+      "language": "python",
+      "lines": [
+        {
+          "id": "list",
+          "text": "nums = [4, 7, 10, 3]"
+        },
+        {
+          "id": "zero",
+          "text": "total = 0"
+        },
+        {
+          "id": "loop",
+          "text": "for n in nums:"
+        },
+        {
+          "id": "test",
+          "text": "    if n % 2 == 0:"
+        },
+        {
+          "id": "add",
+          "text": "        total += n"
+        },
+        {
+          "id": "print",
+          "text": "print(total)"
+        },
+        {
+          "id": "odd",
+          "text": "    if n % 2 == 1:"
+        },
+        {
+          "id": "count",
+          "text": "        total += 1"
+        }
+      ],
+      "answer": {
+        "order": [
+          "list",
+          "zero",
+          "loop",
+          "test",
+          "add",
+          "print"
+        ],
+        "alternatives": [
+          [
+            "zero",
+            "list",
+            "loop",
+            "test",
+            "add",
+            "print"
+          ]
+        ]
+      },
+      "expectedOutput": "14",
+      "marking": {
+        "partial": "longest-run"
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "concept.sequences",
+        "concept.loops",
+        "concept.conditionals",
+        "concept.data.structures"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code ordering",
+      "qType": "Order the lines",
+      "details": "The two setup lines can go in either order. The distractors test for odd numbers and count matches instead of adding them. Partial credit for the longest run of correctly ordered lines."
+    },
+    {
+      "id": "TS-PA-03",
+      "type": "parsons",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Same loop, in Swift",
+      "prompt": "The Python program below adds up the squares of 1 to 4 and prints 30. Put the Swift lines in order so the Swift program does exactly the same. Two of the lines are not needed; leave them out.",
+      "code": {
+        "language": "python",
+        "source": "total = 0\nfor i in range(1, 5):\n    total += i * i\nprint(total)"
+      },
+      "language": "swift",
+      "lines": [
+        {
+          "id": "declare",
+          "text": "var total = 0"
+        },
+        {
+          "id": "loop",
+          "text": "for i in 1...4 {"
+        },
+        {
+          "id": "square",
+          "text": "    total += i * i"
+        },
+        {
+          "id": "close",
+          "text": "}"
+        },
+        {
+          "id": "print",
+          "text": "print(total)"
+        },
+        {
+          "id": "let",
+          "text": "let total = 0"
+        },
+        {
+          "id": "halfopen",
+          "text": "for i in 1..<4 {"
+        }
+      ],
+      "answer": {
+        "order": [
+          "declare",
+          "loop",
+          "square",
+          "close",
+          "print"
+        ]
+      },
+      "expectedOutput": "30",
+      "points": 5,
+      "difficulty": 4,
+      "ontology": [
+        "practice.reusing-remixing.translating",
+        "concept.loops"
+      ],
+      "outcomes": [
+        "LO-TRANSLATE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Translating code",
+      "qType": "Order the lines",
+      "details": "range(1, 5) stops before 5, which is Swift's closed range 1...4, not 1..<4. A total that changes must be var, not let (let will not compile). All or nothing."
+    }
+  ]
+}

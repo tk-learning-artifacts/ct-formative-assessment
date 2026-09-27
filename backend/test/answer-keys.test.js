@@ -4,14 +4,23 @@
 // v1 questions it flags P6-01 (key said 7, the grid needs 6), S2-02 (the true
 // cost, 4, was not an option), S1-01 ("3" and "B" were both right) and P5-01
 // ("3, 1, 2" also always worked); the last test below keeps that true.
+//
+// Code-trace and Parsons questions have no options, so they get their own
+// checks: the solver's computed output must score full marks as the key does,
+// and every accepted Parsons order must print the question's expectedOutput.
+// When python3 or swift is installed, the real programs are run as well.
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const { execFileSync } = require("child_process");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Database = require("better-sqlite3");
 const { loadContent } = require("../src/content");
 const { SOLVERS, NOT_COMPUTABLE } = require("./solvers");
+const scoring = require("../src/scoring");
+const { normalizeOutput } = require("../src/scoring/types/code-trace");
 
 const { questions } = loadContent();
 
@@ -75,9 +84,92 @@ questions.forEach(question => {
   }
 
   test(`${question.id} answer key matches the computed answer`, () => {
-    assert.equal(question.type, "mcq", "only mcq solvers exist so far; add a matcher for the new type");
+    assert.ok(TYPE_CHECKS[question.type], `no answer-key check for type "${question.type}"; add one to TYPE_CHECKS`);
+    TYPE_CHECKS[question.type](question);
+  });
+});
 
+function parsonsSource(question, order) {
+  const text = new Map(question.lines.map(line => [line.id, line.text]));
+  return order.map(id => text.get(id)).join("\n");
+}
+
+function parsonsOrders(question) {
+  return [question.answer.order].concat(question.answer.alternatives || []);
+}
+
+const TYPE_CHECKS = {
+  mcq(question) {
     assert.equal(keyProblem(question), null);
+  },
+
+  "code-trace"(question) {
+    const computed = SOLVERS[question.id](question);
+    assert.deepEqual(normalizeOutput(question.answer.output), normalizeOutput(computed), `${question.id}: key output differs from the computed output`);
+    assert.equal(scoring.scoreResponse(question, computed).result.correct, true);
+  },
+
+  parsons(question) {
+    assert.equal(typeof question.expectedOutput, "string", `${question.id}: give expectedOutput so the key order can be checked`);
+
+    parsonsOrders(question).forEach(order => {
+      const printed = SOLVERS[question.id](question, parsonsSource(question, order));
+      assert.equal(printed, question.expectedOutput, `${question.id}: order ${order.join(",")} prints ${JSON.stringify(printed)}`);
+    });
+  }
+};
+
+// The real interpreters, where installed. CI and the Docker image have
+// neither, so these skip there and the JavaScript translations above stand.
+function hasCommand(command, args) {
+  try {
+    execFileSync(command, args, { stdio: "ignore", timeout: 20000 });
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+const RUNNERS = {
+  python: { command: "python3", available: hasCommand("python3", ["--version"]), extension: ".py" },
+  swift: { command: "swift", available: hasCommand("swift", ["--version"]), extension: ".swift" }
+};
+
+function runProgram(language, source) {
+  const runner = RUNNERS[language];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ctquest-run-"));
+  const file = path.join(dir, `main${runner.extension}`);
+
+  try {
+    fs.writeFileSync(file, `${source}\n`);
+    return execFileSync(runner.command, [file], { encoding: "utf8", timeout: 60000 });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+questions.filter(question => question.type === "code-trace" || question.type === "parsons").forEach(question => {
+  const language = question.type === "code-trace" ? question.code.language : question.language;
+  const runner = RUNNERS[language];
+  const skip = !runner ? `no runner for ${language}` : !runner.available && `${runner.command} is not installed`;
+
+  test(`${question.id} key checked by running real ${language}`, { skip }, () => {
+    if (question.type === "code-trace") {
+      const printed = runProgram(language, question.code.source);
+      assert.equal(scoring.scoreResponse(question, printed).result.correct, true, `${question.id}: ${runner.command} printed ${JSON.stringify(printed)}`);
+      return;
+    }
+
+    parsonsOrders(question).forEach(order => {
+      const printed = runProgram(language, parsonsSource(question, order));
+      assert.deepEqual(normalizeOutput(printed), normalizeOutput(question.expectedOutput), `${question.id}: order ${order.join(",")} printed ${JSON.stringify(printed)}`);
+    });
+
+    // A reference program in the code block (TS-PA-03 shows the Python it
+    // translates) must print the same thing.
+    if (question.code && RUNNERS[question.code.language] && RUNNERS[question.code.language].available) {
+      assert.deepEqual(normalizeOutput(runProgram(question.code.language, question.code.source)), normalizeOutput(question.expectedOutput));
+    }
   });
 });
 

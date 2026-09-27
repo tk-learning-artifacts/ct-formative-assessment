@@ -24,8 +24,8 @@ function withEditedContent(file, edit, fn) {
 
 test("the shipped content is valid", () => {
   const content = loadContent();
-  assert.equal(content.questions.filter(q => q.audience === "core").length, 20);
-  assert.equal(content.questions.filter(q => q.audience === "rgsynapse").length, 4);
+  assert.equal(content.questions.filter(q => q.audience === "core" && q.type === "mcq").length, 20);
+  assert.equal(content.questions.filter(q => q.audience === "rgsynapse" && q.type === "mcq").length, 4);
   assert.ok(content.nodes.length >= 20);
   assert.ok(content.outcomes.length >= 10);
   assert.ok(content.questions.every(q => q.ontology.length && q.outcomes.length));

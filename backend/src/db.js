@@ -424,7 +424,7 @@ function createStore(db, content) {
         qType: question.qType || null,
         type: row.question_type,
         response: row.response_json === null ? null : JSON.parse(row.response_json),
-        correctResponse: row.correct_index === null ? null : { index: row.correct_index, text: correctText },
+        correctResponse: row.correct_index === null ? scoring.keyResponse(question) : { index: row.correct_index, text: correctText },
         earned: row.earned_points,
         max: row.max_points,
         correct: row.score_status === "scored" ? row.earned_points === row.max_points : null,

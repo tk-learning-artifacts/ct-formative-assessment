@@ -5,8 +5,12 @@
 //
 // A renderer is registered with CTQuestTypes.register(type, {
 //   renderInput(question, response, h)   HTML for answering; h = { escapeHtml }
-//   readResponse(container, question)    the response to submit, or undefined
+//   readResponse(container, question)    the response to submit; undefined
+//                                        leaves the saved answer as it is,
+//                                        null clears it
 //   describeResponse(response, h)        text for the results breakdown
+//   renderCode(code, h)                  optional; HTML for the question's
+//                                        code block instead of the default
 // })
 
 (function () {

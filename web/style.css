@@ -829,3 +829,190 @@ hr {
     font-size: 1.85rem;
   }
 }
+
+/* ---------- Question types: code trace and Parsons (web/types/) ---------- */
+
+/* Results breakdown: keep line breaks and indentation in typed output and
+   ordered code. */
+.result-answer {
+  white-space: pre-wrap;
+}
+
+/* Code trace: the program with line numbers, and the output box. */
+.ct-code code {
+  display: block;
+}
+
+.ct-line {
+  display: block;
+  white-space: pre;
+}
+
+.ct-line__no {
+  display: inline-block;
+  width: 2.2em;
+  margin-right: 12px;
+  text-align: right;
+  color: var(--text-soft);
+  opacity: 0.7;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ct-output {
+  width: 100%;
+  min-height: 9rem;
+  margin-top: 6px;
+  padding: 14px 16px;
+  border: 1px solid rgba(87, 66, 191, 0.2);
+  border-radius: 18px;
+  background: var(--surface-strong);
+  color: var(--text-main);
+  font-family: "Consolas", "Liberation Mono", monospace;
+  font-size: 1rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.ct-output:focus {
+  outline: none;
+  border-color: rgba(255, 138, 52, 0.7);
+  box-shadow: 0 0 0 4px rgba(255, 138, 52, 0.16);
+}
+
+.ct-hint {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+}
+
+/* Parsons: the program being built and the pool of unused lines. */
+.pa-help {
+  margin: 0 0 4px;
+  font-size: 0.92rem;
+}
+
+.pa .code-label {
+  margin: 18px 0 8px;
+}
+
+.pa-target {
+  margin-top: 0;
+}
+
+.pa-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  min-height: 3.4rem;
+  border: 2px dashed rgba(87, 66, 191, 0.2);
+  border-radius: 22px;
+}
+
+.pa-program {
+  border-color: rgba(255, 138, 52, 0.45);
+  background: rgba(255, 138, 52, 0.06);
+}
+
+.pa-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  padding: 6px 8px;
+  border-radius: 16px;
+  background: var(--surface-strong);
+  box-shadow: 0 4px 10px rgba(52, 42, 112, 0.08);
+}
+
+.pa-line--dragging {
+  opacity: 0.85;
+  outline: 2px solid var(--accent);
+}
+
+.pa--dragging,
+.pa--dragging * {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grabbing;
+}
+
+/* touch-action: none only on the handle, so the rest of the page still
+   scrolls with a finger. */
+.pa-handle {
+  flex: none;
+  padding: 10px 4px;
+  color: var(--text-soft);
+  letter-spacing: -3px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.pa-text {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: "Consolas", "Liberation Mono", monospace;
+  font-size: 0.95rem;
+}
+
+.pa-controls {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.pa-btn {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 6px 10px;
+  border-radius: 14px;
+  font-size: 0.95rem;
+}
+
+.pa-btn:hover {
+  transform: none;
+}
+
+.pa-btn:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pa-program .pa-add,
+.pa-pool .pa-up,
+.pa-pool .pa-down,
+.pa-pool .pa-remove {
+  display: none;
+}
+
+.pa-empty {
+  margin: 6px 0 0;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.pa-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .pa-line {
+    flex-wrap: wrap;
+  }
+
+  .pa-text {
+    flex-basis: calc(100% - 3rem);
+  }
+
+  .pa-controls {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

@@ -11,6 +11,13 @@
 //                                     it should say what the student saw
 //   score(question, response)      -> { status, earned, max, correct, detail }
 //   legacyColumns(question, resp)  -> optional { chosenIndex, correctIndex }
+//   projectPublic(question)        -> optional; a copy of the question with
+//                                     public fields rewritten (Parsons
+//                                     shuffles its lines here). Only
+//                                     publicFields are taken from it.
+//   keyResponse(question)          -> optional; the correct answer in the
+//                                     recordResponse shape, for the results
+//                                     breakdown after release
 //
 // A reserved type module exports only type, status: "reserved", label and
 // description. Content using a reserved type is rejected at boot.
@@ -89,11 +96,18 @@ function listTypes() {
 
 function toPublicQuestion(question) {
   const impl = getActiveType(question.type);
+  const projected = impl.projectPublic ? impl.projectPublic(question) : question;
   const safe = {};
 
-  BASE_PUBLIC_FIELDS.concat(impl.publicFields).forEach(field => {
+  BASE_PUBLIC_FIELDS.forEach(field => {
     if (question[field] !== undefined) {
       safe[field] = question[field];
+    }
+  });
+
+  impl.publicFields.forEach(field => {
+    if (projected[field] !== undefined) {
+      safe[field] = projected[field];
     }
   });
 
@@ -109,6 +123,13 @@ function scoreResponse(question, rawResponse) {
   return { response, recorded: impl.recordResponse(question, response), result, legacy };
 }
 
+// The correct answer in the shape the type records responses in, or null.
+// MCQ keeps using the legacy correct_index column instead.
+function keyResponse(question) {
+  const impl = question && getType(question.type);
+  return impl && impl.status === "active" && impl.keyResponse ? impl.keyResponse(question) : null;
+}
+
 module.exports = {
   BASE_PUBLIC_FIELDS,
   registerType,
@@ -116,5 +137,6 @@ module.exports = {
   getActiveType,
   listTypes,
   toPublicQuestion,
-  scoreResponse
+  scoreResponse,
+  keyResponse
 };
