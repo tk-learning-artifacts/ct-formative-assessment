@@ -4,7 +4,7 @@ A web-based Computational Thinking (CT) formative-assessment platform. Teachers 
 
 Two audiences are supported: the original **core** P5 to S2 Bebras-style puzzles (the default), and **RGSynapse** (Raffles Girls' School Sec 1 and Sec 2, students who already write some Swift and Python and build with AI assistants). Questions are tagged against a CT ontology based on Brennan & Resnick (2012) and against learning outcomes, so events can be built from any mix of level, outcome, CT concept or practice, and question type.
 
-The design decisions are recorded in [docs/adr/0001-ct-platform-model.md](docs/adr/0001-ct-platform-model.md), the per-event feedback and navigation settings and the quick setup presets in [docs/adr/0003-assessment-settings.md](docs/adr/0003-assessment-settings.md), and the look of the pages in [docs/adr/0002-adopt-slate-visual-conventions.md](docs/adr/0002-adopt-slate-visual-conventions.md). Explainers for the concepts it uses are in [docs/learn/](docs/learn/).
+The design decisions are recorded in [docs/adr/0001-ct-platform-model.md](docs/adr/0001-ct-platform-model.md), the per-event feedback and navigation settings and the quick setup presets in [docs/adr/0003-assessment-settings.md](docs/adr/0003-assessment-settings.md), the admin (head of department) role in [docs/adr/0004-admin-role.md](docs/adr/0004-admin-role.md), and the look of the pages in [docs/adr/0002-adopt-slate-visual-conventions.md](docs/adr/0002-adopt-slate-visual-conventions.md). Explainers for the concepts it uses are in [docs/learn/](docs/learn/).
 
 ---
 
@@ -29,6 +29,7 @@ ct-formative-assessment/
 │   │   ├── selection.js      Event filters -> question lists (including the balanced question cap)
 │   │   ├── presets.js        Quick setup presets: knobs -> event filters
 │   │   ├── policy.js         One attempt per student; feedback and navigation modes; what a student may see
+│   │   ├── access.js         Who may read or change an event: owner, admin (read-only on others' events)
 │   │   ├── outcomes-summary.js  Per-outcome and per-CT-node results for one event
 │   │   ├── security.js       Password hashing, attempt tokens
 │   │   ├── scoring/          Scorer registry; one module per question type in scoring/types/
@@ -36,6 +37,7 @@ ct-formative-assessment/
 │   │   └── ai/               AI scoring (off by default): guarded provider, typed payload, output validation, OpenRouter adapter, background job
 │   ├── scripts/
 │   │   ├── set-password.js   Set or create a teacher's password
+│   │   ├── set-role.js       Make an account an admin or a teacher
 │   │   └── ai-smoke.js       One live AI scoring request, run by hand
 │   ├── test/                 node:test + supertest suite, answer-key solvers, v1 fixture
 │   └── data/
@@ -78,7 +80,7 @@ ct-formative-assessment/
 
 | Table | Purpose |
 |---|---|
-| `users` | Teacher accounts (email + per-user salted scrypt hash) |
+| `users` | Accounts: email, per-user salted scrypt hash, `role` (`teacher` or `admin`, enforced by triggers) |
 | `events` | Join-code sessions: time window, duration, `selection_mode` (legacy mode or `FILTER`), `filter_json`, `results_released_at`, `feedback_mode` (each/end/release), `navigation_mode` (free/linear), `preset_id`, `preset_options_json`, `preset_customised` and `preset_label` (which quick setup card it came from, and its wording as read at creation) |
 | `event_setting_changes` | One row per setting changed after creation: event, teacher, field, old and new value, time |
 | `event_questions` | Snapshot of each event's questions (v2 shape, answer keys included, server-only) |
@@ -97,8 +99,9 @@ To change the schema, add a new file with the current date and time in its name.
 
 ### Authentication
 
-- **Teachers:** JWT. The backend issues a 7-day token on login; protected routes need `Authorization: Bearer <token>`. The secret comes from `JWT_SECRET`, which is required when `NODE_ENV=production`. Teachers only see events they created. Passwords created by the original code (one fixed salt) still work and are rehashed with a random salt on the next login.
-- **First account:** `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` create the first teacher in an empty database. In production the server refuses to start with the demo password `changeme123`, without `SEED_TEACHER_PASSWORD` when the database has no teacher yet, or while any stored account still accepts the demo password. Fix an account with `npm run set-password -- <email>`, described below.
+- **Teachers:** JWT. The backend issues a 7-day token on login; protected routes need `Authorization: Bearer <token>`. The secret comes from `JWT_SECRET`, which is required when `NODE_ENV=production`. Teachers only see events they created; another teacher's event answers 404, like a missing one.
+- **Admins (heads of department):** an account with the `admin` role also sees every teacher's events, with each owner's email, and can open their results, outcomes summary, settings history and attempt details. On events it did not create it is read-only: reset, release, Edit settings and marking answer 403 and are hidden on the page. Its own events work as a teacher's do. The role is read from the database on every request, so a change applies at once. See ADR 0004, which also describes the full-control alternative and how to switch to it. Passwords created by the original code (one fixed salt) still work and are rehashed with a random salt on the next login.
+- **First account:** `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` create the first teacher in an empty database, and `SEED_TEACHER_ROLE=admin` makes it an admin. In production the server refuses to start with the demo password `changeme123`, without `SEED_TEACHER_PASSWORD` when the database has no teacher yet, or while any stored account still accepts the demo password. Fix an account with `npm run set-password -- <email>`, described below.
 - **Students:** no account. Starting an attempt returns a one-off attempt token. The page keeps it in `sessionStorage` and sends it as `X-Attempt-Token` to resume (`GET /api/attempts/:id`) and to submit. Only a hash is stored.
 - **Deadlines:** an attempt's deadline is the earlier of start + duration and the event's `end_at`. A submission up to `SUBMIT_GRACE_SECONDS` after it counts as on time; a later one is stored and marked late. The page counts down, auto-submits at zero and retries if the network fails.
 
@@ -143,6 +146,15 @@ echo '…' | npm run set-password -- teacher@school.edu.sg
 
 The account is created if it does not exist. The password is never accepted as a command-line argument. It must be at least 10 characters and not the demo password.
 
+### Making an account an admin
+
+```bash
+npm run set-role -- head@school.edu.sg admin      # can read every teacher's events
+npm run set-role -- head@school.edu.sg teacher    # back to their own events only
+```
+
+The account must already exist (create it with `set-password` first). The change applies on the account's next request, without signing in again. To make the very first account an admin, set `SEED_TEACHER_ROLE=admin` alongside `SEED_TEACHER_EMAIL` and `SEED_TEACHER_PASSWORD` before the first start. In Docker: `docker compose run --rm app node backend/scripts/set-role.js head@school.edu.sg admin`.
+
 ---
 
 ## Tests
@@ -162,6 +174,7 @@ The suite uses Node's built-in test runner (`node:test`) with `supertest` for HT
 | `answer-keys.test.js` | Every question's key against a computed answer (see below) |
 | `no-answer-leak.test.js` | No answer fields or `details` in any public file or student response; the public file list comes from `web/`; JSON 404 for unknown API routes |
 | `teacher-scoping.test.js` | Teachers only see their own events and results |
+| `admin-role.test.js` | Every event route under a teacher on their own event, another teacher, an admin on their own event, an admin on a teacher's event (200 on reads, 403 on writes, nothing changed) and a teacher on an admin's event; the admin's event list with owners; the role read per request; the role triggers; `SEED_TEACHER_ROLE`; `set-role` |
 | `auth.test.js` | `JWT_SECRET` and `SEED_TEACHER_PASSWORD` rules, refusal of the demo password in production, `set-password`, salted hashes and rehash |
 | `migration.test.js` | Upgrading `fixtures/v1-app.sql` (made by the original code), chosen-option text kept, events with submissions left as their students saw them, backup, idempotence, rollback |
 | `assessment-settings.test.js` | Every feedback and navigation mode: settings stored and validated, no key before the mode allows it, committed answers locked against commit and submit, in-order enforcement and skips, commit guards (token, deadline, submitted, reset), one attempt in every mode, AI answers "being marked" under after-each, pre-existing events unchanged |
@@ -300,6 +313,7 @@ Upgrading the image migrates the database in the volume on first start and leave
 |---|---|---|---|
 | `JWT_SECRET` | Yes | — | Secret used to sign JWTs. Use a long random string. The server refuses to start without it when `NODE_ENV=production`. |
 | `SEED_TEACHER_EMAIL` | No | `teacher@ctquest.local` | First teacher account, created only in an empty database. |
+| `SEED_TEACHER_ROLE` | No | `teacher` | `admin` makes that first account a head of department who can read every teacher's events (ADR 0004). Ignored once the database has an account. |
 | `SEED_TEACHER_PASSWORD` | On first production boot | `changeme123` in development | Password for that account. Production refuses the demo password, and refuses to seed an empty database without it. |
 | `PORT` | No | `3000` | Port the server listens on. |
 | `HOST` | No | all interfaces | Address to bind, e.g. `127.0.0.1` for a local-only run. |
