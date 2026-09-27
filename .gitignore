@@ -12,6 +12,7 @@ backend/data/*.db-wal
 # Environment variables
 .env
 .env.local
+.env.development
 
 # OS files
 .DS_Store

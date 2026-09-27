@@ -103,6 +103,7 @@ To change the schema, add a new file with the current date and time in its name.
 
 ```bash
 npm install       # installs all workspace deps (backend + web)
+cp .env.development.example .env.development   # once; dev settings, gitignored
 npm run dev       # starts both servers concurrently
 npm test          # runs the backend test suite
 ```
@@ -113,7 +114,7 @@ npm test          # runs the backend test suite
 | Teacher portal | http://localhost:5173/admin.html |
 | API | http://localhost:3000/api/ |
 
-The backend auto-restarts on file changes (nodemon). The frontend has hot reload (Vite). Set `HOST=127.0.0.1` to keep the backend off the local network.
+The backend auto-restarts on file changes (nodemon), including edits to `.env.development`, which `npm run dev` loads with Node's `--env-file` flag. The frontend has hot reload (Vite). AI scoring is off in `.env.development` so testing costs nothing; production settings stay in `.env`, which only `docker compose` reads.
 
 ### Default credentials (development only)
 
