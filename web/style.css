@@ -1182,6 +1182,15 @@ textarea.open-response {
   min-width: 0;
 }
 
+/* On a phone or narrow window, once an event is chosen its results come
+   first, above the new-event form and the event list. Only the order on
+   screen changes; the tab order still starts at the form. */
+@media (max-width: 999.98px) {
+  .dash:has(.results-head) .dash__main {
+    order: -1;
+  }
+}
+
 @media (min-width: 1000px) {
   .dash {
     grid-template-columns: 22rem minmax(0, 1fr);

@@ -2,6 +2,8 @@
   const screen = document.getElementById("screen");
   const TOKEN_KEY = "ct-quest-token";
   const PREVIEW_DEBOUNCE_MS = 300;
+  // The dashboard's single-column layout; matches the query in style.css.
+  const NARROW_DASH = "(max-width: 999.98px)";
 
   const state = {
     token: localStorage.getItem(TOKEN_KEY),
@@ -1637,6 +1639,13 @@
         state.selectedEventId = Number(button.getAttribute("data-event-id"));
         state.editingSettings = false;
         await loadResults(state.selectedEventId);
+
+        // In the single-column layout the results now sit above the form
+        // (style.css), so bring them into view from the event list below.
+        if (window.matchMedia(NARROW_DASH).matches) {
+          const main = screen.querySelector(".dash__main");
+          if (main) main.scrollIntoView({ block: "start" });
+        }
       });
     });
 
