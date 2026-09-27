@@ -12,8 +12,8 @@ holds the values specific to this repo.
   GitHub App source with access to the `tk-learning-artifacts` org. If the
   repo doesn't appear in the source's repo picker, grant that source access to
   it on GitHub first.
-- Pick a subdomain under a wildcard that already points at the Coolify server,
-  so no DNS change is needed.
+- The domain is `ctquest.snack.tinkertofu.com`. `*.snack.tinkertofu.com`
+  already points at the Coolify server, so no DNS change is needed.
 - Build the image locally once: `docker build -t ctquest .` must exit 0.
 
 ## Application settings
@@ -24,7 +24,7 @@ holds the values specific to this repo.
 | Base Directory | blank (the `Dockerfile` is at the repo root) |
 | Ports Exposes | `3000` |
 | Health Check Path | `/api/health` |
-| Domain | `https://<your-subdomain>` |
+| Domain | `https://ctquest.snack.tinkertofu.com` |
 | Branch | `main` |
 
 ## Persistent storage
@@ -50,7 +50,7 @@ Copy the values from your local `.env`. Mark the secrets as secret in Coolify.
 | `SEED_TEACHER_PASSWORD` | from `.env` | Secret. Needed only for the first boot; remove it afterwards |
 | `AI_PROVIDER` | `openrouter` | Use `none` to turn AI marking off |
 | `AI_API_KEY` | from `.env` | Secret. The OpenRouter key |
-| `AI_APP_URL` | `https://<your-subdomain>` | Sent to OpenRouter as the referring site |
+| `AI_APP_URL` | `https://ctquest.snack.tinkertofu.com` | Sent to OpenRouter as the referring site |
 | `TZ` | `Asia/Singapore` | Log timestamps only; stored times are UTC |
 
 Leave `PORT` unset (the container listens on 3000) and leave `HOST` unset (the
@@ -62,10 +62,10 @@ defaults.
 
 1. Deploy and watch the build log. The start-up log should list the applied
    migrations, then `CT Quest server running on http://localhost:3000`.
-2. `https://<your-subdomain>/api/health` returns `{"ok":true}`.
-3. `https://<your-subdomain>/questions.js` returns 404 (no answer key is
+2. `https://ctquest.snack.tinkertofu.com/api/health` returns `{"ok":true}`.
+3. `https://ctquest.snack.tinkertofu.com/questions.js` returns 404 (no answer key is
    served).
-4. Sign in at `https://<your-subdomain>/admin.html` with the seed teacher.
+4. Sign in at `https://ctquest.snack.tinkertofu.com/admin.html` with the seed teacher.
 5. Remove `SEED_TEACHER_PASSWORD` from Coolify and redeploy. From now on,
    change passwords from the container's terminal in Coolify with
    `cd /app/backend && npm run set-password -- <email>`.
