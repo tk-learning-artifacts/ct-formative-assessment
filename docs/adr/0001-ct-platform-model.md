@@ -205,7 +205,14 @@ Migrations live in `src/migrations/YYYYMMDDHHMM-<slug>.js`. The file name is the
 
 Each migration runs in a transaction together with its `schema_migrations` row. Foreign keys are switched off around the run (SQLite ignores that pragma inside a transaction), and `foreign_key_check` must pass before each commit. Migrations receive `ctx.content`, the validated content, for lookups like the tag backfill.
 
-A database that already holds data is copied with `VACUUM INTO` next to itself (`app.pre-<latest>-from-<last>-<time>.db`) before upgrading. The runner refuses a database that records a migration this code does not know, and a pre-review database numbered only by `user_version`. Never edit a shipped migration.
+A database that already holds data is copied with `VACUUM INTO` next to itself (`app.pre-<latest>-from-<last>-<time>.db`) before upgrading. Never edit a shipped migration. The runner refuses a database that records a migration this code does not know.
+
+**Round-1 bridge.** The first review round tracked migrations with `PRAGMA user_version = 3`. Those builds never shipped, but their databases exist in review worktrees and local runs. `src/migrations/legacy/round1-user-version-3.js` bridges them in one transaction (after a backup):
+- It creates `schema_migrations` and marks the three current ids applied.
+- It adds and backfills what round 1 lacked: `results_released_at` (set), `late`, `student_key`, `reset_at`, `reset_by`, `detail_json`, `idx_attempts_student`, and the snapshot tags.
+- It rewrites integer `response_json` values to `{ index, text }`. Round 1 had patched every snapshot, so answers given before round 1 (tokenless attempts) take their P5-01, S1-01 and S2-02 text from the original v1 option lists, which are exactly what those students saw.
+
+A test checks this against `fixtures/round1-app.sql`, made by running commit 11e499d. `user_version` 1 and 2 (intermediate builds) are refused.
 
 Indexes cover every per-request query:
 - events by `created_by`, snapshots by event, attempts by event and by `(event_id, student_key)`, answers by attempt;

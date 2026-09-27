@@ -78,7 +78,7 @@ ct-formative-assessment/
 
 The content tables are rebuilt from `backend/content/` on every boot; the other tables hold data.
 
-**Migrations.** Files in `backend/src/migrations/` are named `YYYYMMDDHHMM-<slug>.js`, and the name is the migration's id. On start the runner applies, in sorted order, every file not yet recorded in `schema_migrations`, each in its own transaction. Before upgrading a database that already has data, it saves a copy next to it (`app.pre-<id>-from-<id>-<time>.db`). A database created by the original code (no `schema_migrations`, `user_version` 0) upgrades in place without losing data.
+**Migrations.** Files in `backend/src/migrations/` are named `YYYYMMDDHHMM-<slug>.js`, and the name is the migration's id. On start the runner applies, in sorted order, every file not yet recorded in `schema_migrations`, each in its own transaction. Before upgrading a database that already has data, it saves a copy next to it (`app.pre-<id>-from-<id>-<time>.db`). A database created by the original code (no `schema_migrations`, `user_version` 0) upgrades in place without losing data. So does one made by the first review round of this work (`user_version` 3), through a one-off bridge in `src/migrations/legacy/`.
 
 To change the schema, add a new file with the current date and time in its name. Never edit a migration that has shipped. Because ids are timestamps, two branches can each add one; when merging, check only that their order makes sense.
 

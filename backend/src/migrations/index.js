@@ -21,6 +21,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { bridgeRound1 } = require("./legacy/round1-user-version-3");
 
 const ID_PATTERN = /^\d{12}-[a-z0-9-]+$/;
 
@@ -76,14 +77,47 @@ function backupBeforeMigrating(db, dbPath, lastApplied) {
   return backupPath;
 }
 
+function runWithForeignKeysOff(db, fn) {
+  db.pragma("foreign_keys = OFF");
+
+  try {
+    fn();
+  } finally {
+    db.pragma("foreign_keys = ON");
+  }
+}
+
 function migrate(db, { dbPath = null, ctx = {}, log = () => {}, migrations = MIGRATIONS } = {}) {
   const hasTracking = tableExists(db, "schema_migrations");
   const userVersion = db.pragma("user_version", { simple: true });
 
+  // First-review-round databases (user_version 3): bridge them onto
+  // schema_migrations, then carry on as normal. See ./legacy/.
+  if (!hasTracking && userVersion === 3 && tableExists(db, "users")) {
+    const backupPath = backupBeforeMigrating(db, dbPath, "round1-uv3");
+    log(`Backed up database to ${backupPath} before bridging it from user_version 3`);
+
+    runWithForeignKeysOff(db, () => {
+      db.transaction(() => {
+        bridgeRound1(db, ctx);
+
+        const problems = db.pragma("foreign_key_check");
+        if (problems.length) {
+          throw new Error(`Bridging from user_version 3 broke foreign keys: ${JSON.stringify(problems.slice(0, 5))}`);
+        }
+      })();
+    });
+
+    log("Bridged a user_version 3 database onto schema_migrations");
+    const result = migrate(db, { dbPath, ctx, log, migrations });
+    return { ...result, bridged: true, backupPath: result.backupPath || backupPath };
+  }
+
   if (!hasTracking && userVersion !== 0) {
     throw new Error(
       `Database reports user_version ${userVersion} but has no schema_migrations table. ` +
-      "It was made by an unreleased pre-review build of this branch; delete it and start again."
+      "Only user_version 0 (the original app) and 3 (the first review round) can be upgraded; " +
+      "this one came from an intermediate pre-review build. Delete it and start again."
     );
   }
 

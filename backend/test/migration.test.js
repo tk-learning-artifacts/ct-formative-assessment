@@ -183,15 +183,74 @@ test("a database with migrations this code does not know is refused", async () =
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("a pre-review database numbered by user_version is refused with a clear message", async () => {
+test("an intermediate pre-review database (user_version 1 or 2) is refused with a clear message", async () => {
+  for (const version of [1, 2]) {
+    const dir = makeTempDir();
+    const dbPath = path.join(dir, "app.db");
+    const db = new Database(dbPath);
+    db.pragma(`user_version = ${version}`);
+    db.close();
+
+    await assert.rejects(() => buildApp({ dbPath }), new RegExp(`user_version ${version}`));
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// fixtures/round1-app.sql: the v1 fixture upgraded by the first review round
+// (commit 11e499d, PRAGMA user_version 3), plus two round-1 submissions: Rin
+// on DEMO123 (whose snapshot round 1 had already patched) and Sam on a
+// round-1 RGSynapse event. .dump does not keep user_version, so it is set here.
+test("a first-review-round database (user_version 3) is bridged onto schema_migrations", async t => {
   const dir = makeTempDir();
   const dbPath = path.join(dir, "app.db");
-  const db = new Database(dbPath);
-  db.pragma("user_version = 3");
-  db.close();
+  const raw = new Database(dbPath);
+  raw.exec(fs.readFileSync(path.join(__dirname, "fixtures/round1-app.sql"), "utf8"));
+  raw.pragma("user_version = 3");
+  const before = raw.prepare("SELECT student_name, score FROM attempts ORDER BY id").all();
+  const answerCount = raw.prepare("SELECT COUNT(*) AS c FROM answers").get().c;
+  raw.close();
 
-  await assert.rejects(() => buildApp({ dbPath }), /user_version 3/);
-  fs.rmSync(dir, { recursive: true, force: true });
+  const ctx = await buildApp({ dbPath });
+  t.after(() => {
+    ctx.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const { db } = ctx.store;
+  const text = (name, questionId) => JSON.parse(db.prepare(`
+    SELECT ans.response_json FROM answers ans JOIN attempts a ON a.id = ans.attempt_id
+    WHERE a.student_name = ? AND ans.question_id = ?
+  `).get(name, questionId).response_json);
+
+  assert.equal(ctx.store.migration.bridged, true);
+  assert.ok(ctx.store.migration.backupPath);
+  assert.deepEqual(db.prepare("SELECT id FROM schema_migrations ORDER BY id").all().map(r => r.id), MIGRATIONS.map(m => m.id));
+
+  assert.deepEqual(db.prepare("SELECT student_name, score FROM attempts ORDER BY id").all(), before);
+  assert.equal(db.prepare("SELECT COUNT(*) AS c FROM answers").get().c, answerCount);
+
+  // Pre-round-1 answers get the v1 text they were shown; round-1 answers get the snapshot's.
+  assert.deepEqual(text("Chen", "P5-01"), { index: 1, text: "3, 1, 2" });
+  assert.deepEqual(text("Chen", "S2-02"), { index: 2, text: "8" });
+  assert.deepEqual(text("Dev", "S1-01"), { index: 0, text: "3" });
+  assert.deepEqual(text("Rin", "P5-01"), { index: 1, text: "3, 2, 1" });
+  assert.deepEqual(text("Rin", "S2-02"), { index: 0, text: "4" });
+  assert.deepEqual(text("Sam", "RGS-S1-01").index, 0);
+  assert.equal(typeof text("Sam", "RGS-S1-01").text, "string");
+
+  assert.ok(db.prepare("SELECT results_released_at FROM events").all().every(e => e.results_released_at));
+  assert.ok(db.prepare("SELECT student_key FROM attempts").all().every(a => a.student_key));
+  assert.ok(db.prepare("SELECT question_json FROM event_questions").all().map(r => JSON.parse(r.question_json)).every(q => q.ontology && q.outcomes));
+
+  const fresh = await buildApp();
+  try {
+    assert.deepEqual(schemaSummary(db), schemaSummary(fresh.store.db));
+  } finally {
+    fresh.cleanup();
+  }
+
+  // Round-1 attempts keep their tokens and the one-attempt rule applies to them.
+  const again = await request(ctx.app).post("/api/attempts").send({ joinCode: "DEMO123", studentName: "rin", studentGroup: "S2-2" });
+  assert.equal(again.status, 409);
 });
 
 test("a failing migration rolls back and is not recorded", () => {
