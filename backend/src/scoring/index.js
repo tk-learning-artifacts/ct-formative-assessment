@@ -24,8 +24,9 @@
 //                                     stored question unchanged, which
 //                                     already carries every field ADR 0001
 //                                     §5 defines, so only a type whose
-//                                     content needs reshaping for a teacher
-//                                     (none do today) would override this.
+//                                     content needs reshaping or adding to
+//                                     for a teacher overrides this (blocks
+//                                     adds its programs as text and Python).
 //   configure({ secret })          -> optional; called once by the app with
 //                                     server settings (Parsons keys its
 //                                     line ids and shuffle with the secret)
@@ -128,7 +129,7 @@ function toPublicQuestion(question) {
 // The question as a teacher may see it: the full stored content, answer key
 // included. Unlike toPublicQuestion this is not an allowlist, because a
 // teacher may see everything; a type overrides teacherView only if its
-// stored shape needs reshaping first (none do today).
+// stored shape needs reshaping or adding to first (blocks does).
 function toTeacherQuestion(question) {
   const impl = getActiveType(question.type);
   return impl.teacherView ? impl.teacherView(question) : { ...question };

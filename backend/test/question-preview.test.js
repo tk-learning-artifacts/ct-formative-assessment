@@ -176,3 +176,71 @@ test("student routes carry no more than they did before: exactly toPublicQuestio
   });
   assert.deepEqual(Array.from(leaked), [], "no teacher-only field reaches a student route");
 });
+
+// The two later types: code-reading's follow-up key and glossary, and blocks'
+// hidden grids, reference solution and its text and Python forms (added by
+// the blocks teacherView, since the teacher page loads no engine).
+test("teacher views of code-reading and blocks questions carry their keys; students get none of it", async t => {
+  const ctx = await buildApp();
+  t.after(() => ctx.cleanup());
+  const { app, store } = ctx;
+  const token = await login(app);
+  const engine = require("../../web/lib/blocks-engine");
+  const filter = { audiences: ["core", "rgsynapse"], questionIds: ["CR-P6-01", "CR-RGS-S1-01", "BLK-S1-01", "BLK-RGS-S2-01"] };
+
+  const preview = await request(app).post("/api/question-bank/preview").set(auth(token)).send({ filter, include: "questions" });
+  assert.equal(preview.status, 200, JSON.stringify(preview.body));
+  assert.equal(preview.body.count, 4);
+
+  const created = await request(app).post("/api/events").set(auth(token)).send({ title: "New types", filter });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  assert.equal(created.body.event.question_count, preview.body.count);
+
+  const snapshot = await request(app).get(`/api/events/${created.body.event.id}/questions`).set(auth(token));
+  assert.equal(snapshot.status, 200);
+  assert.deepEqual(snapshot.body.questions, preview.body.questions, "the event's snapshot view matches the preview");
+
+  const byId = Object.fromEntries(preview.body.questions.map(q => [q.id, q]));
+
+  await t.test("code-reading: description key, follow-up key (line and choice) and glossary", () => {
+    const line = byId["CR-P6-01"];
+    assert.equal(line.followUp.kind, "line");
+    assert.equal(line.answer.index, 0);
+    assert.equal(line.answer.followUp, 3);
+    const choice = byId["CR-RGS-S1-01"];
+    assert.equal(choice.followUp.kind, "choice");
+    assert.equal(typeof choice.answer.followUp, "number");
+    assert.ok(choice.followUp.options[choice.answer.followUp]);
+    assert.ok(Array.isArray(choice.glossary) && choice.glossary.length);
+    assert.ok(choice.details);
+  });
+
+  await t.test("blocks: hidden grids, the solution, and the programs as text and Python", () => {
+    for (const id of ["BLK-S1-01", "BLK-RGS-S2-01"]) {
+      const question = byId[id];
+      const stored = store.content.questions.find(q => q.id === id);
+      assert.deepEqual(question.cases, stored.cases, `${id}: every hidden grid`);
+      assert.equal(question.cases.length, 3);
+      assert.deepEqual(question.solution, stored.solution);
+
+      const normalized = engine.normalizeWorkspace(stored.solution, { world: stored.world, variables: stored.variables || [] }).value;
+      assert.equal(question.programText.solution, engine.toText(normalized));
+      assert.equal(question.programText.solutionPython, engine.toPython(normalized));
+      assert.match(question.programText.start, /^when Run clicked/);
+      assert.notEqual(question.programText.start, question.programText.solution, `${id}: the start is not the solution`);
+    }
+  });
+
+  await t.test("the student start and resume carry none of it", async () => {
+    const started = await startAttempt(app, { joinCode: created.body.event.join_code });
+    const resumed = await getAttempt(app, started.attempt);
+    const expectedPublic = store.getEventQuestions(created.body.event.id).map(scoring.toPublicQuestion);
+    assert.deepEqual(started.questions, expectedPublic);
+    assert.deepEqual(resumed.body.questions, expectedPublic);
+
+    for (const field of ["answer", "details", "cases", "solution", "programText"]) {
+      assert.equal(allKeys(started.questions).has(field), false, `start: ${field}`);
+      assert.equal(allKeys(resumed.body.questions).has(field), false, `resume: ${field}`);
+    }
+  });
+});

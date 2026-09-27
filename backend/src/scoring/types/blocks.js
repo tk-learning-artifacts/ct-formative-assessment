@@ -114,6 +114,23 @@ module.exports = {
     return { ...question, hiddenCases: Array.isArray(question.cases) ? question.cases.length : 0 };
   },
 
+  // For the teacher's question preview, which has no engine or editor
+  // loaded: the starting program and the reference solution in words, and
+  // the solution as Python, worked out here with the same engine.
+  teacherView(question) {
+    const solution = engine.normalizeWorkspace(question.solution, { world: question.world, variables: question.variables || [] });
+    const start = startProgram(question);
+
+    return {
+      ...question,
+      programText: {
+        start: start.error ? null : engine.toText(start.value),
+        solution: solution.error ? null : engine.toText(solution.value),
+        solutionPython: solution.error ? null : engine.toPython(solution.value)
+      }
+    };
+  },
+
   sample: {
     id: "SAMPLE-BLOCKS",
     type: "blocks",

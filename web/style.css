@@ -2044,6 +2044,39 @@ textarea.open-response {
   text-align: left;
 }
 
+.qp-glossary {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 4px 0 0;
+  font-size: 0.8125rem;
+}
+
+.qp-glossary dd {
+  margin: 0;
+}
+
+/* Block grids side by side where they fit, each scrolling on its own if a
+   grid is wider than the screen. */
+.qp-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.qp-stage {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.qp-grid {
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  line-height: 1.2;
+  letter-spacing: 0.2em;
+}
+
 /* ---------- Phone ---------- */
 
 @media (max-width: 640px) {

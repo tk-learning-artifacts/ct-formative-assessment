@@ -221,8 +221,41 @@
     mcq: "Multiple choice",
     "code-trace": "Code trace",
     parsons: "Parsons problem",
+    "code-reading": "Code reading",
+    blocks: "Block program",
     "open-response-ai": "Open response (AI scored)"
   };
+
+  const QP_EXPECT_TEXT = {
+    reachGoal: () => "end on the flag",
+    collectAll: () => "pick up every star",
+    say: value => `say ${value} at the end`
+  };
+
+  const QP_FACING_ARROWS = { north: "▲", east: "▶", south: "▼", west: "◀" };
+
+  function qpCountBlocks(block) {
+    if (!block || typeof block !== "object") {
+      return 0;
+    }
+    const inputs = block.inputs || {};
+    return 1 + qpCountBlocks(block.next) + Object.keys(inputs).reduce((sum, name) => sum + qpCountBlocks(inputs[name]), 0);
+  }
+
+  // The blocks under "when Run clicked" (the hat block itself not counted).
+  function qpScriptSize(workspace) {
+    const main = (workspace && workspace.scripts || []).find(script => script && script.type === "when_run");
+    return main ? qpCountBlocks(main) - 1 : 0;
+  }
+
+  // A code-reading follow-up key: one option index, or one or more lines.
+  function qpFollowUpKeys(question) {
+    return [].concat(question.answer.followUp);
+  }
+
+  function qpCodeLine(question, line) {
+    return question.code.source.split("\n")[line - 1] || "";
+  }
 
   function truncate(text, max) {
     const flat = String(text).replace(/\s+/g, " ").trim();
@@ -246,6 +279,26 @@
     if (question.type === "parsons") {
       const n = question.answer.order.length;
       return `<span class="tone-positive">✓ order: ${n} line${n === 1 ? "" : "s"}</span>`;
+    }
+
+    if (question.type === "code-reading") {
+      const letter = String.fromCharCode(65 + question.answer.index);
+      let text = `✓ ${letter}: ${truncate(question.options[question.answer.index], 32)}`;
+
+      if (question.followUp && question.followUp.kind === "choice") {
+        text += ` · then ${String.fromCharCode(65 + question.answer.followUp)}`;
+      } else if (question.followUp) {
+        const lines = qpFollowUpKeys(question);
+        text += ` · then line${lines.length === 1 ? "" : "s"} ${lines.join(" or ")}`;
+      }
+
+      return `<span class="tone-positive">${escapeHtml(text)}</span>`;
+    }
+
+    if (question.type === "blocks") {
+      const size = qpScriptSize(question.solution);
+      const grids = 1 + (question.cases || []).length;
+      return `<span class="tone-positive">✓ solution: ${size} block${size === 1 ? "" : "s"}, ${grids} grid${grids === 1 ? "" : "s"}</span>`;
     }
 
     if (question.type === "open-response-ai") {
@@ -277,6 +330,10 @@
       return marking.partial === "longest-run" ? "partial credit for the longest correct run" : "all or nothing";
     }
 
+    if (question.type === "blocks") {
+      return marking.partial === "cases" ? "partial credit for the share of grids passed" : "all or nothing";
+    }
+
     return "";
   }
 
@@ -297,6 +354,93 @@
           <tbody>${rows}</tbody>
         </table>
       </div>
+    `;
+  }
+
+  function qpMarkedOptions(options, key) {
+    return options.map((option, i) => `
+      <label class="opt qp-opt">
+        <input type="radio" disabled ${i === key ? "checked" : ""} />
+        <span class="opt__text">${escapeHtml(option)}</span>
+        ${i === key ? `<span class="tag tag--accent">Correct</span>` : ""}
+      </label>
+    `).join("");
+  }
+
+  function qpPoints(n) {
+    return `${n} pt${n === 1 ? "" : "s"}`;
+  }
+
+  // Code reading: the description options, then the follow-up (choice
+  // options, or the line or lines that earn the mark), each part with its
+  // points, and the glossary notes the student can open.
+  function qpCodeReadingBody(question) {
+    const followUp = question.followUp;
+    const describePoints = question.points - (followUp ? followUp.points : 0);
+    const parts = [
+      `<p class="answer-label">What does the code do? <span class="muted small">${qpPoints(describePoints)}</span></p>`,
+      `<div class="options">${qpMarkedOptions(question.options, question.answer.index)}</div>`
+    ];
+
+    if (followUp) {
+      parts.push(`<p class="answer-label mt-s">${escapeHtml(followUp.prompt)} <span class="muted small">${qpPoints(followUp.points)}</span></p>`);
+
+      if (followUp.kind === "choice") {
+        parts.push(`<div class="options">${qpMarkedOptions(followUp.options, question.answer.followUp)}</div>`);
+      } else {
+        const lines = qpFollowUpKeys(question).map(line => `
+          <li class="pa-line"><code class="pa-text">${line}: ${escapeHtml(qpCodeLine(question, line).trim())}</code><span class="tag tag--accent">Correct</span></li>
+        `).join("");
+        parts.push(`<p class="muted small">The student picks a line of the code. Accepted:</p><ul class="pa-list">${lines}</ul>`);
+      }
+    }
+
+    if (question.glossary && question.glossary.length) {
+      parts.push(`
+        <p class="code-label mt-s">Glossary notes</p>
+        <dl class="qp-glossary">${question.glossary.map(entry => `<dt class="mono">${escapeHtml(entry.term)}</dt><dd>${escapeHtml(entry.note)}</dd>`).join("")}</dl>
+      `);
+    }
+
+    return parts.join("");
+  }
+
+  // One grid as text, the sprite drawn as an arrow where it starts, and what
+  // the program must do there.
+  function qpStage(stage, label) {
+    const rows = stage.grid.map((row, y) => (y === stage.start.y
+      ? `${row.slice(0, stage.start.x)}${QP_FACING_ARROWS[stage.start.facing] || "@"}${row.slice(stage.start.x + 1)}`
+      : row));
+    const expect = Object.keys(stage.expect || {})
+      .filter(key => QP_EXPECT_TEXT[key])
+      .map(key => QP_EXPECT_TEXT[key](stage.expect[key]))
+      .join(", ");
+
+    return `
+      <div class="qp-stage">
+        <p class="code-label">${escapeHtml(label)}${expect ? `: ${escapeHtml(expect)}` : ""}</p>
+        <pre class="codebox qp-grid">${escapeHtml(rows.join("\n"))}</pre>
+      </div>
+    `;
+  }
+
+  // Blocks: what a student is given (the example grid, the starting program,
+  // the toolbox and limits). The hidden grids and the solution are teacher
+  // only, below.
+  function qpBlocksBody(question) {
+    const limits = [`${question.stepLimit || 500} steps`];
+
+    if (question.maxBlocks) {
+      limits.push(`at most ${question.maxBlocks} blocks`);
+    }
+
+    const programText = question.programText || {};
+
+    return `
+      <p class="muted small">Grid key: <code>#</code> wall, <code>.</code> floor, <code>G</code> flag, <code>*</code> star; the arrow is the sprite, facing the way it points.</p>
+      <div class="qp-stages">${qpStage(question.example, "Example grid (shown to students)")}</div>
+      ${programText.start ? `<p class="code-label">Starting program (given blocks cannot move)</p><pre class="codebox">${escapeHtml(programText.start)}</pre>` : ""}
+      <p class="small">Toolbox: ${question.toolbox.map(type => `<code>${escapeHtml(type)}</code>`).join(", ")}${question.variables && question.variables.length ? `. Variables: ${question.variables.map(name => `<code>${escapeHtml(name)}</code>`).join(", ")}` : ""}. Limit: ${limits.join(", ")}.</p>
     `;
   }
 
@@ -331,6 +475,14 @@
         : "";
 
       return `<p class="answer-label">Lines, correct order marked</p><ol class="pa-list">${lines}</ol>${target}`;
+    }
+
+    if (question.type === "code-reading") {
+      return qpCodeReadingBody(question);
+    }
+
+    if (question.type === "blocks") {
+      return qpBlocksBody(question);
     }
 
     if (question.type === "open-response-ai") {
@@ -368,6 +520,29 @@
       }
     }
 
+    if (question.type === "code-reading" && question.followUp) {
+      bits.push(`<p class="small">Marking: each part all or nothing, so a right description with a missed follow-up keeps its ${qpPoints(question.points - question.followUp.points)}.</p>`);
+    }
+
+    if (question.type === "blocks") {
+      const cases = question.cases || [];
+      const programText = question.programText || {};
+
+      bits.push(cases.length
+        ? `<p class="small">Also marked on ${cases.length} hidden grid${cases.length === 1 ? "" : "s"}, never sent to students:</p><div class="qp-stages">${cases.map((stage, i) => qpStage(stage, `Hidden grid ${i + 1}`)).join("")}</div>`
+        : `<p class="small">Marked on the example grid only.</p>`);
+
+      if (programText.solution) {
+        bits.push(`<p class="code-label">Reference solution</p><pre class="codebox">${escapeHtml(programText.solution)}</pre>`);
+      }
+
+      if (programText.solutionPython) {
+        bits.push(`<p class="code-label">Reference solution as Python${question.showPython ? "" : " (students are not offered the Python view on this question)"}</p><pre class="codebox">${escapeHtml(programText.solutionPython)}</pre>`);
+      }
+
+      bits.push(`<p class="small">Marking: ${qpMarkingText(question) || "all or nothing"}.</p>`);
+    }
+
     if (question.type === "open-response-ai") {
       bits.push(qpRubricTable(question.rubric));
     }
@@ -386,7 +561,12 @@
       parts.push(`<pre class="codebox">${escapeHtml(question.art)}</pre>`);
     }
 
-    if (question.code) {
+    if (question.code && question.type === "code-reading") {
+      // Numbered, since a line follow-up names lines by number.
+      const lines = question.code.source.split("\n").map((line, i) =>
+        `<span class="ct-line"><span class="ct-line__no" aria-hidden="true">${i + 1}</span><span class="ct-line__text">${escapeHtml(line) || " "}</span></span>`).join("");
+      parts.push(`<p class="code-label">${escapeHtml(question.code.language)}</p><pre class="codebox ct-code"><code>${lines}</code></pre>`);
+    } else if (question.code) {
       parts.push(`<p class="code-label">${escapeHtml(question.code.language)}</p><pre class="codebox">${escapeHtml(question.code.source)}</pre>`);
     }
 
