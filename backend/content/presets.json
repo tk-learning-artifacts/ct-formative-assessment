@@ -50,6 +50,13 @@
       "knobs": ["who"]
     },
     {
+      "id": "code-reading",
+      "label": "Reading code: what does it do?",
+      "description": "Read a short script or function, pick what it does, then answer a follow-up. Blocks and pseudocode for core, Python and Swift for RGSynapse.",
+      "filter": { "audiences": ["core", "rgsynapse"], "types": ["code-reading"] },
+      "knobs": ["who"]
+    },
+    {
       "id": "mixed-level",
       "label": "Mixed: everything for a level",
       "description": "Every question for one level, all types except AI-scored ones.",

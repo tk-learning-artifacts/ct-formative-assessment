@@ -1,0 +1,578 @@
+{
+  "bank": "type-code-reading",
+  "questions": [
+    {
+      "id": "CR-P5-01",
+      "type": "code-reading",
+      "audience": "core",
+      "level": "P5",
+      "title": "What does the cat say?",
+      "prompt": "A cat runs this script on a list called numbers. Read it carefully. Which sentence says what the cat says, for any list of numbers?",
+      "code": {
+        "language": "scratch-style",
+        "source": "when green flag clicked\nset biggest to item 1 of numbers\nfor each n in numbers\n    if n > biggest then\n        set biggest to n\n    end\nend\nsay biggest"
+      },
+      "options": [
+        "The first number in the list",
+        "The biggest number in the list",
+        "The last number in the list",
+        "How many numbers are in the list"
+      ],
+      "answer": {
+        "index": 1,
+        "followUp": 1
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "For which list would the cat say 7?",
+        "options": [
+          "7, 9, 2",
+          "3, 7, 1",
+          "9, 3, 7",
+          "1, 2, 3"
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "item 1 of",
+          "note": "The first thing in the list."
+        },
+        {
+          "term": "for each",
+          "note": "Runs the blocks inside once for every number in the list, with n standing for that number."
+        },
+        {
+          "term": ">",
+          "note": "\"Is greater than\": n > biggest is true when n is bigger."
+        }
+      ],
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "concept.data.variables",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-1",
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "Keeps the biggest number seen so far. The follow-up options set traps for students who think it says the first number (7, 9, 2) or the last one (9, 3, 7). Two marks for the description, one for the follow-up."
+    },
+    {
+      "id": "CR-P6-01",
+      "type": "code-reading",
+      "audience": "core",
+      "level": "P6",
+      "title": "Counting letters",
+      "prompt": "This script looks at every letter of a word. Which sentence says what it counts, for any word?",
+      "code": {
+        "language": "scratch-style",
+        "source": "set count to 0\nfor each letter in word\n    if letter is a vowel then\n        change count by 1\n    end\nend\nsay count"
+      },
+      "options": [
+        "How many vowels are in the word",
+        "How many letters are in the word",
+        "Whether the word has a vowel in it (1 for yes, 0 for no)",
+        "How many letters in the word are not vowels"
+      ],
+      "answer": {
+        "index": 0,
+        "followUp": 3
+      },
+      "followUp": {
+        "kind": "line",
+        "prompt": "You want the script to count the letters that are not vowels instead. Which one line would you change?",
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "vowel",
+          "note": "One of the letters a, e, i, o or u."
+        },
+        {
+          "term": "change count by 1",
+          "note": "Adds 1 to count."
+        }
+      ],
+      "points": 3,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "concept.data.variables",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-1",
+        "LO-COND-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "The if decides which letters are counted, so the change goes on line 3 (\"if letter is not a vowel\"). Changing line 4 changes how much is added, not which letters count."
+    },
+    {
+      "id": "CR-S1-01",
+      "type": "code-reading",
+      "audience": "core",
+      "level": "S1",
+      "title": "Putting items at the front",
+      "prompt": "These instructions build a new list called result from a list you give them. What do they show, for any list?",
+      "code": {
+        "language": "pseudocode",
+        "source": "set result to an empty list\nfor each item in the list, from first to last\n    put item at the front of result\nend\nshow result"
+      },
+      "options": [
+        "The list sorted from smallest to largest",
+        "The list in the same order",
+        "The list in reverse order",
+        "Only the first item of the list"
+      ],
+      "answer": {
+        "index": 2,
+        "followUp": 0
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "Which list would be shown exactly as it started?",
+        "options": [
+          "2, 5, 2",
+          "1, 2, 3",
+          "1, 2, 1, 2",
+          "4, 4, 1"
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "at the front of",
+          "note": "Before everything already in result, so it becomes the new first item."
+        }
+      ],
+      "points": 3,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.data.structures",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-1",
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "Each item goes in front of the ones before it, so the last item ends up first. The follow-up asks which list reads the same backwards (2, 5, 2)."
+    },
+    {
+      "id": "CR-S2-01",
+      "type": "code-reading",
+      "audience": "core",
+      "level": "S2",
+      "title": "Looking for a target",
+      "prompt": "Read this function. Which sentence says what find gives back, for any list and target?",
+      "code": {
+        "language": "pseudocode",
+        "source": "function find(list, target)\n    set position to 1\n    repeat while position ≤ length of list\n        if item position of list = target then\n            return position\n        end\n        change position by 1\n    end\n    return 0\nend"
+      },
+      "options": [
+        "How many items are equal to target",
+        "The position of the last item equal to target, or 0 if there is none",
+        "1 if target is in the list, 0 if it is not",
+        "The position of the first item equal to target, or 0 if there is none"
+      ],
+      "answer": {
+        "index": 3,
+        "followUp": 2
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "Which call gives back 0?",
+        "options": [
+          "find([3, 0, 5], 0)",
+          "find([5], 5)",
+          "find([2, 4, 6], 3)",
+          "find([1, 1], 1)"
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "item position of list",
+          "note": "The item at that position. Position 1 is the first item."
+        },
+        {
+          "term": "return",
+          "note": "Stops the function straight away and gives back this value."
+        },
+        {
+          "term": "≤",
+          "note": "\"Is less than or equal to\"."
+        }
+      ],
+      "points": 3,
+      "difficulty": 3,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "concept.data.structures.search-sort",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "A linear search that stops at the first match, because return leaves the function. The follow-up separates \"returns 0\" from \"looks for 0\": find([3, 0, 5], 0) gives 2."
+    },
+    {
+      "id": "CR-RGS-S1-01",
+      "type": "code-reading",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Tidying a list of words",
+      "prompt": "What does this Python function give back, for any list of words?",
+      "code": {
+        "language": "python",
+        "source": "def tidy(words):\n    result = []\n    for w in words:\n        if w not in result:\n            result.append(w)\n    return result"
+      },
+      "options": [
+        "The words with repeats removed, each kept where it first appears",
+        "The words with repeats removed, each kept where it last appears",
+        "The words sorted into alphabetical order",
+        "Only the words that appear more than once"
+      ],
+      "answer": {
+        "index": 0,
+        "followUp": 1
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "Which input gives back a list the same length as the input?",
+        "options": [
+          "[\"hi\", \"hi\"]",
+          "[\"a\", \"b\", \"c\"]",
+          "[\"x\", \"y\", \"x\"]",
+          "[\"go\", \"go\", \"go\"]"
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "not in",
+          "note": "True when the value is nowhere in the list."
+        },
+        {
+          "term": ".append",
+          "note": "Adds an item to the end of a list."
+        }
+      ],
+      "points": 3,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "concept.data.structures",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-RGS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "Removes duplicates and keeps first appearances in order: tidy([\"b\", \"a\", \"b\"]) is [\"b\", \"a\"]. Only a list with no repeats keeps its length."
+    },
+    {
+      "id": "CR-RGS-S1-02",
+      "type": "code-reading",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Checking the scores",
+      "prompt": "What does this Swift function tell you about a list of test scores?",
+      "code": {
+        "language": "swift",
+        "source": "func check(_ scores: [Int]) -> Bool {\n    for s in scores {\n        if s < 50 {\n            return false\n        }\n    }\n    return true\n}"
+      },
+      "options": [
+        "true if at least one score is 50 or more",
+        "true if the first score is 50 or more",
+        "true only if every score is below 50",
+        "true only if every score is 50 or more"
+      ],
+      "answer": {
+        "index": 3,
+        "followUp": 0
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "What does check([]) give back, for an empty list?",
+        "options": [
+          "true",
+          "false",
+          "It crashes",
+          "nil"
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "-> Bool",
+          "note": "The function gives back true or false."
+        },
+        {
+          "term": "return",
+          "note": "Leaves the function at once, giving back this value."
+        }
+      ],
+      "points": 3,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "practice.testing-debugging.edge-cases",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-RGS-1",
+        "LO-DEBUG-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "Returns false at the first score below 50, so true means no score was below 50. With no scores the loop never runs and it returns true, which is the edge case the follow-up checks."
+    },
+    {
+      "id": "CR-RGS-S2-01",
+      "type": "code-reading",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "The AI's top scorer",
+      "prompt": "You asked an AI assistant for a function that finds who scored the most. It wrote this. scores is a dictionary such as {\"Ana\": 12, \"Bo\": 9}. What does the code actually do?",
+      "code": {
+        "language": "python",
+        "source": "def top_scorer(scores):\n    best_name = None\n    best = 0\n    for name, points in scores.items():\n        if points > best:\n            best = points\n            best_name = name\n    return best_name"
+      },
+      "options": [
+        "Gives back the highest score itself, not a name",
+        "Gives back the name with the most points; if two tie, the one listed last",
+        "Gives back the name with the most points (the first listed if two tie), but None if nobody scored more than 0",
+        "Gives back the name with the most points for any scores, negative ones included"
+      ],
+      "answer": {
+        "index": 2,
+        "followUp": 3
+      },
+      "followUp": {
+        "kind": "line",
+        "prompt": "Which one line would you change so it also works when every score is negative?",
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": ".items()",
+          "note": "Goes through the dictionary one name and its points at a time."
+        },
+        {
+          "term": "None",
+          "note": "Python's value for \"nothing\"."
+        }
+      ],
+      "points": 3,
+      "difficulty": 3,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "perspective.questioning.ai-output",
+        "practice.testing-debugging.edge-cases",
+        "concept.conditionals"
+      ],
+      "outcomes": [
+        "LO-READ-RGS-1",
+        "LO-SPEC-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "The best-so-far starts at 0 instead of the first score, so all-negative (or all-zero) scores give None. > rather than >= keeps the first of a tie. Fix line 3, for example best = float(\"-inf\")."
+    },
+    {
+      "id": "CR-RGS-S2-02",
+      "type": "code-reading",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Squashing text",
+      "prompt": "What does this Python function give back, for any text? For example, work out squash(\"aaab\") first.",
+      "code": {
+        "language": "python",
+        "source": "def squash(text):\n    out = \"\"\n    i = 0\n    while i < len(text):\n        j = i\n        while j < len(text) and text[j] == text[i]:\n            j += 1\n        out += text[i] + str(j - i)\n        i = j\n    return out"
+      },
+      "options": [
+        "Each letter with how many times it appears anywhere in the text",
+        "Each run of the same letter in a row, written as the letter and the length of the run",
+        "The text with repeated letters removed",
+        "Each letter followed by its position in the text"
+      ],
+      "answer": {
+        "index": 1,
+        "followUp": 2
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "Which input gives back text longer than the input?",
+        "options": [
+          "\"aaaa\"",
+          "\"aabb\"",
+          "\"abcd\"",
+          "\"aaab\""
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "text[i]",
+          "note": "The letter at position i. The first letter is position 0."
+        },
+        {
+          "term": "str(j - i)",
+          "note": "Turns the number j - i into text, so it can be joined to a letter."
+        }
+      ],
+      "points": 3,
+      "difficulty": 4,
+      "ontology": [
+        "concept.loops",
+        "concept.data.representation.text",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-RGS-1",
+        "LO-GENERALISE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "Run-length encoding: \"aaab\" becomes \"a3b1\". The inner loop finds where each run ends. It only saves space when letters repeat, so \"abcd\" doubles in length."
+    },
+    {
+      "id": "CR-AI-S1-01",
+      "type": "open-response-ai",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Explain it: shout",
+      "prompt": "In one or two sentences, explain what this Python function gives back for any list of names. Say what the result is, not what each line does.",
+      "code": {
+        "language": "python",
+        "source": "def shout(names):\n    out = []\n    for n in names:\n        if len(n) <= 3:\n            out.append(n.upper())\n    return out"
+      },
+      "points": 2,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-RGS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "Explain in your own words",
+      "responseMaxChars": 400,
+      "rubric": [
+        {
+          "id": "full",
+          "description": "Says it gives back a list of only the names with 3 or fewer letters, in capitals, and that longer names are left out.",
+          "points": 2
+        },
+        {
+          "id": "partial",
+          "description": "Says only one of the two: that only short names are kept, or that the names are changed to capitals.",
+          "points": 1
+        },
+        {
+          "id": "none",
+          "description": "Describes something else, or retells the lines one by one without saying what the result is.",
+          "points": 0
+        }
+      ],
+      "details": "A filter and a change in one loop: shout([\"Ada\", \"Grace\", \"Bo\"]) gives [\"ADA\", \"BO\"]."
+    },
+    {
+      "id": "CR-AI-S2-01",
+      "type": "open-response-ai",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Explain it: streak",
+      "prompt": "days has one true or false for each day, true if a habit was kept that day. In one or two sentences, explain what streak gives back. Say what the number means, not what each line does.",
+      "code": {
+        "language": "swift",
+        "source": "func streak(_ days: [Bool]) -> Int {\n    var best = 0\n    var current = 0\n    for d in days {\n        if d {\n            current += 1\n            best = max(best, current)\n        } else {\n            current = 0\n        }\n    }\n    return best\n}"
+      },
+      "points": 3,
+      "difficulty": 3,
+      "ontology": [
+        "concept.loops",
+        "concept.data.variables",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-RGS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "Explain in your own words",
+      "responseMaxChars": 400,
+      "rubric": [
+        {
+          "id": "full",
+          "description": "Says it gives back the longest run of days in a row where the habit was kept (the longest stretch of true values in a row), and 0 if there are none.",
+          "points": 3
+        },
+        {
+          "id": "most",
+          "description": "Says it gives back the longest run in a row but not what happens with no true values, or says it clearly but loosely (\"the best streak\").",
+          "points": 2
+        },
+        {
+          "id": "partial",
+          "description": "Says it counts the days the habit was kept without saying they must be in a row, or describes current rather than best.",
+          "points": 1
+        },
+        {
+          "id": "none",
+          "description": "Describes something else, or retells the lines one by one without saying what the number means.",
+          "points": 0
+        }
+      ],
+      "details": "current counts the run in progress and resets on a false; best keeps the largest current seen. [true, true, false, true] gives 2, not 3."
+    }
+  ]
+}

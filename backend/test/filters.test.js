@@ -45,7 +45,7 @@ test("event filters and picker endpoints", async t => {
     const s1Default = await preview({ filter: { levels: ["S1"], types: ["mcq"] } });
     assert.deepEqual(s1Default.body.byAudience, { core: 5 });
     assert.deepEqual(s1Default.body.filter.audiences, ["core"]);
-    assert.deepEqual((await preview({ filter: { audiences: [], levels: ["P5"] } })).body.byAudience, { core: 5 });
+    assert.deepEqual((await preview({ filter: { audiences: [], levels: ["P5"] } })).body.byAudience, { core: 6 });
 
     const s1Everyone = await preview({ filter: { levels: ["S1"], audiences: ["core", "rgsynapse"], types: ["mcq"] } });
     assert.deepEqual(s1Everyone.body.byAudience, { core: 5, rgsynapse: 12 });
@@ -60,7 +60,7 @@ test("event filters and picker endpoints", async t => {
     ]);
 
     const byOutcome = await preview({ filter: { outcomes: ["LO-DEBUG-1"], audiences: ["core", "rgsynapse"] } });
-    assert.deepEqual(byOutcome.body.questions.map(q => q.id), ["S1-01", "RGS-S1-02", "RGS-S1-10", "RGS-S2-12"]);
+    assert.deepEqual(byOutcome.body.questions.map(q => q.id), ["S1-01", "RGS-S1-02", "RGS-S1-10", "RGS-S2-12", "CR-RGS-S1-02"]);
 
     const outcomeAndLevel = await preview({ filter: { outcomes: ["LO-PATH-1"], levels: ["S2"] } });
     assert.deepEqual(outcomeAndLevel.body.questions.map(q => q.id), ["S2-02"]);
@@ -104,10 +104,10 @@ test("event filters and picker endpoints", async t => {
 
   await t.test("AI-scored questions are opt-in and come last", async () => {
     // A core event never gets RGSynapse or AI questions by default. It does
-    // get the core code-trace and Parsons samples.
+    // get the core code-trace, Parsons and code-reading samples.
     const coreS1 = await preview({ filter: { levels: ["S1"] } });
-    assert.deepEqual(coreS1.body.byAudience, { core: 7 });
-    assert.deepEqual(coreS1.body.byType, { mcq: 5, "code-trace": 1, parsons: 1 });
+    assert.deepEqual(coreS1.body.byAudience, { core: 8 });
+    assert.deepEqual(coreS1.body.byType, { mcq: 5, "code-trace": 1, parsons: 1, "code-reading": 1 });
     assert.equal(coreS1.body.aiRequired, false);
 
     // A level filter on RGSynapse leaves the AI questions out...
@@ -118,10 +118,10 @@ test("event filters and picker endpoints", async t => {
 
     // ...until the teacher names the type, and then they come after the rest.
     const optIn = await preview({ filter: { audiences: ["rgsynapse"], levels: ["S2"], types: ["mcq", "open-response-ai"] } });
-    assert.equal(optIn.body.byType["open-response-ai"], 2);
+    assert.equal(optIn.body.byType["open-response-ai"], 3);
     assert.equal(optIn.body.byType.mcq, rgsS2.body.byType.mcq);
-    assert.deepEqual(optIn.body.questions.slice(-2).map(q => q.id), ["AIS-S2-01", "AIS-S2-02"]);
-    assert.ok(optIn.body.questions.slice(0, -2).every(q => q.type === "mcq"));
+    assert.deepEqual(optIn.body.questions.slice(-3).map(q => q.id), ["AIS-S2-01", "AIS-S2-02", "CR-AI-S2-01"]);
+    assert.ok(optIn.body.questions.slice(0, -3).every(q => q.type === "mcq"));
     assert.equal(optIn.body.aiRequired, true);
     assert.match(optIn.body.warning, /AI is off/);
 
@@ -202,7 +202,8 @@ test("event filters and picker endpoints", async t => {
     assert.deepEqual(rgsS2.body.outcomes.map(outcome => outcome.id), [
       "LO-DEBUG-1", "LO-CODE-TRACE-1", "LO-AI-REVIEW-1", "LO-TRANSLATE-1",
       "LO-EVENTS-1", "LO-PARALLEL-1", "LO-SORT-RGS-1", "LO-ITERATE-1",
-      "LO-GENERALISE-1", "LO-SPEC-1", "LO-PROMPT-1", "LO-EXPRESS-1"
+      "LO-GENERALISE-1", "LO-SPEC-1", "LO-PROMPT-1", "LO-EXPRESS-1",
+      "LO-READ-RGS-1"
     ]);
     assert.ok(rgsS2.body.outcomes.every(outcome => outcome.nodes.length > 0));
 

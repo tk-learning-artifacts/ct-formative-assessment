@@ -62,8 +62,7 @@ test("no solver is left over for a question that no longer exists", () => {
   assert.deepEqual(stale, []);
 });
 
-function keyProblem(question) {
-  const solved = SOLVERS[question.id](question);
+function keyProblem(question, solved = SOLVERS[question.id](question)) {
   const matches = matchingOptions(question, solved);
   const shown = solved && solved.pick ? "(predicate)" : JSON.stringify(solved);
 
@@ -141,6 +140,26 @@ const TYPE_CHECKS = {
     const computed = SOLVERS[question.id](question);
     assert.deepEqual(normalizeOutput(question.answer.output), normalizeOutput(computed), `${question.id}: key output differs from the computed output`);
     assert.equal(scoring.scoreResponse(question, computed).result.correct, true);
+  },
+
+  // Both parts are matched like an mcq: the solver's claims, run against
+  // the code, must pick out exactly the key (see solvers/type-code-reading.js).
+  "code-reading"(question) {
+    const solved = SOLVERS[question.id](question);
+    assert.equal(keyProblem(question, solved.describe), null);
+
+    if (!question.followUp) {
+      return;
+    }
+
+    const keys = [].concat(question.answer.followUp);
+
+    if (question.followUp.kind === "line") {
+      assert.deepEqual(solved.followUp.lines, keys, `${question.id}: the computed follow-up line differs from the key`);
+      return;
+    }
+
+    assert.equal(keyProblem({ id: `${question.id} follow-up`, options: question.followUp.options, answer: { index: question.answer.followUp } }, solved.followUp), null);
   },
 
   parsons(question) {
