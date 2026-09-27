@@ -1,13 +1,16 @@
-// Version 3: correct four questions inside existing event snapshots.
+// Correct four questions inside existing event snapshots, but only for
+// events that have no submitted attempts.
 //
 // Events freeze a copy of their questions, so fixing backend/content/ alone
-// would leave events created before the fix (including DEMO123 in a deployed
-// volume) marking students against the wrong key. Each patch only applies when
-// the snapshot still matches the original v1 content, so an event built from
-// already-corrected content is left alone.
-//
-// Scores of attempts submitted before this migration are not recomputed; the
-// answers table keeps what the student was told at the time.
+// leaves events created before the fix marking against the wrong key. For
+// an event nobody has submitted yet, the snapshot is patched and every future
+// student gets the corrected question. An event that already has submissions
+// is left exactly as its students saw it: its snapshot, the stored answers
+// (which also record the chosen option's text) and the awarded scores all
+// stay consistent, and the teacher's results view never pairs an old answer
+// with changed option text. The cost is that further students on such an
+// event still see the flawed question; the teacher should start a new event.
+// Each patch only applies when the snapshot still matches the v1 content.
 
 const PATCHES = [
   {
@@ -51,18 +54,32 @@ const PATCHES = [
 ];
 
 module.exports = {
-  version: 3,
-  name: "fix-answer-keys",
-  up(db) {
-    const select = db.prepare("SELECT id, question_json FROM event_questions WHERE question_id = ?");
+  up(db, ctx = {}) {
+    const log = ctx.log || (() => {});
+    const events = db.prepare(`
+      SELECT e.id, e.join_code,
+             (SELECT COUNT(*) FROM attempts a WHERE a.event_id = e.id AND a.status = 'submitted') AS submitted
+      FROM events e
+    `).all();
+    const select = db.prepare("SELECT id, question_json FROM event_questions WHERE event_id = ? AND question_id = ?");
     const update = db.prepare("UPDATE event_questions SET question_json = ? WHERE id = ?");
 
-    PATCHES.forEach(({ questionId, applies, patch }) => {
-      select.all(questionId).forEach(row => {
-        const question = JSON.parse(row.question_json);
-        if (question.type === "mcq" && applies(question)) {
+    events.forEach(event => {
+      PATCHES.forEach(({ questionId, applies, patch }) => {
+        select.all(event.id, questionId).forEach(row => {
+          const question = JSON.parse(row.question_json);
+
+          if (question.type !== "mcq" || !applies(question)) {
+            return;
+          }
+
+          if (event.submitted > 0) {
+            log(`Left ${questionId} unpatched in event ${event.join_code}: it already has submissions`);
+            return;
+          }
+
           update.run(JSON.stringify(patch(question)), row.id);
-        }
+        });
       });
     });
   }

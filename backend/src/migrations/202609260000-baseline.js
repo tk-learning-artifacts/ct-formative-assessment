@@ -1,12 +1,10 @@
-// Version 1: the schema exactly as the original CT Quest shipped it.
-// Databases created before migrations existed already have these tables and
-// report user_version 0, so every statement is IF NOT EXISTS and this step is
-// a no-op for them. A fresh database gets the tables here and then continues
+// Baseline: the schema exactly as the original CT Quest shipped it.
+// Databases created before migrations existed already have these tables (and
+// no schema_migrations table), so every statement is IF NOT EXISTS and this
+// step is a no-op for them. A fresh database gets the tables here and then continues
 // through the later migrations like any upgraded one.
 
 module.exports = {
-  version: 1,
-  name: "baseline",
   up(db) {
     db.exec(`
       CREATE TABLE IF NOT EXISTS users (
