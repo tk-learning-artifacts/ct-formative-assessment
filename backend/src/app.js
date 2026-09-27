@@ -349,15 +349,29 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
 
   // Quick setup cards: each preset with its knobs, default settings and the
   // number of questions those defaults select (the same path as preview).
+  // A "who" or "emphasis" option that can never match a question is left
+  // out, so a card never offers a setting that only leads to "No questions
+  // match" (the core bank has no perspectives questions, for example).
   app.get("/api/presets", requireAuth, (_req, res) => {
+    const emphasis = Object.keys(presets.EMPHASIS).map(id => ({ id, label: presets.EMPHASIS_LABELS[id] }));
+
+    function questionsFor(choice) {
+      const resolved = selection.resolveSelection({ preset: choice }, db.content);
+      return resolved.errors.length ? [] : db.previewQuestions(resolved.filter);
+    }
+
     res.json({
       shortLength: db.content.presetShortLength,
-      emphasis: Object.keys(presets.EMPHASIS).map(id => ({ id, label: presets.EMPHASIS_LABELS[id] })),
+      emphasis,
       presets: presets.describePresets(db.content).map(preset => {
-        const resolved = selection.resolveSelection({ preset: preset.defaults }, db.content);
-        const questions = resolved.errors.length ? [] : db.previewQuestions(resolved.filter);
+        const questions = questionsFor(preset.defaults);
+        const whoOptions = preset.whoOptions.filter(option => questionsFor({ ...preset.defaults, who: option.value }).length);
+        const whoValues = preset.knobs.includes("who") ? whoOptions.map(option => option.value) : [undefined];
+        const emphasisOptions = preset.knobs.includes("emphasis")
+          ? emphasis.filter(item => whoValues.some(who => questionsFor({ ...preset.defaults, who, emphasis: item.id }).length))
+          : [];
 
-        return { ...preset, count: questions.length, aiRequired: aiStatus(questions, ai).aiRequired };
+        return { ...preset, whoOptions, emphasisOptions, count: questions.length, aiRequired: aiStatus(questions, ai).aiRequired };
       })
     });
   });

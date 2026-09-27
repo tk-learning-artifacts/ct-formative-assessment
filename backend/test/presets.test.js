@@ -60,6 +60,36 @@ test("GET /api/presets: teacher only, every preset with knobs, defaults and a co
   assert.equal(core.count, 20);
   assert.deepEqual(core.whoOptions.map(option => option.value), ["core", "core:P5", "core:P6", "core:S1", "core:S2"]);
 
+  // Every option a card offers matches something: the core bank has no
+  // perspectives questions, so the core card does not offer that emphasis,
+  // and levels with no loop or code-ordering questions are left out.
+  assert.deepEqual(core.emphasisOptions.map(item => item.id), ["all", "concepts", "practices"]);
+  const loops = res.body.presets.find(preset => preset.id === "loops-conditionals");
+  assert.equal(loops.whoOptions.some(option => option.value === "core:S2"), false);
+  assert.ok(loops.whoOptions.some(option => option.value === "core"));
+  const ordering = res.body.presets.find(preset => preset.id === "ordering-tracing");
+  assert.equal(ordering.whoOptions.some(option => ["core:P5", "core:P6", "core:S2"].includes(option.value)), false);
+  const rgsS1 = res.body.presets.find(preset => preset.id === "rgs-s1-starter");
+  assert.deepEqual(rgsS1.emphasisOptions.map(item => item.id), ["all", "concepts", "practices", "perspectives"]);
+
+  for (const preset of res.body.presets) {
+    const whos = preset.knobs.includes("who") ? preset.whoOptions.map(option => option.value) : [undefined];
+    for (const who of whos) {
+      const choice = { ...preset.defaults, ...(who ? { who } : {}) };
+      const preview = await request(app).post("/api/question-bank/preview").set(auth).send({ preset: choice });
+      assert.ok(preview.body.count > 0, `${preset.id} offers ${who}, which matches nothing`);
+    }
+    for (const item of preset.emphasisOptions) {
+      let any = false;
+      for (const who of whos) {
+        const preview = await request(app).post("/api/question-bank/preview").set(auth)
+          .send({ preset: { ...preset.defaults, ...(who ? { who } : {}), emphasis: item.id } });
+        any = any || preview.body.count > 0;
+      }
+      assert.ok(any, `${preset.id} offers emphasis ${item.id}, which matches nothing`);
+    }
+  }
+
   const mixed = res.body.presets.find(preset => preset.id === "mixed-level");
   assert.equal(mixed.whoOptions.some(option => option.level === null), false, "levelRequired leaves out 'all levels'");
   assert.equal(mixed.defaults.who, "core:P5");

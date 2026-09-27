@@ -64,7 +64,7 @@ Presets live in `backend/content/presets.json`: each has an `id`, `label`, one-l
 - `emphasis`: `all`, `concepts`, `practices` or `perspectives`, which becomes `filter.nodes` set to that Brennan & Resnick root.
 - `length`: `full`, or `short`, which sets `filter.limit` to `shortLength` (10).
 
-A choice `{ id, who?, emphasis?, length? }` compiles to an ordinary filter (`src/presets.js`), which then goes through `selection.resolveSelection` like any other. `POST /api/question-bank/preview` and `POST /api/events` both accept `{ preset }`, so card count, preview count and event count come from one path. `GET /api/presets` (teacher only) returns the presets with their knob options, defaults and default counts.
+A choice `{ id, who?, emphasis?, length? }` compiles to an ordinary filter (`src/presets.js`), which then goes through `selection.resolveSelection` like any other. `POST /api/question-bank/preview` and `POST /api/events` both accept `{ preset }`, so card count, preview count and event count come from one path. `GET /api/presets` (teacher only) returns the presets with their knob options, defaults and default counts. It leaves out a `who` option that matches nothing with the other knobs at their defaults, and an emphasis that matches nothing for any offered `who` (the core bank has no perspectives questions), so a card does not offer a setting that can only fail. A combination of two offered settings can still match nothing; the form then says so and blocks Create.
 
 Checked at boot (`content.js`, then `db.js` once the content tables exist):
 

@@ -437,7 +437,7 @@
         <div class="field">
           <label for="quickEmphasis">Emphasis</label>
           <select id="quickEmphasis" data-quick-knob="emphasis">
-            ${state.presets.emphasis.map(item => `<option value="${escapeHtml(item.id)}" ${state.quick.emphasis === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+            ${(preset.emphasisOptions || state.presets.emphasis).map(item => `<option value="${escapeHtml(item.id)}" ${state.quick.emphasis === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
           </select>
         </div>
       `);
