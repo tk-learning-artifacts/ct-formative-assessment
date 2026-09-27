@@ -18,7 +18,7 @@ ct-formative-assessment/
 │   │   ├── ontology.json         CT ontology (Brennan & Resnick + CT Quest sub-nodes)
 │   │   ├── learning-outcomes.json  LOs mapped to ontology nodes
 │   │   ├── legacy-modes.json     Question ids behind the old ALL/P5/P6/S1/S2 modes
-│   │   └── questions/            Question banks (core.json, rgsynapse.json, type-samples.json)
+│   │   └── questions/            Question banks (core.json, rgsynapse.json, type-samples.json, ai-samples.json)
 │   ├── src/
 │   │   ├── server.js         Entry point: loads config, starts the app
 │   │   ├── app.js            Express app: routes, JWT auth, static allowlist
@@ -30,16 +30,17 @@ ct-formative-assessment/
 │   │   ├── security.js       Password hashing, attempt tokens
 │   │   ├── scoring/          Scorer registry; one module per question type in scoring/types/
 │   │   ├── migrations/       Timestamped migrations, recorded in schema_migrations
-│   │   └── ai/               AI extension point: guarded provider, typed payload, output validation (off by default)
+│   │   └── ai/               AI scoring (off by default): guarded provider, typed payload, output validation, OpenRouter adapter, background job
 │   ├── scripts/
-│   │   └── set-password.js   Set or create a teacher's password
+│   │   ├── set-password.js   Set or create a teacher's password
+│   │   └── ai-smoke.js       One live AI scoring request, run by hand
 │   ├── test/                 node:test + supertest suite, answer-key solvers, v1 fixture
 │   └── data/
 │       └── app.db            SQLite database (auto-created, gitignored)
 ├── web/                      Frontend: plain HTML/CSS/JS, no framework
 │   ├── index.html / app.js   Student quiz UI (countdown, auto-submit, resume after refresh)
 │   ├── type-registry.js      Loads the question-type renderers
-│   ├── types/                One renderer per question type (mcq, code-trace, parsons)
+│   ├── types/                One renderer per question type (mcq, code-trace, parsons, open-response-ai)
 │   ├── admin.html / admin.js Teacher portal
 │   ├── style.css             Shared styles (dark/light mode)
 │   └── vite.config.js        Dev server config (proxy + multi-page build)
@@ -61,6 +62,8 @@ ct-formative-assessment/
 **Answer keys** stay on the server. Students receive each question through its type's public projection, which leaves out `answer`, the teacher-only `details` note and any other marking fields.
 
 **Results.** Each student gets one attempt per event (a teacher can reset it). On submit the student sees their total. The per-question breakdown appears once the event's deadline (`end_at`) passes or the teacher presses "Release results".
+
+**AI-scored answers.** `open-response-ai` questions take a short written answer, scored against a server-only rubric by a model through OpenRouter. Submitting never waits for the model: the answer is stored as pending, a background job in the same process scores it, and the student's total rises when it finishes. The student's name, class and any identifiers they typed are removed before anything is sent. Replies that fail validation, and every answer when AI is off, become "needs review" for the teacher, who can set the score and feedback for any AI-scored answer. See "AI scoring" below and the ADR, section 10.
 
 ### Database schema
 
@@ -156,8 +159,28 @@ The suite uses Node's built-in test runner (`node:test`) with `supertest` for HT
 | `question-types.test.js` | Code-trace normalisation and partial credit; Parsons scoring, opaque ids and a shuffle that never shows a correct order; an HTTP attempt from start to released breakdown |
 | `content.test.js` | Content validation catches bad tags, bands, keys, cycles and legacy modes |
 | `ai.test.js` | AI off by default; the guarded provider builds every request; adversarial tests for each way student data could leak; model output validation |
+| `ai-openrouter.test.js` | The OpenRouter wire format and data-policy options; good, malformed and schema-breaking replies; timeout; 429 then success; bounded retries (fake `fetch`, no network) |
+| `ai-scoring.test.js` | Pending at submit, background scoring, concurrency cap, restart pickup, AI off, teacher override (owner only), release gating of feedback, and a spy proving a student's name and class never leave the server |
 
-**Computed answer keys.** `test/solvers/` has one solver per question. A solver reads the question's own text (the grid in `art`, the edge list in the prompt, the code) and computes the answer. The test requires exactly one option to match, and that option must be the key. Run against the original bank, the solvers flag four defects: P6-01, S2-02 and S1-01, plus P5-01 (two options always worked). A test keeps that true.
+**Computed answer keys.** `test/solvers/` has one solver per question. A solver reads the question's own text (the grid in `art`, the edge list in the prompt, the code) and computes the answer. The test requires exactly one option to match, and that option must be the key. Run against the original bank, the solvers flag four defects: P6-01, S2-02 and S1-01, plus P5-01 (two options always worked). A test keeps that true. An AI-scored question has no single key, so its solver re-runs the question's code and returns the facts the full-credit rubric criterion relies on; the test checks each fact holds and that the criterion names it.
+
+---
+
+## AI scoring (optional)
+
+AI is off unless you set `AI_PROVIDER`. With it off, everything else works as before; `open-response-ai` answers are labelled "needs review" and the teacher marks them on the results page. Creating an event that contains AI questions while AI is off returns a warning, which the teacher page shows.
+
+**To enable it:** set `AI_PROVIDER=openrouter` and `AI_API_KEY` to an OpenRouter key (in `.env` for Docker, or the environment). Optionally set `AI_MODEL`; the default is `anthropic/claude-sonnet-5`. Any model you choose must list `structured_outputs` in OpenRouter's model list. Keep prompt logging off in your OpenRouter privacy settings; the app already asks OpenRouter to route only to endpoints that neither collect nor retain data.
+
+**Check it works** with one live request (a made-up answer, no personal data):
+
+```bash
+AI_API_KEY=… node backend/scripts/ai-smoke.js            # or pass AIS-S2-01 / AIS-S2-02
+```
+
+It prints the model and whether the reply passed validation. `npm test` never calls the network.
+
+**Cost.** Each answer is one request of roughly 1,000 input tokens and under 300 output tokens: about $0.003 with the default model at $2 / $10 per million input / output tokens (September 2026). A class of 40 answering three AI questions costs about 40 cents. Failed requests are retried at most twice. `anthropic/claude-haiku-4.5` costs half as much if its marking is good enough for you.
 
 ---
 
@@ -265,9 +288,12 @@ Upgrading the image migrates the database in the volume on first start and leave
 | `HOST` | No | all interfaces | Address to bind, e.g. `127.0.0.1` for a local-only run. |
 | `DB_PATH` | No | `backend/data/app.db` | SQLite file location. |
 | `SUBMIT_GRACE_SECONDS` | No | `60` | How long after an attempt's deadline a submission still counts as on time. Later ones are stored and marked late. |
-| `AI_PROVIDER` | No | `none` | AI inference provider. `none` keeps every AI feature off; the OpenRouter adapter comes in Phase 2. |
-| `AI_API_KEY` | No | — | Key for `AI_PROVIDER`. Required if a provider is set. |
-| `AI_MODEL` | No | — | Model name for the provider. |
+| `AI_PROVIDER` | No | `none` | `none` keeps every AI feature off; `openrouter` scores `open-response-ai` answers through OpenRouter. |
+| `AI_API_KEY` | With a provider | — | OpenRouter key. Never commit it. |
+| `AI_MODEL` | No | `anthropic/claude-sonnet-5` | OpenRouter model id. Must support structured outputs. |
+| `AI_CONCURRENCY` | No | `2` | How many answers the background job scores at once (1 to 10). |
+| `AI_TIMEOUT_SECONDS` | No | `20` | Timeout for one AI request. |
+| `AI_APP_URL` | No | `http://localhost` | Sent to OpenRouter as `HTTP-Referer`, which it uses to name the app. |
 | `TZ` | No | `Asia/Singapore` (compose) | Only affects log timestamps. Stored and exchanged times are UTC. |
 
 ---

@@ -74,7 +74,7 @@ Each LO has `id`, `statement`, `nodes` (at least one ontology node), `levels` (a
 | Field | Required | Notes |
 |---|---|---|
 | `id` | yes | Unique across all banks, e.g. `P6-01`, `RGS-S1-02` |
-| `type` | yes | A registered, active type. `mcq` now |
+| `type` | yes | A registered, active type: `mcq` or `open-response-ai` |
 | `audience`, `level` | yes | Level must be offered by the audience |
 | `title`, `prompt` | yes | Plain text; `prompt` keeps line breaks |
 | `art` | no | Monospaced figure (grids and similar) |
@@ -86,20 +86,20 @@ Each LO has `id`, `statement`, `nodes` (at least one ontology node), `levels` (a
 | `crosswalk` | no | `{ bebrasCategory }` |
 | `topic`, `qType` | no | Display labels kept from v1. `qType` is a puzzle-style label, not the scoring type |
 | `details` | no | Teacher-only focus note. Never sent to students, because it often names the method or the answer |
-| type-specific | per type | For `mcq`: `options` (at least 2, distinct) and `answer: { index }`. For `code-trace` and `parsons`, see below |
+| type-specific | per type | For `mcq`: `options` (at least 2, distinct) and `answer: { index }`. For `code-trace`, `parsons` and `open-response-ai`, see below |
 
 Correct-answer positions in the shipped banks are balanced (six keys at each of positions 0 to 3), so "always pick B" earns nothing in particular.
 
-Two more types became active in Phase 2 (2026-09-27):
+Three more types became active in Phase 2 (2026-09-27):
 
 - `code-trace`: the student types the output of `code`. `answer: { output, accepted? }`, optional `marking: { collapseSpaces?, partial?: "lines" }`. Line endings are unified and trailing whitespace dropped before comparing. The response is stored as `{ text }`.
 - `parsons`: the student orders `lines: [{ id, text }]`, with indentation inside the text, and leaves out distractors. `language`, `answer: { order, alternatives? }`, optional `expectedOutput` (public) and `marking: { partial: "longest-run" }`. Students get the lines under opaque ids (a hash of question and line id), in a shuffle seeded by the question id that is never a correct order or the content order; validation rejects a question with no such order. The response is stored as `{ lines: [{ id, text }] }`.
+- `open-response-ai`: free text scored by the AI provider against `rubric: [{ id, description, points }]` (at least 2 criteria, one worth the full points and one worth 0; server-only), with optional `responseMaxChars` (20 to 1000). Scoring is asynchronous; see §10. Its questions live in `questions/ai-samples.json`. They have no single key to compute, so their solvers compute the facts each full-credit criterion relies on, and the answer-key test checks that the criterion names them.
 
 Reserved types have a module file each but no scorer, and the loader rejects questions that use them:
 
 - `multi-select`
 - `short-answer`: matched against accepted answers
-- `open-response-ai`: scored by the AI provider against `rubric: [{ id, description, points }]`
 
 ### 6. Question types as plug-ins
 
@@ -207,6 +207,7 @@ Migrations live in `src/migrations/YYYYMMDDHHMM-<slug>.js`. The file name is the
    - The content tables and indexes.
    - v1 snapshots rewritten to the v2 shape, with ontology and outcome tags backfilled from the bank question of the same id.
 3. `202609260200-fix-answer-keys`: patches P5-01, P6-01, S1-01 and S2-02 inside snapshots, but only for events with no submitted attempts. An event that already has submissions keeps the snapshot its students saw, so the snapshot, the stored answers (which also carry the chosen text) and the awarded scores stay consistent, and the teacher's view never pairs an old answer with changed option text. The cost: further students on such an event still see the flawed question, and the teacher should start a new event. The migration logs each event it leaves unpatched.
+4. `202609270249-ai-scoring-queue`: an index on `answers (score_status, id)` for the AI scoring job (§10), which polls pending answers. No new columns: the queue is the pending rows themselves.
 
 Each migration runs in a transaction together with its `schema_migrations` row. Foreign keys are switched off around the run (SQLite ignores that pragma inside a transaction), and `foreign_key_check` must pass before each commit. Migrations receive `ctx.content`, the validated content, for lookups like the tag backfill.
 
@@ -223,12 +224,18 @@ Indexes cover every per-request query:
 - events by `created_by`, snapshots by event, attempts by event and by `(event_id, student_key)`, answers by attempt;
 - the content lookups: `bank_questions (audience, level, type, difficulty)`, `question_nodes (node_id)`, `question_outcomes (outcome_id)`, `outcome_levels (level)`, `ontology_edges (to_id, kind)`.
 
-### 10. AI inference extension point (decision B, decided)
+### 10. AI inference (decision B, decided)
 
-Phase 1 ships the interface and guardrails only. No provider adapter is implemented and no request leaves the server. The app is complete without AI.
+Phase 1 shipped the interface and guardrails. Phase 2 adds the OpenRouter adapter, the `open-response-ai` question type, a background scoring job and a teacher override. AI stays off by default, and the app is complete without it.
 
-- **Configuration:** `AI_PROVIDER` (default `none`), `AI_API_KEY` and `AI_MODEL`, from the environment only. An unknown provider, or a provider without a key, fails at startup. `GET /api/catalog` reports `ai.enabled`.
-- **Guarded provider** (`src/ai/index.js`). An adapter registers as `providers[name] = config => ({ complete(request) })`, but callers never see it. `createAiProvider` returns a frozen object whose only method is `score(payload)`.
+- **Configuration:** from the environment only.
+  - `AI_PROVIDER`: `none` (default) or `openrouter`. An unknown provider, or a provider without a key, fails at startup.
+  - `AI_API_KEY`: the OpenRouter key.
+  - `AI_MODEL`: defaults to `anthropic/claude-sonnet-5` (see "Model" below).
+  - `AI_CONCURRENCY` (default 2, at most 10), `AI_TIMEOUT_SECONDS` (default 20), and `AI_APP_URL` (sent as `HTTP-Referer`, default `http://localhost`).
+
+  `GET /api/catalog` reports `ai.enabled`, `ai.provider` and `ai.model`.
+- **Guarded provider** (`src/ai/index.js`). An adapter registers as `providers[name] = (config, deps) => ({ model, complete(request) })`, but callers never see it. `deps` exists only so tests can pass a fake `fetch` and `sleep`; it carries no request content. `createAiProvider` returns a frozen object with `name`, `enabled`, `model` and one method, `score(payload)`.
   - It accepts exactly one argument, and only a payload made by `buildScoringPayload` (tracked in a `WeakSet` and deep-frozen).
   - It builds the whole request itself: `{ system: SCORING_SYSTEM_PROMPT, payload, schema: buildScoreSchema(from the payload), maxTokens }`.
   - Callers cannot pass a system prompt, a schema or any other key.
@@ -251,7 +258,51 @@ Phase 1 ships the interface and guardrails only. No provider adapter is implemen
   - `feedback` is at most 200 characters of single-line plain text. Control, format (bidi overrides, zero-width), line/paragraph separator, private-use and unassigned characters, and `<` `>`, are rejected.
 
   `buildScoreSchema` produces the matching JSON Schema, and `validateModelScore` checks every reply on receipt.
-- **Fallback:** `scoreWithAi` never throws. AI disabled, a rejected payload, a provider error, or output that fails validation all give `status: "needs-review"`, zero points and `detail: { ai: "needs-review", reason }`, and none of the model's text is kept. A validated score gives `detail: { ai: "scored", criterionId, score, feedbackCode, feedback? }`, stored in `answers.detail_json` and shown to the student only after results release.
+- **Fallback:** `scoreWithAi` never throws. AI disabled, a rejected payload, a provider error, or output that fails validation all give `status: "needs-review"`, zero points and `detail: { ai: "needs-review", reason }`, and none of the model's text is kept. A validated score gives `detail: { ai: "scored", criterionId, score, feedbackCode, feedback?, model? }`, stored in `answers.detail_json` and shown to the student only after results release. `model` is the model id OpenRouter reports, kept only if it looks like one.
+
+**OpenRouter adapter** (`src/ai/providers/openrouter.js`)
+- It only transports. It refuses any request that is not exactly the guard's `{ system, payload, schema, maxTokens }`, and maps those four fields onto `POST https://openrouter.ai/api/v1/chat/completions`:
+  - a system message with the fixed prompt, and a user message holding the JSON payload;
+  - `response_format: { type: "json_schema", json_schema: { name, strict: true, schema } }` with the guard's `buildScoreSchema` output;
+  - `max_tokens` from the guard (300).
+- Headers: `Authorization: Bearer <AI_API_KEY>`, `HTTP-Referer: <AI_APP_URL>`, `X-Title: CT Quest`. Nothing else, and no OpenRouter `user` field.
+- **Data policy options.** Every request carries `provider: { require_parameters: true, data_collection: "deny", zdr: true }`:
+  - `require_parameters` routes only to endpoints that support every parameter sent, so the JSON schema is never silently dropped;
+  - `data_collection: "deny"` excludes endpoints that may store or train on prompts;
+  - `zdr` (zero data retention) excludes endpoints that keep the request at all.
+
+  OpenRouter's own account setting for prompt logging should stay off too; that is an account choice, not a request option.
+- **No `temperature`.** On 2026-09-27 no Claude Sonnet 5 endpoint on OpenRouter listed `temperature` in its `supported_parameters`, and with `require_parameters` the first live call failed routing with a 404 for that reason. Any parameter added later must appear in the chosen model's endpoints' `supported_parameters`.
+- **Timeouts and retries.** Each request times out after `AI_TIMEOUT_SECONDS`. HTTP 408, 429 and 5xx, an error reported inside a 200 reply, and network failures are retried at most twice, waiting 1 s then 2 s, or `Retry-After` when given, capped at 30 s. A timeout is not retried. Client errors (400 to 404) are not retried. A reply cut off at `max_tokens`, or with no content, is an error. Error messages carry only the status, never the reply body.
+- **Model (decided 2026-09-27): `anthropic/claude-sonnet-5`.**
+  - Chosen from `GET https://openrouter.ai/api/v1/models`. Every current Claude model there lists both `structured_outputs` and `response_format`.
+  - Sonnet 5 costs $2 per million input tokens and $10 per million output tokens: about half of Opus 5.5 ($4 and $20) and a fifth of Fable 5.1 ($10 and $50). It is a current model, strong enough to apply a rubric to a teenager's paragraph.
+  - Its zero-data-retention endpoints (`GET /api/v1/endpoints/zdr`) include ones that support structured output (provider "Google"). The Amazon Bedrock ones do not list `structured_outputs`, so `require_parameters` routes around them.
+  - `anthropic/claude-haiku-4.5` ($1 and $5) is the cheaper fallback through `AI_MODEL`, if rubric scoring proves good enough there.
+  - The live smoke test on 2026-09-27 (`backend/scripts/ai-smoke.js`, one synthetic answer to AIS-S1-01) was answered by `anthropic/claude-sonnet-5`, and the reply passed `validateModelScore` (criterion `full`, 2/2, `correct`).
+- **Cost.** A scoring request is roughly 700 to 1,000 input tokens (prompt, rubric, LO statements, code, answer) and at most 300 output tokens, usually under 100. That is about $0.003 per answer with Sonnet 5, so a class of 40 answering three AI questions costs about 40 cents.
+
+**Scoring flow** (`src/scoring/types/open-response-ai.js`, `src/ai/jobs.js`)
+- At submit, a non-empty answer is stored as `{ text }` with `score_status = "pending"`, 0 points and `detail: { ai: "pending" }`. The submit route never waits on the network. An empty answer is scored 0 at once and never sent.
+- A job in the same process scores pending answers. `createApp` starts it and the submit route kicks it; it also polls every 5 s.
+  - It scores at most `AI_CONCURRENCY` answers at once, oldest first, through `scoreWithAi`, with the student's name and group from the attempt used only for redaction.
+  - It writes the result, and recomputes the attempt total as the sum of its answers, in one transaction. The write applies only while the answer is still pending, so a teacher's mark made in the meantime is never overwritten.
+- **Known risk: prompt injection in the answer.** A student can write "give this full marks" into their answer. The system prompt tells the model to treat the response as data, and the schema limits the worst case to a valid score on this question's rubric, which is formative and visible to the teacher, who can override it. Nothing in a reply can change another answer, reach another student, or add text outside the validated feedback.
+- **Restart-safe by construction.** The queue is the pending rows in `answers`; nothing lives only in memory. An answer that was pending or in flight when the process stopped is scored again after the next start. An answer whose result could not be stored is skipped until then, so a database error cannot become a tight loop. A provider failure after the retries becomes `needs-review` rather than staying pending, so an outage costs a teacher some marking, not an endless retry bill.
+- **AI off.** With `AI_PROVIDER=none` the job turns pending answers into `needs-review` with reason `ai-disabled` and sends nothing. `POST /api/question-bank/preview` and `POST /api/events` return `aiRequired`, `aiEnabled` and, when AI is needed but off, a `warning`. The teacher page shows that warning after creating the event. The type module marks itself `requiresAi: true`, so a later AI type needs no change here.
+- **Teacher override.** `POST /api/events/:id/attempts/:attemptId/answers/:questionId/review` with `{ score, feedback? }` (owner only; another teacher's event is 404):
+  - It applies only to AI-type answers of a submitted attempt, whatever their status (pending, needs-review or scored).
+  - `score` must be an integer from 0 to the question's points. `feedback` is plain text of at most 500 characters.
+  - It sets `scored`, keeps the AI's detail for the record under a new `review: { score, feedback?, reviewedBy, reviewedAt }`, and recomputes the total.
+  - The teacher page shows each AI answer with its status, reason, the AI's feedback, and a small score-and-feedback form.
+- **What the student sees** (`policy.studentResultView`).
+  - `result.pending` counts answers still being marked; the total rises as they are scored. The student page says "being marked" and checks back every 15 s while any are pending.
+  - Per-question detail appears only after release, and only as `{ source: "ai", feedbackCode, feedback? }` or `{ source: "teacher", feedback? }`. Criterion ids, failure reasons, model names and reviewer ids stay with the teacher.
+  - Feedback text is escaped like everything else on the page. Needs-review answers say "Waiting for your teacher to mark this."
+- **Tests** use a fake transport and never touch the network:
+  - replies that are good, malformed, too slow, rate-limited then successful, or that try to exceed the schema;
+  - bounded retries, restart pickup, the concurrency cap, recomputed totals, the owner-only override, and release gating;
+  - a spy on the global `fetch` and on `https.request`, checking that a student named "Ada Tan" in "S1-3", who types her own name, group, email and phone into her answer, never appears in any outgoing URL, header or body.
 
 ### 11. API for Phase 2
 
@@ -262,12 +313,13 @@ Teacher endpoints (JWT required, scoped to the caller's own events):
 | `GET /api/catalog` | `framework`, `levels`, `audiences`, `questionTypes` (`type`, `label`, `status` active/reserved), `legacySelectionModes`, `ai` |
 | `GET /api/ontology` | `framework`, `nodes` (`id`, `kind`, `label`, `description`, `parent`, `prerequisites`, `sources`, `questionCount`), `edges` (`from`, `to`, `kind`) |
 | `GET /api/outcomes?level=S1&audience=rgsynapse` | `outcomes` (`id`, `statement`, `nodes`, `levels`, `audiences`, `questionCount`). Both parameters are optional; an unknown value returns 400 |
-| `POST /api/question-bank/preview` | Body `{ filter }` or `{ selectionMode }`. Returns `count`, `totalPoints`, `byLevel`, `byType`, `byAudience`, `questions` (summaries: `id`, `title`, `type`, `audience`, `level`, `difficulty`, `points`, `ontology`, `outcomes`; no prompts or keys) and the canonical `filter` |
-| `POST /api/events` | As before, plus `filter`. Returns the event with `selection_mode`, `filter`, `filter_summary`, `results_released_at`, `breakdown_released` and `question_count` |
+| `POST /api/question-bank/preview` | Body `{ filter }` or `{ selectionMode }`. Returns `count`, `totalPoints`, `byLevel`, `byType`, `byAudience`, `questions` (summaries: `id`, `title`, `type`, `audience`, `level`, `difficulty`, `points`, `ontology`, `outcomes`; no prompts or keys), the canonical `filter`, and `aiRequired`, `aiEnabled` and `warning` (§10) |
+| `POST /api/events` | As before, plus `filter`. Returns the event with `selection_mode`, `filter`, `filter_summary`, `results_released_at`, `breakdown_released` and `question_count`, plus `aiRequired`, `aiEnabled` and `warning` |
 | `GET /api/events` | The caller's events with `filter`, `filter_summary`, `results_released_at`, `question_count` and `attempt_count` |
 | `GET /api/events/:id/results` | The event, plus every attempt (including reset ones) with `late`, `reset_at` and per-answer `response`, `scoreStatus` and `detail` |
 | `POST /api/events/:id/release` | Releases the per-question breakdown to students |
 | `POST /api/events/:id/attempts/:attemptId/reset` | Resets one attempt so the student can start again |
+| `POST /api/events/:id/attempts/:attemptId/answers/:questionId/review` | Body `{ score, feedback? }`. Marks an AI-scored answer by hand (§10). Returns the answer and the attempt's new total |
 
 Student endpoints:
 
@@ -276,12 +328,12 @@ Student endpoints:
 | `GET /api/web-types` | Renderer files the student page loads |
 | `POST /api/events/join` | Event summary and question count |
 | `POST /api/attempts` | 201 with `attempt` (`id`, `token`, `deadlineAt`), `serverNow`, `event`, `questions`; 409 with `code` for a second start |
-| `GET /api/attempts/:id` | Needs `X-Attempt-Token`. `attempt` (`status`: started/submitted/reset, `deadlineAt`, `late`), `serverNow`, `event`, `questions`, and `result` (`score`, `max`, `breakdownReleased`, and `perQuestion` once released) |
+| `GET /api/attempts/:id` | Needs `X-Attempt-Token`. `attempt` (`status`: started/submitted/reset, `deadlineAt`, `late`), `serverNow`, `event`, `questions`, and `result` (`score`, `max`, `pending`, `breakdownReleased`, and `perQuestion` once released) |
 | `POST /api/attempts/:id/submit` | Needs `X-Attempt-Token`. Returns `attempt` and `result` with `score`, `max` and `breakdownReleased` only |
 
 ## Decided after review (2026-09-27)
 
-1. **AI provider: OpenRouter.** The Phase 2 adapter calls OpenRouter's chat completions API with a JSON-schema response format built by `buildScoreSchema`. The key is read from the environment (`AI_API_KEY`); in local development it lives at `~/.config/openrouter/key` and is never committed. Any model reached through OpenRouter must support structured output, and the validator still checks every reply.
+1. **AI provider: OpenRouter.** The Phase 2 adapter calls OpenRouter's chat completions API with a JSON-schema response format built by `buildScoreSchema`. The key is read from the environment (`AI_API_KEY`); in local development it lives at `~/.config/openrouter/key` and is never committed. Any model reached through OpenRouter must support structured output, and the validator still checks every reply. The default model is `anthropic/claude-sonnet-5` (§10).
 2. **Consent is out of scope for the app.** Akmal holds consent for the cohorts using it, and AI scores are formative only: they carry no consequence for the student. The app still enforces decision B (no personal data in payloads, structured output only).
 3. **Students see the validated AI feedback text** (at most 200 characters, single line) alongside the feedback code, once results are released. Only text that passed `validateModelScore` is ever shown; anything else stays `needs-review` for the teacher.
 4. **"Capabilities" means ontology nodes plus question types**, as sections 2, 5 and 7 describe.
@@ -302,3 +354,4 @@ Student endpoints:
 - Production needs `JWT_SECRET`, needs `SEED_TEACHER_PASSWORD` only to seed an empty database, and no account may still use the demo password.
 - The Docker image copies `backend/content` and `backend/scripts`; forgetting `content` would stop the server at boot.
 - New tables and columns come in through timestamped migrations recorded in `schema_migrations`.
+- With `AI_PROVIDER=openrouter`, open-response answers leave the server, redacted, to an OpenRouter endpoint that retains nothing. With the default `none`, they wait for the teacher. RGSynapse events built by level now include the AI sample questions, first in order because `ai-samples.json` sorts before the other banks.

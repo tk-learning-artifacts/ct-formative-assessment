@@ -179,7 +179,7 @@ test("event filters and picker endpoints", async t => {
     assert.deepEqual(res.body.levels.map(level => level.id), ["P5", "P6", "S1", "S2"]);
     assert.deepEqual(res.body.audiences.map(audience => audience.id), ["core", "rgsynapse"]);
     assert.ok(res.body.questionTypes.some(type => type.type === "mcq" && type.status === "active"));
-    assert.deepEqual(res.body.ai, { enabled: false, provider: "none" });
+    assert.deepEqual(res.body.ai, { enabled: false, provider: "none", model: null });
   });
 
   await t.test("RGSynapse questions reach students with their code and without keys", async () => {

@@ -41,7 +41,40 @@ function breakdownReleased(event, now = Date.now()) {
   return Boolean(event.end_at && now > Date.parse(event.end_at));
 }
 
-// result: { score, max, perQuestion } as computed from the stored answers.
+// What a student may see of an answer's scoring detail: who marked it and the
+// feedback. AI feedback is shown only once validated ("scored"); a teacher's
+// review replaces it. Failure reasons, criterion ids, model names and
+// reviewer ids stay with the teacher. Partial-credit counts from the
+// code-trace and Parsons scorers ({ partial }) pass through unchanged.
+function studentFeedback(detail) {
+  if (!detail || typeof detail !== "object") {
+    return null;
+  }
+
+  if (detail.review) {
+    return detail.review.feedback ? { source: "teacher", feedback: detail.review.feedback } : { source: "teacher" };
+  }
+
+  if (detail.ai === "scored") {
+    const view = { source: "ai", feedbackCode: detail.feedbackCode };
+
+    if (detail.feedback) {
+      view.feedback = detail.feedback;
+    }
+
+    return view;
+  }
+
+  if (detail.partial && typeof detail.partial === "object") {
+    return { partial: detail.partial };
+  }
+
+  return null;
+}
+
+// result: { score, max, pending, perQuestion } as computed from the stored
+// answers. pending counts answers still being marked; the total rises as
+// they are scored.
 function studentResultView(event, result, now = Date.now()) {
   if (!result) {
     return null;
@@ -51,11 +84,12 @@ function studentResultView(event, result, now = Date.now()) {
   const view = {
     score: result.score,
     max: result.max,
+    pending: result.pending || 0,
     breakdownReleased: released
   };
 
   if (released) {
-    view.perQuestion = result.perQuestion;
+    view.perQuestion = result.perQuestion.map(item => ({ ...item, detail: studentFeedback(item.detail) }));
   }
 
   return view;
@@ -65,5 +99,6 @@ module.exports = {
   normalizePart,
   studentKey,
   breakdownReleased,
+  studentFeedback,
   studentResultView
 };

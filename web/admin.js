@@ -100,6 +100,70 @@
       .replaceAll("'", "&#39;");
   }
 
+  const AI_REASONS = {
+    "ai-disabled": "AI is off (AI_PROVIDER=none)",
+    "provider-error": "the AI service did not answer",
+    "invalid-output": "the AI's reply failed validation",
+    "payload-rejected": "the answer could not be prepared for AI",
+    "job-error": "the scoring job failed"
+  };
+
+  // Status line for an AI-scored answer, for the teacher only.
+  function aiStatusText(answer) {
+    const detail = answer.detail || {};
+
+    if (detail.review) {
+      return `Marked by you: ${detail.review.score}/${answer.maxPoints}`;
+    }
+
+    if (answer.scoreStatus === "pending") {
+      return "Being marked by AI";
+    }
+
+    if (answer.scoreStatus === "needs-review") {
+      return `Needs your mark: ${AI_REASONS[detail.reason] || "AI could not score it"}`;
+    }
+
+    if (detail.ai === "scored") {
+      return `AI scored ${answer.earnedPoints}/${answer.maxPoints} (criterion "${detail.criterionId}", ${detail.feedbackCode})`;
+    }
+
+    return answer.response ? `Scored ${answer.earnedPoints}/${answer.maxPoints}` : "No answer";
+  }
+
+  // Each AI-scored answer, with a small form to set the score and feedback.
+  function aiAnswersBlock(attempt) {
+    return attempt.answers
+      .filter(answer => answer.questionType === "open-response-ai")
+      .map(answer => {
+        const detail = answer.detail || {};
+        const aiFeedback = detail.ai === "scored" && detail.feedback ? detail.feedback : "";
+        const reviewFeedback = detail.review && detail.review.feedback ? detail.review.feedback : "";
+        const key = escapeHtml(`${attempt.id}-${answer.questionId}`);
+
+        return `
+          <div class="ai-review">
+            <strong>${escapeHtml(answer.questionId)}</strong>
+            <span class="${answer.scoreStatus === "scored" ? "" : "bad"}">${escapeHtml(aiStatusText(answer))}</span>
+            <p class="ai-review__answer">${escapeHtml(answer.response && answer.response.text ? answer.response.text : "No answer")}</p>
+            ${aiFeedback ? `<p class="muted">AI feedback: ${escapeHtml(aiFeedback)}</p>` : ""}
+            ${attempt.status === "submitted" ? `
+              <div class="row" style="margin-top:8px">
+                <label for="score-${key}">Score</label>
+                <input id="score-${key}" type="number" min="0" max="${answer.maxPoints}" step="1" value="${answer.earnedPoints}" />
+                <span>/ ${answer.maxPoints}</span>
+              </div>
+              <label for="feedback-${key}">Feedback for the student (optional)</label>
+              <textarea id="feedback-${key}" maxlength="500">${escapeHtml(reviewFeedback)}</textarea>
+              <div class="nav">
+                <button class="secondary" data-review-attempt="${attempt.id}" data-review-question="${escapeHtml(answer.questionId)}" data-review-key="${key}">Save mark</button>
+              </div>
+            ` : ""}
+          </div>
+        `;
+      }).join("");
+  }
+
   function renderLogin(errorMessage) {
     screen.innerHTML = `
       <section class="card start-layout">
@@ -749,6 +813,7 @@
                     <span>${attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : "Not submitted"}</span>
                     ${attempt.reset_at ? "" : `<button class="secondary" data-reset-attempt="${attempt.id}">Reset</button>`}
                   </div>
+                  ${aiAnswersBlock(attempt)}
                 </div>
               `).join("")
               : `<p class="muted">No submissions yet for this event.</p>`
@@ -871,7 +936,7 @@
         : { selectionMode };
 
       try {
-        await api("/api/events", {
+        const created = await api("/api/events", {
           method: "POST",
           body: JSON.stringify({
             title,
@@ -884,6 +949,10 @@
             endAt: endAt ? new Date(endAt).toISOString() : null
           })
         });
+
+        if (created.warning) {
+          alert(created.warning);
+        }
 
         await loadDashboard();
       } catch (error) {
@@ -921,6 +990,26 @@
 
         try {
           await api(`/api/events/${state.selectedEventId}/attempts/${attemptId}/reset`, { method: "POST" });
+          await loadResults(state.selectedEventId);
+        } catch (error) {
+          alert(error.message);
+        }
+      });
+    });
+
+    Array.from(screen.querySelectorAll("[data-review-attempt]")).forEach(button => {
+      button.addEventListener("click", async () => {
+        const attemptId = Number(button.getAttribute("data-review-attempt"));
+        const questionId = button.getAttribute("data-review-question");
+        const key = button.getAttribute("data-review-key");
+        const score = Number(document.getElementById(`score-${key}`).value);
+        const feedback = document.getElementById(`feedback-${key}`).value;
+
+        try {
+          await api(`/api/events/${state.selectedEventId}/attempts/${attemptId}/answers/${encodeURIComponent(questionId)}/review`, {
+            method: "POST",
+            body: JSON.stringify({ score, feedback })
+          });
           await loadResults(state.selectedEventId);
         } catch (error) {
           alert(error.message);

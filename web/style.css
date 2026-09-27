@@ -1116,3 +1116,53 @@ hr {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+
+/* Open-response answers (web/types/open-response-ai.js) and the teacher's
+   review of AI-scored answers (admin.js). */
+textarea.open-response,
+.ai-review textarea {
+  width: 100%;
+  min-height: 9rem;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-soft);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+textarea.open-response:focus,
+.ai-review textarea:focus {
+  border-color: rgba(255, 138, 52, 0.7);
+  box-shadow: 0 0 0 4px rgba(255, 138, 52, 0.16);
+}
+
+.open-response__hint {
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
+
+.ai-review {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.ai-review__answer {
+  margin: 6px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ai-review textarea {
+  min-height: 3.5rem;
+}
+
+.ai-review input[type="number"] {
+  width: 6rem;
+}

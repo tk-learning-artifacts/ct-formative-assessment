@@ -77,9 +77,40 @@ function keyProblem(question) {
   return null;
 }
 
+// An AI-scored question has no single key. Its solver returns the facts the
+// full-credit criterion relies on (see solvers/ai-samples.js); each must hold
+// when computed and be named in that criterion's description.
+function rubricProblem(question) {
+  const { facts } = SOLVERS[question.id](question);
+  const full = question.rubric.find(criterion => criterion.points === question.points);
+  const problems = [];
+
+  if (!Array.isArray(facts) || !facts.length) {
+    return `${question.id}: the solver returned no facts`;
+  }
+
+  facts.forEach(fact => {
+    if (fact.holds !== true) {
+      problems.push(`"${fact.mention}" does not hold for the question's code`);
+    }
+    if (!full.description.toLowerCase().includes(fact.mention.toLowerCase())) {
+      problems.push(`the full-credit criterion does not mention "${fact.mention}"`);
+    }
+  });
+
+  return problems.length ? `${question.id}: ${problems.join("; ")}` : null;
+}
+
 questions.forEach(question => {
   if (NOT_COMPUTABLE[question.id]) {
     test(`${question.id} key is checked by hand: ${NOT_COMPUTABLE[question.id]}`, { skip: true }, () => {});
+    return;
+  }
+
+  if (question.type === "open-response-ai") {
+    test(`${question.id} rubric rests on computed facts`, () => {
+      assert.equal(rubricProblem(question), null);
+    });
     return;
   }
 
