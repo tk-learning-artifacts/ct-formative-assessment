@@ -8,8 +8,9 @@ const rgsynapse = require("./rgsynapse");
 const typeSamples = require("./type-samples");
 const aiSamples = require("./ai-samples");
 const codeReading = require("./type-code-reading").SOLVERS;
+const blocks = require("./blocks");
 
-const SOLVERS = { ...core, ...rgsynapse, ...typeSamples, ...aiSamples, ...codeReading };
+const SOLVERS = { ...core, ...rgsynapse, ...typeSamples, ...aiSamples, ...codeReading, ...blocks };
 
 const NOT_COMPUTABLE = {
   // "QUESTION-ID": "why no solver is possible, and who checked the key by hand"

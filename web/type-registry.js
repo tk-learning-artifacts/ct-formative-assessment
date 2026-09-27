@@ -16,6 +16,10 @@
 //   renderContext(question, h)           optional; HTML shown under the
 //                                        question (instructions, target
 //                                        output), not on the answer side
+//   ready                                optional; a promise for anything
+//                                        the renderer loads itself (blocks
+//                                        loads its engine); load() waits
+//                                        for it
 // })
 
 (function () {
@@ -58,6 +62,8 @@
     for (const file of payload.renderers || []) {
       await loadScript(`/${file}`);
     }
+
+    await Promise.all(Object.values(renderers).map(renderer => renderer.ready).filter(Boolean));
   }
 
   window.CTQuestTypes = { register, get, load };

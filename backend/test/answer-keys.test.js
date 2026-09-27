@@ -8,7 +8,10 @@
 // Code-trace and Parsons questions have no options, so they get their own
 // checks: the solver's computed output must score full marks as the key does,
 // and every accepted Parsons order must print the question's expectedOutput.
-// When python3 or swift is installed, the real programs are run as well.
+// Block questions run their reference solution through the server's
+// interpreter on every stage, and their solver checks each stage's
+// expectation from the grid alone. When python3 or swift is installed, the
+// real programs are run as well (for blocks, the Python the student can view).
 
 const fs = require("fs");
 const os = require("os");
@@ -24,6 +27,7 @@ const { loadContent } = require("../src/content");
 const { SOLVERS, NOT_COMPUTABLE } = require("./solvers");
 const scoring = require("../src/scoring");
 const { normalizeOutput } = require("../src/scoring/types/code-trace");
+const blocksEngine = require("../../web/lib/blocks-engine");
 
 const { questions } = loadContent();
 
@@ -162,6 +166,23 @@ const TYPE_CHECKS = {
     assert.equal(keyProblem({ id: `${question.id} follow-up`, options: question.followUp.options, answer: { index: question.answer.followUp } }, solved.followUp), null);
   },
 
+  // The solver's expectations agree with each stage's, the reference
+  // solution earns full marks through the scorer (so it passes every stage
+  // and keeps the given blocks), and the starting program alone does not.
+  blocks(question) {
+    const facts = SOLVERS[question.id](question);
+    blocksStages(question).forEach((stage, i) => {
+      assert.deepEqual(facts[i], stage.expect, `${question.id}: stage ${i} expects ${JSON.stringify(stage.expect)} but its grid gives ${JSON.stringify(facts[i])}`);
+    });
+
+    const solved = scoring.scoreResponse(question, question.solution).result;
+    assert.equal(solved.correct, true, `${question.id}: the solution scores ${JSON.stringify(solved)}`);
+    assert.equal(solved.earned, question.points);
+
+    const unchanged = scoring.scoreResponse(question, blocksEngine.strip(question.startProgram)).result;
+    assert.equal(unchanged.correct, false, `${question.id}: the starting program already passes`);
+  },
+
   parsons(question) {
     assert.equal(typeof question.expectedOutput, "string", `${question.id}: give expectedOutput so the key order can be checked`);
 
@@ -171,6 +192,58 @@ const TYPE_CHECKS = {
     });
   }
 };
+
+function blocksStages(question) {
+  return [question.example].concat(question.cases || []);
+}
+
+// The maze world written again in Python, for running the Python view of a
+// block program. Prints where the sprite ended, as the engine reports it.
+function mazePython(stage, program) {
+  const body = program.split("\n").map(line => `    ${line}`).join("\n");
+
+  return [
+    "import json",
+    `GRID = ${JSON.stringify(stage.grid)}`,
+    `x, y, facing = ${stage.start.x}, ${stage.start.y}, ${JSON.stringify(stage.start.facing)}`,
+    "collected, said = set(), None",
+    "ORDER = ['north', 'east', 'south', 'west']",
+    "STEP = {'north': (0, -1), 'east': (1, 0), 'south': (0, 1), 'west': (-1, 0)}",
+    "class Crash(Exception): pass",
+    "def cell(cx, cy):",
+    "    return '#' if cy < 0 or cy >= len(GRID) or cx < 0 or cx >= len(GRID[0]) else GRID[cy][cx]",
+    "def look(by):",
+    "    dx, dy = STEP[ORDER[(ORDER.index(facing) + by) % 4]]",
+    "    return cell(x + dx, y + dy) != '#'",
+    "def move_forward():",
+    "    global x, y",
+    "    dx, dy = STEP[facing]",
+    "    if cell(x + dx, y + dy) == '#': raise Crash()",
+    "    x, y = x + dx, y + dy",
+    "def turn_left():",
+    "    global facing",
+    "    facing = ORDER[(ORDER.index(facing) + 3) % 4]",
+    "def turn_right():",
+    "    global facing",
+    "    facing = ORDER[(ORDER.index(facing) + 1) % 4]",
+    "def pick_up():",
+    "    if on_star(): collected.add((x, y))",
+    "def path_ahead(): return look(0)",
+    "def path_left(): return look(3)",
+    "def path_right(): return look(1)",
+    "def at_goal(): return cell(x, y) == 'G'",
+    "def on_star(): return cell(x, y) == '*' and (x, y) not in collected",
+    "def say(value):",
+    "    global said",
+    "    said = str(value)",
+    "crashed = False",
+    "try:",
+    body,
+    "except Crash:",
+    "    crashed = True",
+    "print(json.dumps({'x': x, 'y': y, 'facing': facing, 'collected': len(collected), 'said': said, 'crashed': crashed}))"
+  ].join("\n");
+}
 
 // The real interpreters, where installed. CI and the Docker image have
 // neither, so these skip there and the JavaScript translations above stand.
@@ -228,6 +301,29 @@ questions.filter(question => question.type === "code-trace" || question.type ===
     // translates) must print the same thing.
     if (question.code && RUNNERS[question.code.language] && RUNNERS[question.code.language].available) {
       assert.deepEqual(normalizeOutput(await runProgram(question.code.language, question.code.source)), normalizeOutput(question.expectedOutput));
+    }
+  });
+});
+
+// The "Show my program as Python" view of each reference solution, run by
+// real Python on every stage, must end where the engine's own run ends.
+questions.filter(question => question.type === "blocks").forEach(question => {
+  const skip = !RUNNERS.python.available && "python3 is not installed";
+
+  test(`${question.id} Python view of the solution runs like the blocks`, { skip }, async () => {
+    const program = blocksEngine.toPython(question.solution);
+
+    for (const [i, stage] of blocksStages(question).entries()) {
+      const printed = JSON.parse(await runProgram("python", mazePython(stage, program)));
+      const run = blocksEngine.run(question.solution, stage, { world: question.world, variables: question.variables, stepLimit: question.stepLimit });
+      assert.deepEqual(printed, {
+        x: run.state.x,
+        y: run.state.y,
+        facing: run.state.facing,
+        collected: run.state.collected.length,
+        said: run.state.said,
+        crashed: run.outcome === "crashed"
+      }, `${question.id}: stage ${i}`);
     }
   });
 });

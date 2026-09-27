@@ -1,0 +1,976 @@
+{
+  "bank": "blocks",
+  "description": "Block programming (Scratch-like) questions: finish a partly built program so a sprite does its job on a grid. Marked on the server by running the program on the example grid and on hidden ones. Not part of any legacy mode.",
+  "questions": [
+    {
+      "id": "BLK-P5-01",
+      "type": "blocks",
+      "world": "maze",
+      "audience": "core",
+      "level": "P5",
+      "title": "To the flag",
+      "prompt": "The first four moves are done. Add blocks under them so the sprite walks the rest of the path and stops on the flag. Walking into a wall stops the program.",
+      "example": {
+        "grid": [
+          ".....#",
+          "####.#",
+          "####.G"
+        ],
+        "start": {
+          "x": 0,
+          "y": 0,
+          "facing": "east"
+        },
+        "expect": {
+          "reachGoal": true
+        }
+      },
+      "cases": [],
+      "startProgram": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "move_forward",
+              "next": {
+                "type": "move_forward",
+                "next": {
+                  "type": "move_forward",
+                  "next": {
+                    "type": "move_forward",
+                    "locked": true
+                  },
+                  "locked": true
+                },
+                "locked": true
+              },
+              "locked": true
+            },
+            "locked": true
+          }
+        ]
+      },
+      "toolbox": [
+        "move_forward",
+        "turn_left",
+        "turn_right"
+      ],
+      "solution": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "move_forward",
+              "next": {
+                "type": "move_forward",
+                "next": {
+                  "type": "move_forward",
+                  "next": {
+                    "type": "move_forward",
+                    "next": {
+                      "type": "turn_right",
+                      "next": {
+                        "type": "move_forward",
+                        "next": {
+                          "type": "move_forward",
+                          "next": {
+                            "type": "turn_left",
+                            "next": {
+                              "type": "move_forward"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.sequences"
+      ],
+      "outcomes": [
+        "LO-SEQ-1",
+        "LO-BLOCKS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Block programming",
+      "qType": "Finish the program",
+      "details": "Sequencing and turning relative to the sprite's own facing: after four moves it faces east, so it must turn right to go down the grid and then left to face the flag. A common slip is turning left first (thinking of the page, not the sprite)."
+    },
+    {
+      "id": "BLK-P6-01",
+      "type": "blocks",
+      "world": "maze",
+      "audience": "core",
+      "level": "P6",
+      "title": "Climb the stairs",
+      "prompt": "Get the sprite up the stairs to the flag using at most 5 blocks under \"when Run clicked\". The repeat block is given: put the blocks for one step inside it, and set how many times it repeats.",
+      "example": {
+        "grid": [
+          "####G",
+          "###..",
+          "##..#",
+          "#..##",
+          "..###"
+        ],
+        "start": {
+          "x": 0,
+          "y": 4,
+          "facing": "east"
+        },
+        "expect": {
+          "reachGoal": true
+        }
+      },
+      "cases": [],
+      "startProgram": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "repeat_times",
+              "editable": true,
+              "fields": {
+                "TIMES": 2
+              },
+              "locked": true
+            },
+            "locked": true
+          }
+        ]
+      },
+      "toolbox": [
+        "move_forward",
+        "turn_left",
+        "turn_right"
+      ],
+      "maxBlocks": 5,
+      "solution": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "repeat_times",
+              "fields": {
+                "TIMES": 4
+              },
+              "inputs": {
+                "DO": {
+                  "type": "move_forward",
+                  "next": {
+                    "type": "turn_left",
+                    "next": {
+                      "type": "move_forward",
+                      "next": {
+                        "type": "turn_right"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-PAT-1",
+        "LO-BLOCKS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Block programming",
+      "qType": "Finish the program",
+      "details": "Spotting the repeating unit (forward, turn left, forward, turn right) and how many times it repeats (4 stairs). Writing all 16 moves out fails the 5-block limit; the limit is what makes a loop necessary."
+    },
+    {
+      "id": "BLK-S1-01",
+      "type": "blocks",
+      "world": "maze",
+      "audience": "core",
+      "level": "S1",
+      "title": "Follow the winding path",
+      "prompt": "The sprite walks along a path with no forks until it reaches the flag. When there is a path ahead it moves. Fill the \"else\" gap so that at a bend it turns the right way. The same program must work on other winding paths too.",
+      "example": {
+        "grid": [
+          "...#...",
+          "##.#.#.",
+          "##...#.",
+          "######G"
+        ],
+        "start": {
+          "x": 0,
+          "y": 0,
+          "facing": "east"
+        },
+        "expect": {
+          "reachGoal": true
+        }
+      },
+      "cases": [
+        {
+          "grid": [
+            "########",
+            "##....##",
+            "##.##.##",
+            "...##.##",
+            "#####..G"
+          ],
+          "start": {
+            "x": 0,
+            "y": 3,
+            "facing": "east"
+          },
+          "expect": {
+            "reachGoal": true
+          }
+        },
+        {
+          "grid": [
+            "####.###",
+            "####.###",
+            "#....###",
+            "#.######",
+            "#......G"
+          ],
+          "start": {
+            "x": 4,
+            "y": 0,
+            "facing": "east"
+          },
+          "expect": {
+            "reachGoal": true
+          }
+        },
+        {
+          "grid": [
+            ".#...",
+            ".#.#.",
+            ".#.#.",
+            "...#G"
+          ],
+          "start": {
+            "x": 0,
+            "y": 0,
+            "facing": "north"
+          },
+          "expect": {
+            "reachGoal": true
+          }
+        }
+      ],
+      "startProgram": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "repeat_until",
+              "inputs": {
+                "UNTIL": {
+                  "type": "at_goal",
+                  "locked": true
+                },
+                "DO": {
+                  "type": "if_else",
+                  "inputs": {
+                    "IF": {
+                      "type": "path_ahead",
+                      "locked": true
+                    },
+                    "THEN": {
+                      "type": "move_forward",
+                      "locked": true
+                    }
+                  },
+                  "locked": true
+                }
+              },
+              "locked": true
+            },
+            "locked": true
+          }
+        ]
+      },
+      "toolbox": [
+        "if_else",
+        "if_then",
+        "path_left",
+        "path_right",
+        "turn_left",
+        "turn_right",
+        "move_forward"
+      ],
+      "solution": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "repeat_until",
+              "inputs": {
+                "UNTIL": {
+                  "type": "at_goal"
+                },
+                "DO": {
+                  "type": "if_else",
+                  "inputs": {
+                    "IF": {
+                      "type": "path_ahead"
+                    },
+                    "THEN": {
+                      "type": "move_forward"
+                    },
+                    "ELSE": {
+                      "type": "if_else",
+                      "inputs": {
+                        "IF": {
+                          "type": "path_left"
+                        },
+                        "THEN": {
+                          "type": "turn_left"
+                        },
+                        "ELSE": {
+                          "type": "turn_right"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "marking": {
+        "partial": "cases"
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "concept.conditionals",
+        "concept.loops",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-COND-1",
+        "LO-BLOCKS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Block programming",
+      "qType": "Finish the program",
+      "details": "A nested decision: at a bend, check which side the path is on (if path to the left, turn left, else turn right). Always turning right sends the sprite back the way it came at a left bend, so it never arrives; the paths bend both ways, and two of the hidden ones start facing a wall."
+    },
+    {
+      "id": "BLK-S2-01",
+      "type": "blocks",
+      "world": "maze",
+      "audience": "core",
+      "level": "S2",
+      "title": "Star collector",
+      "prompt": "The sprite follows a winding path to the flag. Complete the loop so it picks up every star on the way and ends on the flag. Each pass round the loop it first deals with the star it is standing on (if any), then moves or turns. The program is also tried on other paths.",
+      "example": {
+        "grid": [
+          "..*.##",
+          "###.##",
+          "#..*##",
+          "#.####",
+          "#*...G"
+        ],
+        "start": {
+          "x": 0,
+          "y": 0,
+          "facing": "east"
+        },
+        "expect": {
+          "reachGoal": true,
+          "collectAll": true
+        }
+      },
+      "cases": [
+        {
+          "grid": [
+            "*##.*.",
+            ".##.#.",
+            "..*.#*",
+            "#####G"
+          ],
+          "start": {
+            "x": 0,
+            "y": 0,
+            "facing": "south"
+          },
+          "expect": {
+            "reachGoal": true,
+            "collectAll": true
+          }
+        },
+        {
+          "grid": [
+            "##G..",
+            "####.",
+            "####*",
+            "####.",
+            ".***."
+          ],
+          "start": {
+            "x": 0,
+            "y": 4,
+            "facing": "east"
+          },
+          "expect": {
+            "reachGoal": true,
+            "collectAll": true
+          }
+        },
+        {
+          "grid": [
+            "*...##",
+            ".#####",
+            ".#####",
+            "....*G"
+          ],
+          "start": {
+            "x": 3,
+            "y": 0,
+            "facing": "south"
+          },
+          "expect": {
+            "reachGoal": true,
+            "collectAll": true
+          }
+        }
+      ],
+      "startProgram": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "repeat_until",
+              "inputs": {
+                "UNTIL": {
+                  "type": "at_goal",
+                  "locked": true
+                },
+                "DO": {
+                  "type": "if_then",
+                  "inputs": {
+                    "IF": {
+                      "type": "on_star",
+                      "locked": true
+                    }
+                  },
+                  "next": {
+                    "type": "if_else",
+                    "inputs": {
+                      "IF": {
+                        "type": "path_ahead",
+                        "locked": true
+                      },
+                      "THEN": {
+                        "type": "move_forward",
+                        "locked": true
+                      }
+                    },
+                    "locked": true
+                  },
+                  "locked": true
+                }
+              },
+              "locked": true
+            },
+            "locked": true
+          }
+        ]
+      },
+      "toolbox": [
+        "pick_up",
+        "if_else",
+        "if_then",
+        "path_left",
+        "path_right",
+        "not",
+        "turn_left",
+        "turn_right",
+        "move_forward"
+      ],
+      "solution": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "repeat_until",
+              "inputs": {
+                "UNTIL": {
+                  "type": "at_goal"
+                },
+                "DO": {
+                  "type": "if_then",
+                  "inputs": {
+                    "IF": {
+                      "type": "on_star"
+                    },
+                    "THEN": {
+                      "type": "pick_up"
+                    }
+                  },
+                  "next": {
+                    "type": "if_else",
+                    "inputs": {
+                      "IF": {
+                        "type": "path_ahead"
+                      },
+                      "THEN": {
+                        "type": "move_forward"
+                      },
+                      "ELSE": {
+                        "type": "if_else",
+                        "inputs": {
+                          "IF": {
+                            "type": "path_left"
+                          },
+                          "THEN": {
+                            "type": "turn_left"
+                          },
+                          "ELSE": {
+                            "type": "turn_right"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "marking": {
+        "partial": "cases"
+      },
+      "points": 6,
+      "difficulty": 4,
+      "ontology": [
+        "concept.conditionals",
+        "concept.loops",
+        "practice.testing-debugging.edge-cases"
+      ],
+      "outcomes": [
+        "LO-DEBUG-1",
+        "LO-BLOCKS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Block programming",
+      "qType": "Finish the program",
+      "details": "Two independent decisions in one loop body: pick up a star if on one, then move or turn. The hidden paths include a star on the starting square and bends both ways, so a program that turns only one way, or forgets the star it starts on, loses marks."
+    },
+    {
+      "id": "BLK-RGS-S1-01",
+      "type": "blocks",
+      "world": "maze",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Count the stars",
+      "prompt": "The sprite walks a straight path to the flag. Make it count the stars it walks over (it does not need to pick them up) and say the total at the end. The variable stars starts at 0. It is tested on paths with different numbers of stars, including none.",
+      "example": {
+        "grid": [
+          "..**..*G"
+        ],
+        "start": {
+          "x": 0,
+          "y": 0,
+          "facing": "east"
+        },
+        "expect": {
+          "reachGoal": true,
+          "say": "3"
+        }
+      },
+      "cases": [
+        {
+          "grid": [
+            ".....G"
+          ],
+          "start": {
+            "x": 0,
+            "y": 0,
+            "facing": "east"
+          },
+          "expect": {
+            "reachGoal": true,
+            "say": "0"
+          }
+        },
+        {
+          "grid": [
+            ".********G"
+          ],
+          "start": {
+            "x": 0,
+            "y": 0,
+            "facing": "east"
+          },
+          "expect": {
+            "reachGoal": true,
+            "say": "8"
+          }
+        },
+        {
+          "grid": [
+            ".#",
+            ".#",
+            ".#",
+            ".#",
+            "*#",
+            ".#",
+            "G#"
+          ],
+          "start": {
+            "x": 0,
+            "y": 0,
+            "facing": "south"
+          },
+          "expect": {
+            "reachGoal": true,
+            "say": "1"
+          }
+        }
+      ],
+      "variables": [
+        "stars"
+      ],
+      "startProgram": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "set_var",
+              "fields": {
+                "VAR": "stars"
+              },
+              "inputs": {
+                "VALUE": {
+                  "type": "number",
+                  "fields": {
+                    "NUM": 0
+                  },
+                  "locked": true
+                }
+              },
+              "next": {
+                "type": "repeat_until",
+                "inputs": {
+                  "UNTIL": {
+                    "type": "at_goal",
+                    "locked": true
+                  },
+                  "DO": {
+                    "type": "move_forward",
+                    "locked": true
+                  }
+                },
+                "next": {
+                  "type": "say",
+                  "locked": true
+                },
+                "locked": true
+              },
+              "locked": true
+            },
+            "locked": true
+          }
+        ]
+      },
+      "toolbox": [
+        "if_then",
+        "on_star",
+        "change_var",
+        "get_var",
+        "pick_up",
+        "number"
+      ],
+      "showPython": true,
+      "solution": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "set_var",
+              "fields": {
+                "VAR": "stars"
+              },
+              "inputs": {
+                "VALUE": {
+                  "type": "number",
+                  "fields": {
+                    "NUM": 0
+                  }
+                }
+              },
+              "next": {
+                "type": "repeat_until",
+                "inputs": {
+                  "UNTIL": {
+                    "type": "at_goal"
+                  },
+                  "DO": {
+                    "type": "move_forward",
+                    "next": {
+                      "type": "if_then",
+                      "inputs": {
+                        "IF": {
+                          "type": "on_star"
+                        },
+                        "THEN": {
+                          "type": "change_var",
+                          "fields": {
+                            "VAR": "stars"
+                          },
+                          "inputs": {
+                            "BY": {
+                              "type": "number",
+                              "fields": {
+                                "NUM": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "next": {
+                  "type": "say",
+                  "inputs": {
+                    "VALUE": {
+                      "type": "get_var",
+                      "fields": {
+                        "VAR": "stars"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "marking": {
+        "partial": "cases"
+      },
+      "points": 5,
+      "difficulty": 2,
+      "ontology": [
+        "concept.data.variables",
+        "concept.loops",
+        "concept.conditionals"
+      ],
+      "outcomes": [
+        "LO-BLOCKS-2"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Block programming",
+      "qType": "Finish the program",
+      "details": "A counter: change the variable by 1 inside the loop, only when on a star, and say the variable (not a typed number) at the end. Saying the example's count as a fixed number passes the example only; the hidden paths have 0, 8 and 1 stars. In Python this is stars = 0, a while loop and stars += 1."
+    },
+    {
+      "id": "BLK-RGS-S2-01",
+      "type": "blocks",
+      "world": "maze",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Solve any maze",
+      "prompt": "Write the body of the loop so the sprite finds the flag in any maze like this one, not just the one shown. Paths branch and some are dead ends. Hint: a walker who always keeps a hand on the wall on one side never gets lost in a maze with no loops. Run it, see where it goes wrong, and refine.",
+      "example": {
+        "grid": [
+          "......#",
+          ".####.#",
+          ".#....#",
+          ".#.####",
+          "...#..G",
+          "##.#.##",
+          "##...##"
+        ],
+        "start": {
+          "x": 0,
+          "y": 0,
+          "facing": "east"
+        },
+        "expect": {
+          "reachGoal": true
+        }
+      },
+      "cases": [
+        {
+          "grid": [
+            ".#.....",
+            ".#.###.",
+            "...#...",
+            "##.#.##",
+            "...#..G"
+          ],
+          "start": {
+            "x": 0,
+            "y": 0,
+            "facing": "south"
+          },
+          "expect": {
+            "reachGoal": true
+          }
+        },
+        {
+          "grid": [
+            "G....",
+            "####.",
+            "...#.",
+            ".#...",
+            ".#.##",
+            "....."
+          ],
+          "start": {
+            "x": 0,
+            "y": 5,
+            "facing": "north"
+          },
+          "expect": {
+            "reachGoal": true
+          }
+        },
+        {
+          "grid": [
+            "...#...",
+            ".#.#.#.",
+            ".#...#.",
+            ".#####.",
+            ".......",
+            "###.###",
+            "G.....#"
+          ],
+          "start": {
+            "x": 2,
+            "y": 0,
+            "facing": "south"
+          },
+          "expect": {
+            "reachGoal": true
+          }
+        }
+      ],
+      "startProgram": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "repeat_until",
+              "inputs": {
+                "UNTIL": {
+                  "type": "at_goal",
+                  "locked": true
+                }
+              },
+              "locked": true
+            },
+            "locked": true
+          }
+        ]
+      },
+      "toolbox": [
+        "if_else",
+        "if_then",
+        "path_ahead",
+        "path_left",
+        "path_right",
+        "not",
+        "and",
+        "or",
+        "move_forward",
+        "turn_left",
+        "turn_right"
+      ],
+      "stepLimit": 1000,
+      "showPython": true,
+      "solution": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "repeat_until",
+              "inputs": {
+                "UNTIL": {
+                  "type": "at_goal"
+                },
+                "DO": {
+                  "type": "if_else",
+                  "inputs": {
+                    "IF": {
+                      "type": "path_right"
+                    },
+                    "THEN": {
+                      "type": "turn_right",
+                      "next": {
+                        "type": "move_forward"
+                      }
+                    },
+                    "ELSE": {
+                      "type": "if_else",
+                      "inputs": {
+                        "IF": {
+                          "type": "path_ahead"
+                        },
+                        "THEN": {
+                          "type": "move_forward"
+                        },
+                        "ELSE": {
+                          "type": "turn_left"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "marking": {
+        "partial": "cases"
+      },
+      "points": 6,
+      "difficulty": 4,
+      "ontology": [
+        "concept.conditionals",
+        "concept.loops",
+        "practice.experimenting-iterating",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-ITERATE-1",
+        "LO-BLOCKS-2"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Block programming",
+      "qType": "Finish the program",
+      "details": "The wall-follower: if there is a path to the right, turn right and move; else if the path ahead is open, move; else turn left. The left-hand version works too. A corridor follower (Follow the winding path) or a fixed route passes the example at best; dead ends and junctions in the hidden mazes need the priority order."
+    }
+  ]
+}

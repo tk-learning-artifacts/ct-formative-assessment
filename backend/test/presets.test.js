@@ -63,10 +63,14 @@ test("GET /api/presets: teacher only, every preset with knobs, defaults and a co
   // Every option a card offers matches something: the core bank has no
   // perspectives questions, so the core card does not offer that emphasis,
   // and levels with no code-ordering questions are left out. (Every core
-  // level has a loop question since the code-reading bank.)
+  // level has a loop or conditional question since the code-reading and
+  // block programming questions arrived, so the loops card offers them all.)
   assert.deepEqual(core.emphasisOptions.map(item => item.id), ["all", "concepts", "practices"]);
   const loops = res.body.presets.find(preset => preset.id === "loops-conditionals");
-  assert.ok(loops.whoOptions.some(option => option.value === "core"));
+  assert.deepEqual(loops.whoOptions.filter(option => option.value.startsWith("core")).map(option => option.value), ["core", "core:P5", "core:P6", "core:S1", "core:S2"]);
+  const blocks = res.body.presets.find(preset => preset.id === "block-programming");
+  assert.equal(blocks.count, 4);
+  assert.ok(["core:P5", "core:S2", "rgsynapse:S1", "rgsynapse:S2"].every(value => blocks.whoOptions.some(option => option.value === value)));
   const ordering = res.body.presets.find(preset => preset.id === "ordering-tracing");
   assert.equal(ordering.whoOptions.some(option => ["core:P5", "core:P6", "core:S2"].includes(option.value)), false);
   const rgsS1 = res.body.presets.find(preset => preset.id === "rgs-s1-starter");
@@ -250,7 +254,7 @@ test("filter.limit: validated, deterministic, and balanced across levels and out
   assert.equal(new Set(s2Outcomes).size, s2Outcomes.length, "six questions, six different outcomes");
 
   // A limit above the match count keeps everything.
-  assert.equal(selection.selectQuestions(store.db, { audiences: ["core"], levels: ["P5"], limit: 50 }).length, 6);
+  assert.equal(selection.selectQuestions(store.db, { audiences: ["core"], levels: ["P5"], types: ["mcq"], limit: 50 }).length, 5);
 
   // The event list says there is a limit.
   const created = await request(app).post("/api/events").set(auth).send({ title: "Short", filter: { audiences: ["core"], limit: 4 } });

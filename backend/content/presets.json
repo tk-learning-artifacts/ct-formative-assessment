@@ -57,6 +57,13 @@
       "knobs": ["who"]
     },
     {
+      "id": "block-programming",
+      "label": "Block programming (Scratch-like)",
+      "description": "Finish a block program so a sprite does its job on a grid: sequences, loops, conditions, and variables for RGSynapse. Marked by running it on hidden grids too.",
+      "filter": { "audiences": ["core", "rgsynapse"], "types": ["blocks"] },
+      "knobs": ["who"]
+    },
+    {
       "id": "mixed-level",
       "label": "Mixed: everything for a level",
       "description": "Every question for one level, all types except AI-scored ones.",
