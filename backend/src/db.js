@@ -312,25 +312,30 @@ function createStore(db, content) {
 
   const EVENT_COLUMNS = "id, title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at, results_released_at, feedback_mode, navigation_mode, preset_id, preset_options_json, preset_customised, preset_label, created_by, created_at";
 
+  // The event with its owner's email, for the teacher routes. Who may see it
+  // is decided in access.js, not here.
   function getEventById(eventId) {
-    return eventRow(db.prepare(`SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`).get(eventId));
+    return eventRow(db.prepare(`
+      SELECT ${EVENT_COLUMNS}, (SELECT u.email FROM users u WHERE u.id = events.created_by) AS owner_email
+      FROM events
+      WHERE id = ?
+    `).get(eventId));
   }
 
-  function getEventForTeacher(eventId, userId) {
-    const event = getEventById(eventId);
-    return event && event.created_by === userId ? event : null;
-  }
-
-  function listEventsForTeacher(userId) {
+  // One teacher's events, or every teacher's when ownerId is null (an admin's
+  // list, ADR 0004). Newest first.
+  function listEvents({ ownerId = null } = {}) {
     return db.prepare(`
       SELECT e.id, e.title, e.join_code, e.status, e.selection_mode, e.filter_json, e.duration_minutes, e.start_at, e.end_at,
-             e.results_released_at, e.feedback_mode, e.navigation_mode, e.preset_id, e.preset_options_json, e.preset_customised, e.preset_label, e.created_at,
+             e.results_released_at, e.feedback_mode, e.navigation_mode, e.preset_id, e.preset_options_json, e.preset_customised, e.preset_label,
+             e.created_by, e.created_at, u.email AS owner_email,
              (SELECT COUNT(*) FROM attempts a WHERE a.event_id = e.id) AS attempt_count,
              (SELECT COUNT(*) FROM event_questions q WHERE q.event_id = e.id) AS question_count
       FROM events e
-      WHERE e.created_by = ?
+      LEFT JOIN users u ON u.id = e.created_by
+      WHERE @ownerId IS NULL OR e.created_by = @ownerId
       ORDER BY e.created_at DESC, e.id DESC
-    `).all(userId).map(eventRow);
+    `).all({ ownerId }).map(eventRow);
   }
 
   function getEventQuestions(eventId) {
@@ -841,6 +846,20 @@ function createStore(db, content) {
     return Number(result.lastInsertRowid);
   }
 
+  // Sets an existing account's role (ADR 0004). Returns the previous role,
+  // or null when there is no such account. The users_role_check triggers
+  // refuse anything but "teacher" or "admin".
+  function setRole(email, role) {
+    const user = findUserByEmail(String(email).trim().toLowerCase());
+
+    if (!user) {
+      return null;
+    }
+
+    db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, user.id);
+    return user.role;
+  }
+
   // Sets a password, creating the teacher account if it does not exist yet.
   // Returns "updated" or "created".
   function setPassword(email, password) {
@@ -932,7 +951,7 @@ function createStore(db, content) {
         );
       }
 
-      createUser({ email: seedTeacher.email, password: seedTeacher.password });
+      createUser({ email: seedTeacher.email, password: seedTeacher.password, role: seedTeacher.role || "teacher" });
     }
 
     const eventCount = db.prepare("SELECT COUNT(*) AS count FROM events").get().count;
@@ -960,8 +979,7 @@ function createStore(db, content) {
     previewQuestions,
     createEventWithQuestions,
     getEventById,
-    getEventForTeacher,
-    listEventsForTeacher,
+    listEvents,
     getEventQuestions,
     getEventByJoinCode,
     startAttempt,
@@ -985,6 +1003,7 @@ function createStore(db, content) {
     findUserById,
     updatePasswordHash,
     createUser,
+    setRole,
     setPassword,
     assertNoDefaultPasswords,
     listOntology,

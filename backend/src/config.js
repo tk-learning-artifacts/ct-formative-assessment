@@ -1,4 +1,5 @@
 const path = require("path");
+const { ROLES } = require("./access");
 
 const DEFAULT_DB_PATH = path.resolve(__dirname, "../data/app.db");
 const DEV_JWT_SECRET = "ct-quest-dev-secret";
@@ -20,6 +21,13 @@ function loadConfig(env = process.env) {
 
   if (isProduction && seedPassword === DEFAULT_TEACHER_PASSWORD) {
     throw new Error("SEED_TEACHER_PASSWORD must not be the demo password when NODE_ENV=production.");
+  }
+
+  // The first account's role (ADR 0004): teacher unless set to admin.
+  const seedRole = env.SEED_TEACHER_ROLE === undefined || env.SEED_TEACHER_ROLE === "" ? "teacher" : String(env.SEED_TEACHER_ROLE).trim().toLowerCase();
+
+  if (!ROLES.includes(seedRole)) {
+    throw new Error(`SEED_TEACHER_ROLE must be one of: ${ROLES.join(", ")}.`);
   }
 
   const graceSeconds = env.SUBMIT_GRACE_SECONDS === undefined ? 60 : Number(env.SUBMIT_GRACE_SECONDS);
@@ -52,7 +60,8 @@ function loadConfig(env = process.env) {
       email: String(env.SEED_TEACHER_EMAIL || DEFAULT_TEACHER_EMAIL).trim().toLowerCase(),
       // Null in production when unset: seeding an empty database then fails,
       // but a database that already has a teacher boots without it.
-      password: seedPassword || (isProduction ? null : DEFAULT_TEACHER_PASSWORD)
+      password: seedPassword || (isProduction ? null : DEFAULT_TEACHER_PASSWORD),
+      role: seedRole
     },
     ai: {
       // "none" keeps every AI feature off. See src/ai/index.js.

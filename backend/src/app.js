@@ -8,6 +8,7 @@ const { verifyPassword, hashPassword, createAttemptToken, verifyAttemptToken } =
 const scoring = require("./scoring");
 const selection = require("./selection");
 const policy = require("./policy");
+const access = require("./access");
 const presets = require("./presets");
 const { createAiProvider } = require("./ai");
 const { buildOutcomesSummary } = require("./outcomes-summary");
@@ -283,9 +284,17 @@ function countBy(items, key) {
   }, {});
 }
 
-function teacherEvent(event) {
+// An event as the teacher page sees it: whose it is, and whether the
+// signed-in account may change it (access.js). The page hides reset,
+// release, Edit settings and marking when can_manage is false.
+function teacherEvent(event, user) {
   const { created_by: _createdBy, ...rest } = event;
-  return { ...rest, breakdown_released: policy.breakdownReleased(event) };
+  return {
+    ...rest,
+    breakdown_released: policy.breakdownReleased(event),
+    owned: access.owns(user, event),
+    can_manage: access.canManage(user, event)
+  };
 }
 
 // Whether a question list needs the AI provider to be scored, and whether it
@@ -362,21 +371,47 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       return;
     }
 
+    let claims;
+
     try {
-      req.user = jwt.verify(token, config.jwtSecret);
-      next();
+      claims = jwt.verify(token, config.jwtSecret);
     } catch (_error) {
       res.status(401).json({ error: "Invalid or expired token." });
+      return;
     }
+
+    // The role comes from the database, not the token, so `npm run set-role`
+    // takes effect on the account's next request rather than when its 7-day
+    // token runs out.
+    const user = db.findUserById(claims.sub);
+
+    if (!user) {
+      res.status(401).json({ error: "This account no longer exists." });
+      return;
+    }
+
+    req.user = { sub: user.id, email: user.email, role: user.role };
+    next();
   }
 
-  // Loads the teacher's own event or answers 404, the same as a missing one.
-  function ownEvent(req, res) {
+  // Loads the event in :id for a teacher route, or answers for it (ADR 0004).
+  // Every route that takes an event id goes through here; access.js decides.
+  // - Not readable (missing, or another teacher's for a teacher): 404, the
+  //   same answer either way, so ids cannot be probed.
+  // - Readable but not the caller's to change (an admin on another
+  //   teacher's event) when the route changes something: 403.
+  function eventForRequest(req, res, { manage = false } = {}) {
     const eventId = Number(req.params.id);
-    const event = Number.isInteger(eventId) ? db.getEventForTeacher(eventId, req.user.sub) : null;
+    const event = Number.isInteger(eventId) ? db.getEventById(eventId) : null;
+    const level = access.eventAccess(req.user, event);
 
-    if (!event) {
+    if (!level) {
       res.status(404).json({ error: "Event not found." });
+      return null;
+    }
+
+    if (manage && level !== "manage") {
+      res.status(403).json({ error: "Only the teacher who created this event can change it. You can see its results." });
       return null;
     }
 
@@ -561,10 +596,12 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     });
   });
 
-  // ---------- Teacher: events and results (scoped to the signed-in teacher) ----------
+  // ---------- Teacher: events and results (scoped by access.js) ----------
 
+  // A teacher's own events; an admin's list has every teacher's.
   app.get("/api/events", requireAuth, (req, res) => {
-    res.json({ events: db.listEventsForTeacher(req.user.sub) });
+    const events = db.listEvents({ ownerId: access.isAdmin(req.user) ? null : req.user.sub });
+    res.json({ events: events.map(event => teacherEvent(event, req.user)) });
   });
 
   app.post("/api/events", requireAuth, (req, res) => {
@@ -628,7 +665,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
         createdBy: req.user.sub
       });
 
-      const event = teacherEvent(db.getEventById(eventId));
+      const event = teacherEvent(db.getEventById(eventId), req.user);
       const questions = db.getEventQuestions(eventId);
       event.question_count = questions.length;
 
@@ -644,26 +681,26 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
   });
 
   app.get("/api/events/:id/results", requireAuth, (req, res) => {
-    const event = ownEvent(req, res);
+    const event = eventForRequest(req, res);
 
     if (!event) {
       return;
     }
 
     res.json({
-      event: teacherEvent(event),
+      event: teacherEvent(event, req.user),
       attempts: db.getResults(event.id),
       settingChanges: db.listSettingChanges(event.id).map(settingChangeView)
     });
   });
 
   // Changes an event's settings, even while students are taking it (ADR 0003
-  // §10). Owner only. The question set cannot change. policy.js reads the
+  // §10). Owner only (ADR 0004). The question set cannot change. policy.js reads the
   // event's current settings on every request, so a student's next request
   // follows the new rules; attempts in progress get their deadline
   // recomputed in the store.
   app.patch("/api/events/:id", requireAuth, (req, res) => {
-    const event = ownEvent(req, res);
+    const event = eventForRequest(req, res, { manage: true });
 
     if (!event) {
       return;
@@ -677,7 +714,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     }
 
     const { changes, attemptsUpdated } = db.updateEventSettings(event.id, req.user.sub, edit.changes);
-    const updated = teacherEvent(db.getEventById(event.id));
+    const updated = teacherEvent(db.getEventById(event.id), req.user);
     updated.question_count = db.getEventQuestions(event.id).length;
 
     res.json({ event: updated, changes, attemptsUpdated });
@@ -686,7 +723,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
   // Per-learning-outcome and per-ontology-node results, for the teacher's
   // picker to report back against what was actually tested.
   app.get("/api/events/:id/outcomes-summary", requireAuth, (req, res) => {
-    const event = ownEvent(req, res);
+    const event = eventForRequest(req, res);
 
     if (!event) {
       return;
@@ -696,18 +733,18 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
   });
 
   app.post("/api/events/:id/release", requireAuth, (req, res) => {
-    const event = ownEvent(req, res);
+    const event = eventForRequest(req, res, { manage: true });
 
     if (!event) {
       return;
     }
 
     db.releaseResults(event.id);
-    res.json({ event: teacherEvent(db.getEventById(event.id)) });
+    res.json({ event: teacherEvent(db.getEventById(event.id), req.user) });
   });
 
   app.post("/api/events/:id/attempts/:attemptId/reset", requireAuth, (req, res) => {
-    const event = ownEvent(req, res);
+    const event = eventForRequest(req, res, { manage: true });
 
     if (!event) {
       return;
@@ -725,12 +762,12 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
 
   // A teacher marks an AI-scored answer by hand: one still waiting, one the
   // AI could not score (needs-review), or one whose AI score they disagree
-  // with. Owner only; the attempt total is recomputed. A committed answer of
+  // with. Owner only (ADR 0004); the attempt total is recomputed. A committed answer of
   // an attempt still in progress can be marked too, so a student under
   // "after each question" sees the mark straight away; the attempt's total
   // still only appears once it is submitted.
   app.post("/api/events/:id/attempts/:attemptId/answers/:questionId/review", requireAuth, (req, res) => {
-    const event = ownEvent(req, res);
+    const event = eventForRequest(req, res, { manage: true });
 
     if (!event) {
       return;
