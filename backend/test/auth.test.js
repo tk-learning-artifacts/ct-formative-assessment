@@ -24,12 +24,13 @@ function runNode(script, args, env, input) {
   });
 }
 
-// Starts server.js on 127.0.0.1 and a random high port, and resolves once it
-// is listening. The caller stops it with child.kill() on that one process.
+// Starts server.js on 127.0.0.1 and resolves once it is listening. PORT=0
+// lets the OS pick a free port, read back from the startup line; a random
+// port could collide with another server on this machine and crash the run.
+// The caller stops it with child.kill() on that one process.
 function startServer(env) {
-  const port = 40000 + Math.floor(Math.random() * 20000);
   const child = spawn(process.execPath, [SERVER], {
-    env: { PATH: process.env.PATH, HOST: "127.0.0.1", PORT: String(port), ...env },
+    env: { PATH: process.env.PATH, HOST: "127.0.0.1", PORT: "0", ...env },
     stdio: ["ignore", "pipe", "pipe"]
   });
 
@@ -37,7 +38,8 @@ function startServer(env) {
     let output = "";
     const onData = chunk => {
       output += chunk;
-      if (output.includes("running on")) resolve({ child, port });
+      const match = output.match(/running on http:\/\/[^:]+:(\d+)/);
+      if (match) resolve({ child, port: Number(match[1]) });
     };
     child.stdout.on("data", onData);
     child.stderr.on("data", onData);

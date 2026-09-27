@@ -14,12 +14,15 @@ try {
 
 // HOST is optional: unset listens on every interface (what Docker needs);
 // HOST=127.0.0.1 keeps a local run private to this machine.
+// The logged port is the one actually bound, so PORT=0 (any free port) works.
+let server;
+
 const onListening = () => {
-  console.log(`CT Quest server running on http://${config.host || "localhost"}:${config.port}`);
+  console.log(`CT Quest server running on http://${config.host || "localhost"}:${server.address().port}`);
 };
 
 if (config.host) {
-  app.listen(config.port, config.host, onListening);
+  server = app.listen(config.port, config.host, onListening);
 } else {
-  app.listen(config.port, onListening);
+  server = app.listen(config.port, onListening);
 }
