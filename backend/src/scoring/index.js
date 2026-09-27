@@ -18,6 +18,14 @@
 //   keyResponse(question)          -> optional; the correct answer in the
 //                                     recordResponse shape, for the results
 //                                     breakdown after release
+//   teacherView(question)          -> optional; the question as a teacher
+//                                     should see it (answer key, rubric and
+//                                     similar included). The default is the
+//                                     stored question unchanged, which
+//                                     already carries every field ADR 0001
+//                                     §5 defines, so only a type whose
+//                                     content needs reshaping for a teacher
+//                                     (none do today) would override this.
 //   configure({ secret })          -> optional; called once by the app with
 //                                     server settings (Parsons keys its
 //                                     line ids and shuffle with the secret)
@@ -117,6 +125,15 @@ function toPublicQuestion(question) {
   return safe;
 }
 
+// The question as a teacher may see it: the full stored content, answer key
+// included. Unlike toPublicQuestion this is not an allowlist, because a
+// teacher may see everything; a type overrides teacherView only if its
+// stored shape needs reshaping first (none do today).
+function toTeacherQuestion(question) {
+  const impl = getActiveType(question.type);
+  return impl.teacherView ? impl.teacherView(question) : { ...question };
+}
+
 function scoreResponse(question, rawResponse) {
   const impl = getActiveType(question.type);
   const response = rawResponse === undefined ? null : impl.normalizeResponse(rawResponse, question);
@@ -150,6 +167,7 @@ module.exports = {
   getActiveType,
   listTypes,
   toPublicQuestion,
+  toTeacherQuestion,
   scoreResponse,
   keyResponse,
   configure

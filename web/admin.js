@@ -57,7 +57,19 @@
     },
     preview: null,
     previewError: null,
-    previewLoading: false
+    previewLoading: false,
+    // Whether the create-event preview shows the compact question list
+    // (fetched with include: "questions", full teacher views) instead of the
+    // plain title list.
+    previewQuestionsOpen: false,
+    // Whether state.preview.questions (whatever is currently held) was
+    // fetched with include: "questions". previewQuestionsOpen can flip
+    // before that fetch resolves, so the render must check this too, or a
+    // stale summary-shaped list gets rendered as full teacher views.
+    previewIncludesQuestions: false,
+    // The chosen event's frozen question snapshot (full teacher views), or
+    // null until GET /api/events/:id/questions has loaded.
+    eventQuestions: null
   };
 
   const FEEDBACK_LABELS = {
@@ -196,6 +208,252 @@
       }).join("");
   }
 
+  // ---------- Compact question preview ----------
+  // A read-only, collapsed-by-default view of a question list, built from a
+  // teacher view (full content, answer key included: GET /api/events/:id/questions,
+  // or POST /api/question-bank/preview with include: "questions"). Used in the
+  // create-event preview panel and the results view's Questions disclosure.
+  // Static markup only, in this file: it borrows web/types/ class names for a
+  // consistent look but none of their interactive code, since nothing here is
+  // ever answered.
+
+  const QP_TYPE_LABELS = {
+    mcq: "Multiple choice",
+    "code-trace": "Code trace",
+    parsons: "Parsons problem",
+    "open-response-ai": "Open response (AI scored)"
+  };
+
+  function truncate(text, max) {
+    const flat = String(text).replace(/\s+/g, " ").trim();
+    return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+  }
+
+  // The correct answer, in short form, for a collapsed row. Only a genuine
+  // correctness statement gets the positive tone (ADR 0002: a status tone is
+  // paired with a word, and reserved for what it actually means); the AI
+  // rubric line is neutral, since it names a criterion count, not a result.
+  function qpCompactAnswer(question) {
+    if (question.type === "mcq") {
+      const letter = String.fromCharCode(65 + question.answer.index);
+      return `<span class="tone-positive">✓ ${letter}: ${escapeHtml(truncate(question.options[question.answer.index], 40))}</span>`;
+    }
+
+    if (question.type === "code-trace") {
+      return `<span class="tone-positive">✓ output: ${escapeHtml(truncate(question.answer.output, 40))}</span>`;
+    }
+
+    if (question.type === "parsons") {
+      const n = question.answer.order.length;
+      return `<span class="tone-positive">✓ order: ${n} line${n === 1 ? "" : "s"}</span>`;
+    }
+
+    if (question.type === "open-response-ai") {
+      const n = question.rubric.length;
+      return `<span class="tone-neutral">AI rubric: ${n} level${n === 1 ? "" : "s"}</span>`;
+    }
+
+    return "";
+  }
+
+  // marking flags in words, for code-trace and parsons.
+  function qpMarkingText(question) {
+    const marking = question.marking;
+
+    if (!marking) {
+      return "";
+    }
+
+    if (question.type === "code-trace") {
+      const bits = [];
+      if (marking.collapseSpaces) {
+        bits.push("runs of spaces count as one");
+      }
+      bits.push(marking.partial === "lines" ? "partial credit per matching line" : "all or nothing");
+      return bits.join("; ");
+    }
+
+    if (question.type === "parsons") {
+      return marking.partial === "longest-run" ? "partial credit for the longest correct run" : "all or nothing";
+    }
+
+    return "";
+  }
+
+  function qpRubricTable(rubric) {
+    const rows = rubric.map(criterion => `
+      <tr>
+        <td class="mono">${escapeHtml(criterion.id)}</td>
+        <td>${escapeHtml(criterion.description)}</td>
+        <td>${criterion.points}</td>
+      </tr>
+    `).join("");
+
+    return `
+      <div class="table-wrap">
+        <table class="data-table qp-rubric">
+          <caption>Rubric</caption>
+          <thead><tr><th scope="col">Criterion</th><th scope="col">Description</th><th scope="col">Points</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // The question as a student would see it, with the correct option or lines
+  // marked, per type.
+  function qpTypeBody(question) {
+    if (question.type === "mcq") {
+      const options = question.options.map((option, i) => `
+        <label class="opt qp-opt">
+          <input type="radio" disabled ${i === question.answer.index ? "checked" : ""} />
+          <span class="opt__text">${escapeHtml(option)}</span>
+          ${i === question.answer.index ? `<span class="tag tag--accent">Correct</span>` : ""}
+        </label>
+      `).join("");
+
+      return `<p class="answer-label">Options, correct one marked</p><div class="options">${options}</div>`;
+    }
+
+    if (question.type === "code-trace") {
+      return `<p class="answer-label">Correct output</p><pre class="codebox">${escapeHtml(question.answer.output)}</pre>`;
+    }
+
+    if (question.type === "parsons") {
+      const positionOf = new Map(question.answer.order.map((id, i) => [id, i + 1]));
+      const lines = question.lines.map(line => {
+        const position = positionOf.get(line.id);
+        const badge = position ? `<span class="tag tag--accent">${position}</span>` : `<span class="tag">distractor</span>`;
+        return `<li class="pa-line"><code class="pa-text">${escapeHtml(line.text)}</code>${badge}</li>`;
+      }).join("");
+      const target = question.expectedOutput
+        ? `<p class="code-label">Program output</p><pre class="codebox">${escapeHtml(question.expectedOutput)}</pre>`
+        : "";
+
+      return `<p class="answer-label">Lines, correct order marked</p><ol class="pa-list">${lines}</ol>${target}`;
+    }
+
+    if (question.type === "open-response-ai") {
+      const max = question.responseMaxChars || 1000;
+      return `<p class="muted small">Free text, up to ${max} characters. Scored by AI against the rubric below.</p>`;
+    }
+
+    return "";
+  }
+
+  // The teacher-only material below the student-shaped view: the "details"
+  // focus note, and whatever else a type keeps server-only (rubric, accepted
+  // alternate outputs, marking flags).
+  function qpTeacherOnly(question) {
+    const bits = [];
+
+    if (question.details) {
+      bits.push(`<p>${escapeHtml(question.details)}</p>`);
+    }
+
+    if (question.type === "code-trace") {
+      if (question.answer.accepted && question.answer.accepted.length) {
+        bits.push(`<p class="small">Also accepted: ${question.answer.accepted.map(form => `<code>${escapeHtml(form)}</code>`).join(", ")}</p>`);
+      }
+      const marking = qpMarkingText(question);
+      if (marking) {
+        bits.push(`<p class="small">Marking: ${marking}</p>`);
+      }
+    }
+
+    if (question.type === "parsons") {
+      const marking = qpMarkingText(question);
+      if (marking) {
+        bits.push(`<p class="small">Marking: ${marking}</p>`);
+      }
+    }
+
+    if (question.type === "open-response-ai") {
+      bits.push(qpRubricTable(question.rubric));
+    }
+
+    if (!bits.length) {
+      return "";
+    }
+
+    return `<div class="qp-teacher"><p class="qp-teacher__label"><span class="tag">Teacher only</span></p>${bits.join("")}</div>`;
+  }
+
+  function qpQuestionBody(question) {
+    const parts = [`<p class="prompt-text">${escapeHtml(question.prompt)}</p>`];
+
+    if (question.art) {
+      parts.push(`<pre class="codebox">${escapeHtml(question.art)}</pre>`);
+    }
+
+    if (question.code) {
+      parts.push(`<p class="code-label">${escapeHtml(question.code.language)}</p><pre class="codebox">${escapeHtml(question.code.source)}</pre>`);
+    }
+
+    parts.push(qpTypeBody(question));
+    parts.push(qpTeacherOnly(question));
+
+    return parts.join("");
+  }
+
+  function qpRow(question, number) {
+    return `
+      <li>
+        <details class="qp-row">
+          <summary>
+            <span class="qp-row__num">${number}.</span>
+            <span class="qp-row__title">${escapeHtml(question.title)}</span>
+            <span class="tag">${escapeHtml(QP_TYPE_LABELS[question.type] || question.type)}</span>
+            <span class="concept-tag">${escapeHtml(question.level)}</span>
+            <span class="muted small">${question.points} pt${question.points === 1 ? "" : "s"}</span>
+            <span class="qp-row__answer">${qpCompactAnswer(question)}</span>
+          </summary>
+          <div class="qp-row__body">${qpQuestionBody(question)}</div>
+        </details>
+      </li>
+    `;
+  }
+
+  // questions: full teacher views, in the order they should be numbered.
+  function renderQuestionPreview(questions) {
+    if (!questions || !questions.length) {
+      return `<p class="muted small">No questions to show.</p>`;
+    }
+
+    return `
+      <div class="qp">
+        <div class="qp__controls">
+          <button type="button" class="btn btn--ghost btn--sm" data-qp-expand-all>Expand all</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-qp-collapse-all>Collapse all</button>
+        </div>
+        <ol class="qp-list">${questions.map((question, i) => qpRow(question, i + 1)).join("")}</ol>
+      </div>
+    `;
+  }
+
+  // container: the element renderQuestionPreview's markup was just inserted
+  // into. Re-bind after every re-render, as the rest of the page does.
+  function bindQuestionPreviewEvents(container) {
+    if (!container) {
+      return;
+    }
+
+    const expandAll = container.querySelector("[data-qp-expand-all]");
+    const collapseAll = container.querySelector("[data-qp-collapse-all]");
+
+    if (expandAll) {
+      expandAll.addEventListener("click", () => {
+        container.querySelectorAll(".qp-row").forEach(details => { details.open = true; });
+      });
+    }
+
+    if (collapseAll) {
+      collapseAll.addEventListener("click", () => {
+        container.querySelectorAll(".qp-row").forEach(details => { details.open = false; });
+      });
+    }
+  }
+
   function renderLogin(errorMessage) {
     screen.innerHTML = `
       <section class="card join">
@@ -314,6 +572,13 @@
     const requestId = (previewRequestId += 1);
     const fromPreset = !advancedIsOpen() && Boolean(state.quick);
     const body = fromPreset ? { preset: state.quick } : { filter: pickerFilter() };
+    // Captured now, not read again after the await: previewQuestionsOpen can
+    // change while this request is in flight.
+    const requestedQuestions = state.previewQuestionsOpen;
+
+    if (requestedQuestions) {
+      body.include = "questions";
+    }
 
     try {
       const payload = await api("/api/question-bank/preview", {
@@ -326,6 +591,7 @@
       }
 
       state.preview = payload;
+      state.previewIncludesQuestions = requestedQuestions;
       state.previewError = null;
 
       if (fromPreset && !state.pickerEdited) {
@@ -373,12 +639,20 @@
     // aiRequired: some matched question is AI-scored. warning: AI is off, so
     // those answers will wait for the teacher to mark them.
     const aiFlag = preview.aiRequired;
+    // state.preview.questions may still be the plain summary shape if the
+    // toggle just turned on and its include: "questions" fetch has not
+    // resolved yet: render the compact list only once both agree.
+    const showQuestionPreview = state.previewQuestionsOpen && state.previewIncludesQuestions;
 
     el.innerHTML = `
       <div class="row">
         <h3>${preview.count} question${preview.count === 1 ? "" : "s"}</h3>
         <span class="muted small">${preview.totalPoints} point${preview.totalPoints === 1 ? "" : "s"}</span>
         ${aiFlag !== undefined ? `<span class="tag ${aiFlag ? "tag--accent" : ""}">${aiFlag ? "Uses AI scoring" : "No AI scoring"}</span>` : ""}
+        ${preview.count
+          ? `<button type="button" class="btn btn--ghost btn--sm" id="togglePreviewQuestionsBtn" aria-expanded="${state.previewQuestionsOpen}">${state.previewQuestionsOpen ? "Hide questions" : "Preview questions"}</button>`
+          : ""
+        }
       </div>
       ${preview.count === 0 ? `<p class="notice notice--critical mt-s">No questions match. Widen the selection before you create the event.</p>` : ""}
       ${preview.warning ? `<p class="notice notice--warning mt-s">${escapeHtml(preview.warning)}</p>` : ""}
@@ -387,11 +661,35 @@
         <dt>Types</dt><dd>${counts(preview.byType)}</dd>
         <dt>Audiences</dt><dd>${counts(preview.byAudience)}</dd>
       </dl>
-      ${preview.questions && preview.questions.length
-        ? `<ol class="preview-list">${preview.questions.map(q => `<li>${escapeHtml(q.title)} <span class="muted">${escapeHtml(q.level)} · ${escapeHtml(q.type)}</span></li>`).join("")}</ol>`
-        : ""
+      ${showQuestionPreview
+        ? renderQuestionPreview(preview.questions)
+        : (state.previewQuestionsOpen
+          ? `<p class="muted small">Loading questions&hellip;</p>`
+          : (preview.questions && preview.questions.length
+            ? `<ol class="preview-list">${preview.questions.map(q => `<li>${escapeHtml(q.title)} <span class="muted">${escapeHtml(q.level)} · ${escapeHtml(q.type)}</span></li>`).join("")}</ol>`
+            : ""))
       }
     `;
+
+    const toggleBtn = document.getElementById("togglePreviewQuestionsBtn");
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", () => {
+        state.previewQuestionsOpen = !state.previewQuestionsOpen;
+
+        // Toggling on needs the full teacher views, which the summary
+        // request above did not fetch; toggling off can redraw at once.
+        if (state.previewQuestionsOpen) {
+          runPreview();
+        } else {
+          renderPreviewPanel();
+        }
+      });
+    }
+
+    if (showQuestionPreview) {
+      bindQuestionPreviewEvents(el);
+    }
   }
 
   function advancedIsOpen() {
@@ -1519,6 +1817,10 @@
           </p>
           ${canManage ? "" : `<p class="notice read-only">Read only: this is ${escapeHtml(resultsEvent.owner_email || "another teacher")}'s event. Only they can reset attempts, release results, edit settings or mark answers.</p>`}
           ${canManage && state.editingSettings ? renderEditSettings(resultsEvent) : ""}
+          <details class="history" id="eventQuestionsSection">
+            <summary>Questions${state.eventQuestions ? ` (${state.eventQuestions.length})` : ""}</summary>
+            ${state.eventQuestions ? renderQuestionPreview(state.eventQuestions) : `<p class="muted small">Could not load the questions.</p>`}
+          </details>
           ${renderSettingsHistory(state.results.settingChanges)}
           ${state.results.attempts.length
             ? `<ul class="attempts">${state.results.attempts.map(attempt => `
@@ -1632,6 +1934,7 @@
       state.selectedEventId = null;
       state.results = null;
       state.outcomesSummary = null;
+      state.eventQuestions = null;
       state.eventFilter = { scope: "all", owner: "" };
       localStorage.removeItem(TOKEN_KEY);
       renderLogin();
@@ -1763,16 +2066,19 @@
 
     bindEventListEvents();
     bindOutcomesSummaryEvents();
+    bindQuestionPreviewEvents(document.getElementById("eventQuestionsSection"));
   }
 
   async function loadResults(eventId) {
     try {
-      const [results, outcomesSummary] = await Promise.all([
+      const [results, outcomesSummary, questions] = await Promise.all([
         api(`/api/events/${eventId}/results`),
-        api(`/api/events/${eventId}/outcomes-summary`).catch(() => null)
+        api(`/api/events/${eventId}/outcomes-summary`).catch(() => null),
+        api(`/api/events/${eventId}/questions`).catch(() => null)
       ]);
       state.results = results;
       state.outcomesSummary = outcomesSummary;
+      state.eventQuestions = questions ? questions.questions : null;
       renderDashboard();
     } catch (error) {
       alert(error.message);
@@ -1826,6 +2132,7 @@
         state.selectedEventId = null;
         state.results = null;
         state.outcomesSummary = null;
+        state.eventQuestions = null;
       }
     }
 

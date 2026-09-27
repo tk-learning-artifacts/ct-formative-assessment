@@ -1864,6 +1864,118 @@ textarea.open-response {
   font-size: 0.75rem;
 }
 
+/* ---------- Teacher: compact question preview ---------- */
+
+.qp__controls {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.qp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A column flex item's default min-width is content-based, not 0, so a wide
+   descendant (the rubric table, say) would otherwise stretch the whole list
+   to fit it instead of wrapping or scrolling inside its own block. */
+.qp-list > li {
+  min-width: 0;
+}
+
+.qp-row {
+  min-width: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  background: var(--color-surface-2);
+}
+
+.qp-row > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.qp-row > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qp-row__num {
+  flex: none;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.qp-row__title {
+  flex: 1 1 160px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.qp-row__answer {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.qp-row__body {
+  padding: 4px 10px 12px;
+  border-top: 1px solid var(--color-line);
+}
+
+.qp-row__body .prompt-text {
+  margin-top: 8px;
+}
+
+.qp-row__body .pa-line {
+  justify-content: space-between;
+}
+
+.qp-teacher {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px dashed var(--color-line-strong);
+  border-radius: 6px;
+  background: var(--color-bg);
+}
+
+.qp-teacher__label {
+  margin: 0 0 6px;
+}
+
+/* Same look as a real MCQ option, plus room to wrap onto a second line for
+   the "Correct" tag on narrow screens, which the interactive .opt never
+   needs. */
+.qp-opt {
+  flex-wrap: wrap;
+  cursor: default;
+}
+
+.qp-teacher p + p {
+  margin-top: 6px;
+}
+
+.qp-rubric td:nth-child(2) {
+  text-align: left;
+}
+
 /* ---------- Phone ---------- */
 
 @media (max-width: 640px) {

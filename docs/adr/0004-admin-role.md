@@ -18,8 +18,10 @@ A head of department wants to see how every class is doing: each teacher's event
 An admin can:
 
 - list every teacher's events (`GET /api/events`), each with its owner's email;
-- read any event: `GET /api/events/:id/results` (the event, every attempt with its answers, the settings history) and `GET /api/events/:id/outcomes-summary`;
+- read any event: `GET /api/events/:id/results` (the event, every attempt with its answers, the settings history), `GET /api/events/:id/outcomes-summary` and `GET /api/events/:id/questions` (the event's frozen question snapshot, full teacher views — answer key, rubric and the rest);
 - create and run their own events exactly as a teacher does.
+
+A question preview is a read of content the owner already put in front of students, not a change to the event, so it follows the same rule as results and the outcomes summary (added 2026-09-27, alongside the teacher's compact question preview in admin.html).
 
 ### 2. Other teachers' events are read-only (the default)
 
@@ -37,7 +39,7 @@ On an event it did not create, an admin cannot reset an attempt, release results
 - **403** when the route changes something (`manage: true`) and the caller may only read;
 - otherwise the event.
 
-The routes that changed from `ownEvent` to `eventForRequest`: results and outcomes-summary (read), and PATCH settings, release, reset and review (manage). `GET /api/events` lists every event for an admin and the caller's own for a teacher. The routes without an event id (catalog, ontology, outcomes, presets, preview, create) are the same for both roles.
+The routes that changed from `ownEvent` to `eventForRequest`: results, outcomes-summary and questions (read), and PATCH settings, release, reset and review (manage). `GET /api/events` lists every event for an admin and the caller's own for a teacher. The routes without an event id (catalog, ontology, outcomes, presets, preview, create) are the same for both roles; `POST /api/question-bank/preview` with `include: "questions"` is one of them, since it previews a selection rather than reading a specific event.
 
 A teacher gets 404 on an admin's own events too: being an admin does not make one's events public.
 
