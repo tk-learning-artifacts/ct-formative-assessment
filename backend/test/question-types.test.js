@@ -2,6 +2,7 @@
 // the Parsons shuffle (deterministic, opaque ids, never a correct order), and
 // a full attempt over HTTP from start to the released breakdown.
 
+const crypto = require("crypto");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
@@ -176,6 +177,62 @@ function assertShuffleHidesAnswer(question) {
   shown.forEach(line => assert.match(line.id, /^L[0-9a-f]{10}$/));
   assert.deepEqual(scoring.toPublicQuestion(question).lines, shown, `${question.id} shuffle is deterministic`);
 }
+
+// A student who has this repository but not the server's secret. Two
+// attacks that worked while the ids and shuffle were unkeyed: hashing likely
+// content ids, and replaying the shuffle seeded by the question id to invert
+// it back to the order the author wrote the lines in.
+function unkeyedLineId(questionId, lineId) {
+  return "L" + crypto.createHash("sha256").update(`${questionId}\u0000${lineId}`).digest("hex").slice(0, 10);
+}
+
+function unkeyedFirstShuffle(questionId, size) {
+  let seed = crypto.createHash("sha256").update(`parsons:${questionId}`).digest().readUInt32LE(0);
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const idx = Array.from({ length: size }, (_, i) => i);
+  for (let i = size - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  return idx;
+}
+
+test("the Parsons ids and shuffle are keyed with the server secret", () => {
+  const shipped = loadContent().questions.filter(question => question.type === "parsons");
+
+  try {
+    scoring.configure({ secret: "first-secret-for-this-test" });
+    const first = shipped.map(question => scoring.toPublicQuestion(question).lines);
+    scoring.configure({ secret: "second-secret-for-this-test" });
+    const second = shipped.map(question => scoring.toPublicQuestion(question).lines);
+
+    shipped.forEach((question, n) => {
+      const ids = new Set(first[n].map(line => line.id));
+      assert.ok(second[n].every(line => !ids.has(line.id)), `${question.id} ids depend on the secret`);
+
+      // Hashing the content ids without the key finds nothing.
+      const guessed = new Set(question.lines.map(line => unkeyedLineId(question.id, line.id)));
+      assert.ok(first[n].every(line => !guessed.has(line.id)), `${question.id} ids are not the unkeyed hash`);
+
+      // Inverting the unkeyed shuffle no longer gives the content order.
+      const shown = first[n].map(line => line.text);
+      const recovered = [];
+      unkeyedFirstShuffle(question.id, shown.length).forEach((contentIndex, k) => { recovered[contentIndex] = shown[k]; });
+      assert.notDeepEqual(recovered, question.lines.map(line => line.text), `${question.id} content order recovered`);
+    });
+
+    assert.ok(shipped.some((question, n) => first[n].map(line => line.text).join("\n") !== second[n].map(line => line.text).join("\n")),
+      "the shuffle depends on the secret");
+  } finally {
+    scoring.configure({ secret: "question-types-test-restored" });
+  }
+});
 
 test("the Parsons shuffle never shows a correct order or the content order", () => {
   const shipped = loadContent().questions.filter(question => question.type === "parsons");

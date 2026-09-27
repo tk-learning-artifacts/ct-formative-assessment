@@ -138,6 +138,10 @@ function aiStatus(questions, ai) {
 }
 
 function createApp({ config = loadConfig(), store = null, log = console.log } = {}) {
+  // Before content is loaded or any question projected: Parsons keys its
+  // public line ids and shuffle with this.
+  scoring.configure({ secret: config.jwtSecret });
+
   const db = store || openDatabase({
     dbPath: config.dbPath,
     seedTeacher: config.seedTeacher,

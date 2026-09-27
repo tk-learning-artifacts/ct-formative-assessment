@@ -18,24 +18,53 @@
 //                           optional; the default is all or nothing.
 //
 // The student never sees the content ids or the content order. The public
-// projection replaces `lines` with the same lines under opaque ids (a hash of
-// the question id and line id), in a shuffle seeded by the question id that
-// is never a correct order and never the content order. The response is the
-// list of opaque ids in the student's order; it is stored as the content ids
-// with their text.
+// projection replaces `lines` with the same lines under opaque ids, in a
+// shuffle that is never a correct order and never the content order. The
+// response is the list of opaque ids in the student's order; it is stored as
+// the content ids with their text.
+//
+// Both the ids and the shuffle are keyed with a server secret (an HMAC key
+// derived from JWT_SECRET; see configure below). Unkeyed, anyone with this
+// source could hash likely line ids ("start", "odd", "a", "b") to label every
+// line, or replay the shuffle from the question id and invert it to get the
+// order the author wrote the lines in, which is usually the answer followed
+// by the distractors. Changing JWT_SECRET changes the ids, so a Parsons
+// answer in progress at that moment is lost when it is submitted.
 
 const crypto = require("crypto");
 
 const MAX_SHUFFLE_TRIES = 200;
+// Up to this many lines, validate() and the fallback below can try every
+// order (8! = 40320) to prove a safe one exists.
+const MAX_EXHAUSTIVE_LINES = 8;
+
+// Replaced by configure() when the app starts. Until then (unit tests that
+// never build an app) a random per-process key, so nothing unkeyed is ever
+// produced.
+let lineKey = crypto.randomBytes(32);
+
+// secret: the app's JWT_SECRET. A sub-key is derived so the two uses of the
+// secret never share a key.
+function configure({ secret } = {}) {
+  if (typeof secret !== "string" || !secret) {
+    throw new Error("parsons.configure needs a secret");
+  }
+
+  lineKey = crypto.createHmac("sha256", secret).update("ct-quest parsons line ids v1").digest();
+}
+
+function keyed(text) {
+  return crypto.createHmac("sha256", lineKey).update(text).digest();
+}
 
 function publicLineId(questionId, lineId) {
-  return "L" + crypto.createHash("sha256").update(`${questionId}\u0000${lineId}`).digest("hex").slice(0, 10);
+  return "L" + keyed(`id\u0000${questionId}\u0000${lineId}`).toString("hex").slice(0, 10);
 }
 
 // A small seeded generator (mulberry32), so the shuffle is the same on every
-// request and every server without being stored.
-function seededRandom(seedText) {
-  let seed = crypto.createHash("sha256").update(seedText).digest().readUInt32LE(0);
+// request without being stored. seedBytes: at least 4 bytes.
+function seededRandom(seedBytes) {
+  let seed = seedBytes.readUInt32LE(0);
 
   return () => {
     seed = (seed + 0x6d2b79f5) >>> 0;
@@ -72,11 +101,30 @@ function leaksAnswer(question, ids) {
     acceptedOrders(question).some(order => sameSequence(order.map(id => text.get(id)), shownText));
 }
 
-// The content ids in the order the student is shown, or null if no safe
-// order turns up (validate reports that as an error).
-function shuffledIds(question) {
-  const random = seededRandom(`parsons:${question.id}`);
+// Every order of ids, one at a time (Heap's algorithm).
+function* permutations(ids) {
+  const a = ids.slice();
+  const c = new Array(a.length).fill(0);
+  yield a.slice();
 
+  let i = 0;
+  while (i < a.length) {
+    if (c[i] < i) {
+      const j = i % 2 === 0 ? 0 : c[i];
+      [a[j], a[i]] = [a[i], a[j]];
+      yield a.slice();
+      c[i] += 1;
+      i = 0;
+    } else {
+      c[i] = 0;
+      i += 1;
+    }
+  }
+}
+
+// The first order that hides the answer: seeded shuffles first, then, for
+// short questions, every order in turn. Null if there is none.
+function safeOrder(question, random) {
   for (let tries = 0; tries < MAX_SHUFFLE_TRIES; tries += 1) {
     const ids = question.lines.map(line => line.id);
 
@@ -90,7 +138,28 @@ function shuffledIds(question) {
     }
   }
 
+  if (question.lines.length <= MAX_EXHAUSTIVE_LINES) {
+    for (const ids of permutations(question.lines.map(line => line.id))) {
+      if (!leaksAnswer(question, ids)) {
+        return ids;
+      }
+    }
+  }
+
   return null;
+}
+
+// The content ids in the order the student is shown, keyed like the ids.
+// Null only for a question validate() rejects.
+function shuffledIds(question) {
+  return safeOrder(question, seededRandom(keyed(`order\u0000${question.id}`)));
+}
+
+// Whether any order hides the answer. Independent of the key, so content
+// validation gives the same result before and after configure().
+function hasSafeOrder(question) {
+  const seed = crypto.createHash("sha256").update(`parsons-validate:${question.id}`).digest();
+  return safeOrder(question, seededRandom(seed)) !== null;
 }
 
 // The longest stretch of the student's program that appears, line for line
@@ -211,7 +280,7 @@ module.exports = {
       errors.push("parsons marking may only be { \"partial\": \"longest-run\" }");
     }
 
-    if (!errors.length && shuffledIds(question) === null) {
+    if (!errors.length && !hasSafeOrder(question)) {
       errors.push("parsons has no shuffled order that hides the answer; add a line or a distractor");
     }
 
@@ -222,7 +291,11 @@ module.exports = {
   // registry copies only publicFields from what this returns.
   projectPublic(question) {
     const text = textOf(question);
-    const ids = shuffledIds(question) || [];
+    const ids = shuffledIds(question);
+
+    if (!ids) {
+      throw new Error(`parsons ${question.id} has no shuffled order that hides the answer`);
+    }
 
     return {
       ...question,
@@ -287,6 +360,7 @@ module.exports = {
     return { status: "scored", earned: Math.max(0, earned), max, correct: false, detail: { partial: { longestRun: run, ofLines: of } } };
   },
 
+  configure,
   publicLineId,
   shuffledIds,
   leaksAnswer

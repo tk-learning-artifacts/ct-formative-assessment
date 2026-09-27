@@ -18,6 +18,9 @@
 //   keyResponse(question)          -> optional; the correct answer in the
 //                                     recordResponse shape, for the results
 //                                     breakdown after release
+//   configure({ secret })          -> optional; called once by the app with
+//                                     server settings (Parsons keys its
+//                                     line ids and shuffle with the secret)
 //
 // A reserved type module exports only type, status: "reserved", label and
 // description. Content using a reserved type is rejected at boot.
@@ -123,6 +126,16 @@ function scoreResponse(question, rawResponse) {
   return { response, recorded: impl.recordResponse(question, response), result, legacy };
 }
 
+// Passes server settings to every type that takes them. createApp calls this
+// before any question is projected.
+function configure(options) {
+  registry.forEach(impl => {
+    if (typeof impl.configure === "function") {
+      impl.configure(options);
+    }
+  });
+}
+
 // The correct answer in the shape the type records responses in, or null.
 // MCQ keeps using the legacy correct_index column instead.
 function keyResponse(question) {
@@ -138,5 +151,6 @@ module.exports = {
   listTypes,
   toPublicQuestion,
   scoreResponse,
-  keyResponse
+  keyResponse,
+  configure
 };
