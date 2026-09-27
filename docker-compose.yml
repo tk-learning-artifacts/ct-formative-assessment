@@ -13,6 +13,8 @@ services:
       # refuses to start without it, or with the demo password.
       SEED_TEACHER_EMAIL: ${SEED_TEACHER_EMAIL:-teacher@ctquest.local}
       SEED_TEACHER_PASSWORD: ${SEED_TEACHER_PASSWORD:-}
+      # admin makes that first account a head of department (ADR 0004).
+      SEED_TEACHER_ROLE: ${SEED_TEACHER_ROLE:-teacher}
       SUBMIT_GRACE_SECONDS: ${SUBMIT_GRACE_SECONDS:-60}
       AI_PROVIDER: ${AI_PROVIDER:-none}
       AI_API_KEY: ${AI_API_KEY:-}
