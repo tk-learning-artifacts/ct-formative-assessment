@@ -239,3 +239,21 @@ test("the provider needs a key, and the key never appears outside the Authorizat
   assert.doesNotMatch(calls[0].init.body, /sk-or-test-key/);
   assert.doesNotMatch(JSON.stringify(provider), /sk-or-test-key/);
 });
+
+test("AI settings are read from the environment with safe defaults", () => {
+  const { loadConfig } = require("../src/config");
+  const defaults = loadConfig({}).ai;
+  assert.deepEqual(defaults, { provider: "none", apiKey: null, model: null, concurrency: 2, timeoutMs: 20000, appUrl: "http://localhost" });
+
+  // docker-compose passes unset variables as empty strings.
+  const blank = loadConfig({ AI_MODEL: "", AI_CONCURRENCY: "", AI_TIMEOUT_SECONDS: "", AI_APP_URL: "" }).ai;
+  assert.deepEqual(blank, defaults);
+
+  const set = loadConfig({ AI_PROVIDER: " OpenRouter ", AI_API_KEY: "k", AI_MODEL: "anthropic/claude-haiku-4.5", AI_CONCURRENCY: "4", AI_TIMEOUT_SECONDS: "45" }).ai;
+  assert.equal(set.provider, "openrouter");
+  assert.equal(set.concurrency, 4);
+  assert.equal(set.timeoutMs, 45000);
+
+  ["0", "11", "1.5", "lots"].forEach(value => assert.throws(() => loadConfig({ AI_CONCURRENCY: value }), /AI_CONCURRENCY/));
+  ["0", "-3", "500", "soon"].forEach(value => assert.throws(() => loadConfig({ AI_TIMEOUT_SECONDS: value }), /AI_TIMEOUT_SECONDS/));
+});
