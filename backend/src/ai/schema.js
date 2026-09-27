@@ -7,8 +7,11 @@
 //     "criterionId":  one of the question's rubric criterion ids,
 //     "score":        integer equal to that criterion's points (0..maxPoints),
 //     "feedbackCode": one of FEEDBACK_CODES,
-//     "feedback":     optional, at most FEEDBACK_MAX_CHARS, one line of plain text
+//     "feedback":     optional, at most FEEDBACK_MAX_CHARS of one-line plain text
 //   }
+//
+// "spec" below is { rubric: [{ id, points }], maxPoints }, which the guarded
+// provider takes from the payload built by buildScoringPayload().
 
 const FEEDBACK_CODES = [
   "correct",
@@ -22,16 +25,18 @@ const FEEDBACK_CODES = [
 const FEEDBACK_MAX_CHARS = 200;
 const OUTPUT_KEYS = ["criterionId", "score", "feedbackCode", "feedback"];
 
-// A JSON Schema the provider adapter passes to the model's structured-output
-// mode, built per question so the enums are the question's own rubric ids.
-function buildScoreSchema(question) {
+// Control, format (bidi overrides, zero-width), line/paragraph separator,
+// private-use and unassigned characters, plus angle brackets.
+const UNSAFE_FEEDBACK_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cn}<>]/u;
+
+function buildScoreSchema(spec) {
   return {
     type: "object",
     additionalProperties: false,
     required: ["criterionId", "score", "feedbackCode"],
     properties: {
-      criterionId: { type: "string", enum: question.rubric.map(criterion => criterion.id) },
-      score: { type: "integer", minimum: 0, maximum: question.points },
+      criterionId: { type: "string", enum: spec.rubric.map(criterion => criterion.id) },
+      score: { type: "integer", minimum: 0, maximum: spec.maxPoints },
       feedbackCode: { type: "string", enum: FEEDBACK_CODES },
       feedback: { type: "string", maxLength: FEEDBACK_MAX_CHARS }
     }
@@ -39,7 +44,7 @@ function buildScoreSchema(question) {
 }
 
 // Returns { ok: true, value } or { ok: false, errors }.
-function validateModelScore(raw, question) {
+function validateModelScore(raw, spec) {
   const errors = [];
   let output = raw;
 
@@ -61,14 +66,14 @@ function validateModelScore(raw, question) {
     }
   });
 
-  const criterion = (question.rubric || []).find(item => item.id === output.criterionId);
+  const criterion = (spec.rubric || []).find(item => item.id === output.criterionId);
 
   if (!criterion) {
     errors.push("criterionId is not one of the question's rubric criteria");
   }
 
-  if (!Number.isInteger(output.score) || output.score < 0 || output.score > question.points) {
-    errors.push(`score must be an integer from 0 to ${question.points}`);
+  if (!Number.isInteger(output.score) || output.score < 0 || output.score > spec.maxPoints) {
+    errors.push(`score must be an integer from 0 to ${spec.maxPoints}`);
   } else if (criterion && output.score !== criterion.points) {
     errors.push(`score ${output.score} does not match criterion "${criterion.id}" (${criterion.points} points)`);
   }
@@ -82,8 +87,8 @@ function validateModelScore(raw, question) {
       errors.push("feedback must be a string");
     } else if (output.feedback.length > FEEDBACK_MAX_CHARS) {
       errors.push(`feedback is longer than ${FEEDBACK_MAX_CHARS} characters`);
-    } else if (/[\u0000-\u001f\u007f<>]/.test(output.feedback)) {
-      errors.push("feedback must be one line of plain text");
+    } else if (UNSAFE_FEEDBACK_CHARS.test(output.feedback)) {
+      errors.push("feedback must be one line of plain text without control or formatting characters");
     }
   }
 
