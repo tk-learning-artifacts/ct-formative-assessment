@@ -837,6 +837,8 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       throw error;
     }
 
+    const questions = db.getEventQuestions(event.id);
+
     res.status(201).json({
       attempt: {
         id: attemptId,
@@ -848,14 +850,27 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       },
       serverNow: new Date(startedAtMs).toISOString(),
       event: publicEvent(event),
-      questions: db.getEventQuestions(event.id).map(scoring.toPublicQuestion),
+      questions: db.deliveredQuestions(db.getAttempt(attemptId)).map(scoring.toPublicQuestion),
+      questionCount: questions.length,
       progress: policy.studentProgressView(event, [])
     });
   });
 
   // Resume after a refresh, and fetch results later (including answers that
   // are scored after submission, such as AI-scored ones).
+  //
+  // ?fields=status is the page's poll: the settings, the deadline, which
+  // answers are committed and how their marking stands, and the total
+  // policy.js allows, with no question content, key or feedback. The page
+  // fetches the full attempt only when something in it has changed.
   app.get("/api/attempts/:id", (req, res) => {
+    const fields = req.query.fields;
+
+    if (fields !== undefined && fields !== "status") {
+      res.status(400).json({ error: "fields must be \"status\" when set." });
+      return;
+    }
+
     const attempt = attemptFromRequest(req, res);
 
     if (!attempt) {
@@ -866,11 +881,24 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     const reset = Boolean(attempt.reset_at);
     const inProgress = !reset && attempt.status === "started";
 
+    if (fields === "status") {
+      const result = reset ? null : db.getAttemptResult(attempt);
+
+      res.json({
+        attempt: { id: attempt.id, status: attemptSummary(attempt).status, deadlineAt: attempt.deadline_at, late: Boolean(attempt.late) },
+        serverNow: new Date().toISOString(),
+        progress: inProgress ? policy.studentStatusView(event, db.getCommittedItems(attempt)) : null,
+        result: result ? policy.studentTotal(event, result) : null
+      });
+      return;
+    }
+
     res.json({
       attempt: attemptSummary(attempt),
       serverNow: new Date().toISOString(),
       event: publicEvent(event),
-      questions: reset ? [] : db.getEventQuestions(attempt.event_id).map(scoring.toPublicQuestion),
+      questions: reset ? [] : db.deliveredQuestions(attempt).map(scoring.toPublicQuestion),
+      questionCount: db.getEventQuestions(attempt.event_id).length,
       progress: inProgress ? policy.studentProgressView(event, db.getCommittedItems(attempt)) : null,
       result: reset ? null : policy.studentResultView(event, db.getAttemptResult(attempt))
     });
@@ -918,10 +946,20 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
 
     scoringQueue.kick();
 
-    res.json({
+    // In order, the response brings the question the student moves on to
+    // (null after the last), which is all they have of it until now.
+    const view = {
       committed: policy.committedAnswerView(event, item),
       progress: policy.studentProgressView(event, db.getCommittedItems(attempt))
-    });
+    };
+
+    if (policy.navigationMode(event) === "linear") {
+      const delivered = db.deliveredQuestions(attempt);
+      const next = delivered.find(question => !view.progress.committed.some(entry => entry.questionId === question.id));
+      view.next = next ? scoring.toPublicQuestion(next) : null;
+    }
+
+    res.json(view);
   });
 
   app.post("/api/attempts/:id/submit", (req, res) => {

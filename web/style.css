@@ -695,6 +695,36 @@ legend {
   color: var(--color-line-strong);
 }
 
+/* Free navigation: each dot sits in a 32px button that jumps to its
+   question. The dot keeps its size; the button is the hit area. */
+.progress--jump {
+  gap: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.progress__jump {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.progress__jump:hover .progress__dot:not(.progress__dot--done) {
+  border-color: var(--color-accent-deep);
+  color: var(--color-ink);
+}
+
+.progress__jump:focus-visible {
+  outline-offset: -2px;
+}
+
 .timer {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -1774,6 +1804,20 @@ textarea.open-response {
 
   .q-strip__event {
     display: none;
+  }
+
+  /* A long row of question buttons scrolls sideways rather than taking
+     several lines of the sticky strip. */
+  .progress--jump {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .progress--jump li {
+    flex: none;
   }
 
   .stats {

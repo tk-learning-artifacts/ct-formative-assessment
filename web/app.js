@@ -17,6 +17,9 @@
   // settings or the time reaches the student (ADR 0003 §10).
   const SETTINGS_POLL_SECONDS = 30;
 
+  // The questions this student holds, in order. Under in-order navigation
+  // the server sends them one at a time (the ones reached so far), so this
+  // can be shorter than state.questionCount, the number in the test.
   let ACTIVE_BANK = [];
 
   const state = {
@@ -42,6 +45,7 @@
     // student moves to another question.
     notice: "",
     i: 0,
+    questionCount: 0,
     answers: {},
     startedAt: null,
     // The event's settings (ADR 0003) and the answers committed so far,
@@ -78,6 +82,28 @@
   function firstOpenIndex() {
     const index = ACTIVE_BANK.findIndex(q => !state.committed[q.id]);
     return index === -1 ? ACTIVE_BANK.length : index;
+  }
+
+  // Takes questions from the server: the full list from a start or a full
+  // read, or the one a commit under in-order navigation sends next. The
+  // list only ever grows, in the server's order.
+  function holdQuestions(questions, count) {
+    if (Array.isArray(questions) && questions.length > ACTIVE_BANK.length) {
+      ACTIVE_BANK = questions;
+    }
+
+    if (count) {
+      state.questionCount = count;
+    }
+
+    state.questionCount = Math.max(state.questionCount, ACTIVE_BANK.length);
+  }
+
+  function holdNext(question) {
+    if (question && !ACTIVE_BANK.some(q => q.id === question.id)) {
+      ACTIVE_BANK = ACTIVE_BANK.concat([question]);
+      state.questionCount = Math.max(state.questionCount, ACTIVE_BANK.length);
+    }
   }
 
   function setCommitted(progress) {
@@ -384,6 +410,7 @@
         delete state.answers[q.id];
       }
 
+      holdNext(payload.next);
       setCommitted(payload.progress);
       state.markingPolls = 0;
       saveAttempt();
@@ -480,6 +507,24 @@
     return JSON.stringify([state.eventTitle, state.feedbackMode, state.navigationMode, state.deadlineAt, locked, q ? state.committed[q.id] || null : null]);
   }
 
+  // What the status poll (GET /api/attempts/:id?fields=status) reports, and
+  // the same built from what this page holds: the settings, the deadline,
+  // and each committed answer with its marking status (only under "each").
+  // When the two differ, the page fetches the full attempt.
+  function statusSignature(progress, deadlineAt) {
+    const committed = ((progress && progress.committed) || []).map(item => [item.questionId, item.skipped, item.status || null]);
+    return JSON.stringify([progress && progress.feedbackMode, progress && progress.navigationMode, deadlineAt || null, committed]);
+  }
+
+  function heldStatusSignature() {
+    const committed = Object.values(state.committed).map(item => ({
+      questionId: item.questionId,
+      skipped: item.skipped,
+      status: item.result ? item.result.status : null
+    }));
+    return statusSignature({ feedbackMode: state.feedbackMode, navigationMode: state.navigationMode, committed }, state.deadlineAt);
+  }
+
   // The first question with neither a committed nor a typed answer, or, if
   // every one has something, the last uncommitted question.
   function firstUnansweredIndex() {
@@ -514,6 +559,7 @@
         }
 
         const payload = await postCommit(q, state.answers[q.id]);
+        holdNext(payload.next);
         setCommitted(payload.progress);
       }
     } catch (error) {
@@ -559,10 +605,12 @@
     return parts.length ? `Your teacher changed this test. ${parts.join(" ")}` : "";
   }
 
-  // Re-reads the attempt: settings, committed answers and the deadline. If
-  // anything changed, the question is redrawn (the timer restarts with the
-  // new deadline). stayOn keeps the student on that question, to show its
-  // stored result, instead of moving them to the first open one.
+  // Re-reads the attempt: settings, committed answers and the deadline. The
+  // status poll comes first and carries no questions; only if it differs
+  // from what the page holds (or stayOn is set) is the full attempt fetched.
+  // If anything changed, the question is redrawn (the timer restarts with
+  // the new deadline). stayOn keeps the student on that question, to show
+  // its stored result, instead of moving them to the first open one.
   async function syncFromServer({ stayOn = null } = {}) {
     if (!state.attemptId || !state.inAttempt || state.submitting || state.committing || state.syncing) {
       scheduleSync();
@@ -570,12 +618,26 @@
     }
 
     const attemptId = state.attemptId;
+    const stillHere = () => state.attemptId === attemptId && !state.submitting && !state.committing && state.inAttempt;
     state.syncing = true;
 
     try {
-      const payload = await api(`/api/attempts/${attemptId}`, { method: "GET", headers: attemptHeaders() });
+      const status = await api(`/api/attempts/${attemptId}?fields=status`, { method: "GET", headers: attemptHeaders() });
 
-      if (state.attemptId !== attemptId || state.submitting || state.committing || !state.inAttempt) {
+      if (!stillHere()) {
+        return;
+      }
+
+      if (status.attempt.status === "started" && !stayOn &&
+          statusSignature(status.progress, status.attempt.deadlineAt) === heldStatusSignature()) {
+        return;
+      }
+
+      const payload = status.attempt.status === "started"
+        ? await api(`/api/attempts/${attemptId}`, { method: "GET", headers: attemptHeaders() })
+        : status;
+
+      if (!stillHere()) {
         return;
       }
 
@@ -586,6 +648,7 @@
       }
 
       captureCurrentAnswer();
+      holdQuestions(payload.questions, payload.questionCount);
 
       const before = { feedbackMode: state.feedbackMode, navigationMode: state.navigationMode, deadlineAt: state.deadlineAt };
       const signature = progressSignature();
@@ -804,6 +867,7 @@
     state.answers = answers || {};
     state.startedAt = payload.attempt.startedAt ? Date.parse(payload.attempt.startedAt) : Date.now();
     ACTIVE_BANK = payload.questions;
+    state.questionCount = Math.max(payload.questionCount || 0, ACTIVE_BANK.length);
 
     const progress = payload.progress || {};
     state.feedbackMode = progress.feedbackMode || payload.event.feedbackMode || "release";
@@ -937,11 +1001,54 @@
     syncFromServer();
   }
 
+  // Free navigation: a dot jumps to its question, saving the answer on
+  // screen first, as Next does. Focus follows to the new current dot,
+  // because the redraw replaces the one that was clicked. On a phone the
+  // row scrolls sideways; it is kept scrolled to the current question.
+  function bindProgressDots() {
+    const row = document.getElementById("progressDots");
+
+    if (!row) {
+      return;
+    }
+
+    const current = row.querySelector(".progress__dot--current");
+
+    if (current && row.scrollWidth > row.clientWidth) {
+      const rowBox = row.getBoundingClientRect();
+      const dotBox = current.getBoundingClientRect();
+      row.scrollLeft = Math.max(0, row.scrollLeft + dotBox.left - rowBox.left - (rowBox.width - dotBox.width) / 2);
+    }
+
+    row.addEventListener("click", event => {
+      const button = event.target.closest("[data-goto]");
+
+      if (!button || state.committing || state.submitting) {
+        return;
+      }
+
+      const index = Number(button.dataset.goto);
+
+      if (index === state.i) {
+        return;
+      }
+
+      captureCurrentAnswer();
+      goTo(index);
+
+      const focus = document.querySelector(`#progressDots [data-goto="${state.i}"]`);
+
+      if (focus) {
+        focus.focus();
+      }
+    });
+  }
+
   function renderQuestion() {
     const q = ACTIVE_BANK[state.i];
     const renderer = Types.get(q.type);
     const currentNumber = state.i + 1;
-    const isLast = state.i === ACTIVE_BANK.length - 1;
+    const isLast = state.i === state.questionCount - 1;
     const answered = answeredCount();
     const skipped = skippedCount();
     const locked = Boolean(state.committed[q.id]);
@@ -949,19 +1056,30 @@
     const meta = [q.level, q.topic, q.qType].filter(Boolean)
       .map(label => `<span class="concept-tag">${escapeHtml(label)}</span>`).join("");
 
-    // One dot per question: filled once answered, dashed when skipped,
-    // square once locked, ringed for this one. In order, the ones not
-    // reached yet are faded. The strip's text says the same in words.
-    const dots = ACTIVE_BANK.map((item, idx) => {
+    // One dot per question in the test: filled once answered, dashed when
+    // skipped, square once locked, ringed for this one. In order, the ones
+    // not reached yet are faded (and not held by the page at all). Under
+    // free navigation each dot is a button that jumps to its question, and
+    // its label says the same as the dot in words.
+    const jumpable = !isLinear();
+    const dots = Array.from({ length: state.questionCount }, (_unused, idx) => {
+      const item = ACTIVE_BANK[idx];
+      const committed = item ? state.committed[item.id] : null;
       const classes = ["progress__dot"];
-      const committed = state.committed[item.id];
+      const words = [`Question ${idx + 1}`];
+
       if (committed && committed.skipped) {
         classes.push("progress__dot--skipped");
-      } else if (isAnswered(item)) {
+        words.push("skipped");
+      } else if (item && isAnswered(item)) {
         classes.push("progress__dot--done");
+        words.push("answered");
+      } else {
+        words.push("not answered");
       }
       if (committed) {
         classes.push("progress__dot--locked");
+        words.push("locked");
       }
       if (isLinear() && idx > state.i) {
         classes.push("progress__dot--ahead");
@@ -969,7 +1087,12 @@
       if (idx === state.i) {
         classes.push("progress__dot--current");
       }
-      return `<li class="${classes.join(" ")}">${idx + 1}</li>`;
+
+      const dot = `<span class="${classes.join(" ")}">${idx + 1}</span>`;
+
+      return jumpable && item
+        ? `<li><button type="button" class="progress__jump" data-goto="${idx}" aria-label="${words.join(", ")}" ${idx === state.i ? `aria-current="step"` : ""}>${dot}</button></li>`
+        : `<li>${dot}</li>`;
     }).join("");
 
     const art = q.art ? `<pre>${escapeHtml(q.art)}</pre>` : "";
@@ -979,8 +1102,10 @@
 
     screen.innerHTML = `
       <div class="q-strip">
-        <span class="q-strip__count">Question ${currentNumber} of ${ACTIVE_BANK.length}</span>
-        <ol class="progress" aria-hidden="true">${dots}</ol>
+        <span class="q-strip__count">Question ${currentNumber} of ${state.questionCount}</span>
+        ${jumpable
+          ? `<ol class="progress progress--jump" id="progressDots" aria-label="Questions">${dots}</ol>`
+          : `<ol class="progress" id="progressDots" aria-hidden="true">${dots}</ol>`}
         <span class="muted small">${answered} answered${skipped ? `, ${skipped} skipped` : ""}</span>
         ${state.deadlineMs !== null ? `<span class="timer" id="timerPill" role="timer" aria-live="off"></span>` : ""}
         <span class="q-strip__event">${escapeHtml(state.eventTitle)} <span class="mono">${escapeHtml(state.joinCode)}</span></span>
@@ -1018,6 +1143,7 @@
 
     updateTimerPill();
     scheduleSync();
+    bindProgressDots();
 
     const answerArea = document.getElementById("answerArea");
     answerArea.addEventListener("change", captureCurrentAnswer);
@@ -1084,7 +1210,9 @@
 
     document.getElementById("submitBtn").addEventListener("click", async () => {
       captureCurrentAnswer();
-      const missing = ACTIVE_BANK.filter(item => !state.committed[item.id] && state.answers[item.id] === undefined).length;
+      // Under in order, questions not reached yet are not held here at all.
+      const given = ACTIVE_BANK.filter(item => state.committed[item.id] || state.answers[item.id] !== undefined).length;
+      const missing = state.questionCount - given;
       const message = isLinear()
         ? `${missing} question${missing === 1 ? " has" : "s have"} no answer yet, including any you haven't reached. Submit anyway? They score zero.`
         : `You have ${missing} unanswered question${missing === 1 ? "" : "s"}. Submit anyway? Unanswered questions score zero.`;
@@ -1119,21 +1247,40 @@
     }
   }
 
-  // AI-scored answers are marked after submit, so the total can rise. Check
-  // back a few times while any are still pending.
-  function pollWhileMarking(pending, { auto, polls = 0 }) {
+  // The parts of a result the status poll reports.
+  function totalsSignature(result) {
+    return JSON.stringify(result ? [result.score, result.max, result.pending || 0, Boolean(result.markedSoFar), Boolean(result.breakdownReleased)] : null);
+  }
+
+  // AI-scored answers are marked after submit, so the total can rise (or,
+  // before release, the results can be released). Check back a few times
+  // while any are still pending: the status poll first, and the full
+  // attempt only when its totals have changed.
+  function pollWhileMarking(result, { auto, polls = 0 }) {
     stopMarkingPoll();
 
-    if (!pending || polls >= MARKING_POLLS) {
+    if (!result || !result.pending || polls >= MARKING_POLLS) {
       return;
     }
 
     const attemptId = state.attemptId;
+    const shown = totalsSignature(result);
 
     state.markingTimerId = setTimeout(async () => {
       state.markingTimerId = null;
 
       try {
+        const status = await api(`/api/attempts/${attemptId}?fields=status`, { method: "GET", headers: attemptHeaders() });
+
+        if (state.attemptId !== attemptId || status.attempt.status !== "submitted") {
+          return;
+        }
+
+        if (totalsSignature(status.result) === shown) {
+          pollWhileMarking(result, { auto, polls: polls + 1 });
+          return;
+        }
+
         const view = await api(`/api/attempts/${attemptId}`, { method: "GET", headers: attemptHeaders() });
 
         if (state.attemptId === attemptId && view.attempt.status === "submitted") {
@@ -1141,7 +1288,7 @@
         }
       } catch (_error) {
         if (state.attemptId === attemptId) {
-          pollWhileMarking(pending, { auto, polls: polls + 1 });
+          pollWhileMarking(result, { auto, polls: polls + 1 });
         }
       }
     }, MARKING_POLL_SECONDS * 1000);
@@ -1241,7 +1388,7 @@
       </div>
     `;
 
-    pollWhileMarking(pendingCount, { auto, polls });
+    pollWhileMarking(result, { auto, polls });
 
     document.getElementById("copyBtn").addEventListener("click", async () => {
       try {
@@ -1265,6 +1412,7 @@
       state.deadlineAt = null;
       state.submitting = false;
       state.i = 0;
+      state.questionCount = 0;
       state.answers = {};
       state.startedAt = null;
       state.feedbackMode = "release";

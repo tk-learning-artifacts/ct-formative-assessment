@@ -548,6 +548,20 @@ function createStore(db, content) {
     return { score: result.score, max: result.max };
   }
 
+  // The questions this attempt may hold, in order, with answer keys (the
+  // caller projects them): all of them, or under in-order navigation only
+  // those up to the one the student is on (policy.deliveredQuestionCount).
+  function deliveredQuestions(attempt) {
+    const questions = getEventQuestions(attempt.event_id);
+    const count = policy.deliveredQuestionCount(attempt, {
+      total: questions.length,
+      committed: committedIds(attempt.id).size,
+      heldAll: ranUnderFreeNavigation(attempt)
+    });
+
+    return questions.slice(0, count);
+  }
+
   // Whether the event's navigation was switched away from free after this
   // attempt started.
   function ranUnderFreeNavigation(attempt) {
@@ -970,6 +984,7 @@ function createStore(db, content) {
     submitAttempt,
     commitAnswer,
     getCommittedItems,
+    deliveredQuestions,
     getAttemptResult,
     getResults,
     recomputeAttemptScore,

@@ -158,6 +158,23 @@ function committedAnswerView(event, item) {
   return view;
 }
 
+// How many of the event's questions, from the first, a student may hold.
+// Under in-order navigation (decided by Akmal, 2026-09-27) an attempt gets
+// them one at a time: the ones it has committed, which are the first ones,
+// and the one it is on, so the content of later questions never reaches the
+// browser early. An attempt that ran while the event's navigation was free
+// (heldAll) was sent every question then and keeps them; so does every
+// attempt under free navigation. The same count applies after submit:
+// answers stored at submit are not commits, so it covers exactly the
+// questions the student reached.
+function deliveredQuestionCount(event, { total, committed, heldAll }) {
+  if (navigationMode(event) !== "linear" || heldAll) {
+    return total;
+  }
+
+  return Math.min(total, committed + 1);
+}
+
 // The attempt's settings and committed answers, for the start and resume
 // responses of an attempt still in progress.
 function studentProgressView(event, committedItems) {
@@ -165,6 +182,28 @@ function studentProgressView(event, committedItems) {
     feedbackMode: feedbackMode(event),
     navigationMode: navigationMode(event),
     committed: (committedItems || []).map(item => committedAnswerView(event, item))
+  };
+}
+
+// The same, for the status poll (GET /api/attempts/:id?fields=status): only
+// which answers are committed and, under "each", how far each one's marking
+// has got, so the page can tell whether to fetch the full attempt. No result,
+// key or feedback.
+function studentStatusView(event, committedItems) {
+  const each = feedbackMode(event) === "each";
+
+  return {
+    feedbackMode: feedbackMode(event),
+    navigationMode: navigationMode(event),
+    committed: (committedItems || []).map(item => {
+      const view = { questionId: item.id, skipped: item.response === null };
+
+      if (each) {
+        view.status = item.status;
+      }
+
+      return view;
+    })
   };
 }
 
@@ -236,7 +275,9 @@ module.exports = {
   studentMaySeeBreakdown,
   studentFeedback,
   committedAnswerView,
+  deliveredQuestionCount,
   studentProgressView,
+  studentStatusView,
   marksLater,
   studentTotal,
   studentResultView
