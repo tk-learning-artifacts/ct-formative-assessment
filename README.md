@@ -85,7 +85,7 @@ To change the schema, add a new file with the current date and time in its name.
 ### Authentication
 
 - **Teachers:** JWT. The backend issues a 7-day token on login; protected routes need `Authorization: Bearer <token>`. The secret comes from `JWT_SECRET`, which is required when `NODE_ENV=production`. Teachers only see events they created. Passwords created by the original code (one fixed salt) still work and are rehashed with a random salt on the next login.
-- **First account:** `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` create the first teacher in an empty database. In production the server refuses to start without `SEED_TEACHER_PASSWORD`, with the demo password `changeme123`, or while any stored account still accepts the demo password. Fix an account with `npm run set-password -- <email>`, described below.
+- **First account:** `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` create the first teacher in an empty database. In production the server refuses to start with the demo password `changeme123`, without `SEED_TEACHER_PASSWORD` when the database has no teacher yet, or while any stored account still accepts the demo password. Fix an account with `npm run set-password -- <email>`, described below.
 - **Students:** no account. Starting an attempt returns a one-off attempt token. The page keeps it in `sessionStorage` and sends it as `X-Attempt-Token` to resume (`GET /api/attempts/:id`) and to submit. Only a hash is stored.
 - **Deadlines:** an attempt's deadline is the earlier of start + duration and the event's `end_at`. A submission up to `SUBMIT_GRACE_SECONDS` after it counts as on time; a later one is stored and marked late. The page counts down, auto-submits at zero and retries if the network fails.
 
@@ -216,7 +216,7 @@ Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question 
 cp .env.example .env
 ```
 
-Edit `.env` and set a strong `JWT_SECRET` and a `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` for the first teacher. `docker compose` refuses to start without `JWT_SECRET` or `SEED_TEACHER_PASSWORD`.
+Edit `.env` and set a strong `JWT_SECRET` and a `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` for the first teacher. `docker compose` refuses to start without `JWT_SECRET`. The server refuses to start on an empty database without `SEED_TEACHER_PASSWORD`; once the first teacher exists, you can remove it from `.env`.
 
 ### 2. Build and start
 
@@ -259,7 +259,7 @@ Upgrading the image migrates the database in the volume on first start and leave
 |---|---|---|---|
 | `JWT_SECRET` | Yes | — | Secret used to sign JWTs. Use a long random string. The server refuses to start without it when `NODE_ENV=production`. |
 | `SEED_TEACHER_EMAIL` | No | `teacher@ctquest.local` | First teacher account, created only in an empty database. |
-| `SEED_TEACHER_PASSWORD` | Yes (production) | `changeme123` in development | Password for that account. Production refuses to start without it or with the demo password. |
+| `SEED_TEACHER_PASSWORD` | On first production boot | `changeme123` in development | Password for that account. Production refuses the demo password, and refuses to seed an empty database without it. |
 | `PORT` | No | `3000` | Port the server listens on. |
 | `HOST` | No | all interfaces | Address to bind, e.g. `127.0.0.1` for a local-only run. |
 | `DB_PATH` | No | `backend/data/app.db` | SQLite file location. |

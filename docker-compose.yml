@@ -12,7 +12,7 @@ services:
       # Only used to create the first teacher in an empty database; production
       # refuses to start without it, or with the demo password.
       SEED_TEACHER_EMAIL: ${SEED_TEACHER_EMAIL:-teacher@ctquest.local}
-      SEED_TEACHER_PASSWORD: ${SEED_TEACHER_PASSWORD:?SEED_TEACHER_PASSWORD must be set}
+      SEED_TEACHER_PASSWORD: ${SEED_TEACHER_PASSWORD:-}
       SUBMIT_GRACE_SECONDS: ${SUBMIT_GRACE_SECONDS:-60}
       AI_PROVIDER: ${AI_PROVIDER:-none}
       AI_API_KEY: ${AI_API_KEY:-}

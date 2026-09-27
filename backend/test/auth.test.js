@@ -45,9 +45,9 @@ function startServer(env) {
   });
 }
 
-test("production refuses to start without JWT_SECRET or a real seed password", () => {
+test("production refuses to start without JWT_SECRET or with the demo seed password", () => {
   assert.throws(() => loadConfig({ NODE_ENV: "production" }), /JWT_SECRET/);
-  assert.throws(() => loadConfig({ NODE_ENV: "production", JWT_SECRET: "x" }), /SEED_TEACHER_PASSWORD/);
+  assert.equal(loadConfig({ NODE_ENV: "production", JWT_SECRET: "x" }).seedTeacher.password, null);
   assert.throws(() => loadConfig({ NODE_ENV: "production", JWT_SECRET: "x", SEED_TEACHER_PASSWORD: "changeme123" }), /SEED_TEACHER_PASSWORD/);
   assert.equal(loadConfig(PROD).jwtSecret, "long-random");
   assert.equal(loadConfig({ NODE_ENV: "development" }).jwtSecret, "ct-quest-dev-secret");
@@ -74,6 +74,21 @@ test("a fresh production database is seeded from SEED_TEACHER_EMAIL / SEED_TEACH
   } finally {
     ctx.cleanup();
   }
+});
+
+test("SEED_TEACHER_PASSWORD is needed only to seed an empty production database", async () => {
+  const dir = makeTempDir();
+  const dbPath = path.join(dir, "app.db");
+  const { SEED_TEACHER_PASSWORD, ...prodWithoutSeed } = PROD;
+
+  const fresh = runNode(SERVER, [], { ...prodWithoutSeed, DB_PATH: dbPath });
+  assert.equal(fresh.status, 1);
+  assert.match(fresh.stderr, /SEED_TEACHER_PASSWORD must be set/);
+
+  (await buildApp({ dbPath, env: PROD })).close();
+  const { child } = await startServer({ ...prodWithoutSeed, DB_PATH: dbPath });
+  child.kill();
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("production refuses an existing database that still holds the demo password, until set-password is run", async () => {

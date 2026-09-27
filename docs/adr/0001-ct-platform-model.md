@@ -184,7 +184,7 @@ Event times must be absolute ISO 8601 strings with `Z` or an offset. A bare `202
 - `SEED_TEACHER_EMAIL` and `SEED_TEACHER_PASSWORD` create the first account in an empty database.
 - With `NODE_ENV=production` the server refuses to start in any of these cases:
   - `JWT_SECRET` is missing
-  - `SEED_TEACHER_PASSWORD` is missing or equals the demo password `changeme123`
+  - `SEED_TEACHER_PASSWORD` equals the demo password `changeme123`, or is missing when the database has no teacher yet to seed
   - any stored account still verifies against the demo password, including one seeded by the original code
 - `npm run set-password -- <email>` fixes an account. It reads the password from `NEW_PASSWORD` or stdin (hidden prompt on a terminal), never argv.
 
@@ -294,6 +294,6 @@ Student endpoints:
 - Content authors edit JSON and restart. `npm test` then checks the tags, the bands, the legacy modes and every answer key.
 - Four defective questions are fixed in new events and in existing events without submissions. Events with submissions keep what their students saw.
 - In-progress attempts at deploy time have no token; the student starts again.
-- Production needs `JWT_SECRET` and `SEED_TEACHER_PASSWORD`, and no account may still use the demo password.
+- Production needs `JWT_SECRET`, needs `SEED_TEACHER_PASSWORD` only to seed an empty database, and no account may still use the demo password.
 - The Docker image copies `backend/content` and `backend/scripts`; forgetting `content` would stop the server at boot.
 - New tables and columns come in through timestamped migrations recorded in `schema_migrations`.

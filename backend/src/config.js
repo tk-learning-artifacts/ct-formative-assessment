@@ -18,11 +18,8 @@ function loadConfig(env = process.env) {
 
   const seedPassword = env.SEED_TEACHER_PASSWORD || null;
 
-  if (isProduction && (!seedPassword || seedPassword === DEFAULT_TEACHER_PASSWORD)) {
-    throw new Error(
-      "SEED_TEACHER_PASSWORD must be set to something other than the demo password when NODE_ENV=production. " +
-      "It is only used to create the first teacher account in an empty database."
-    );
+  if (isProduction && seedPassword === DEFAULT_TEACHER_PASSWORD) {
+    throw new Error("SEED_TEACHER_PASSWORD must not be the demo password when NODE_ENV=production.");
   }
 
   const graceSeconds = env.SUBMIT_GRACE_SECONDS === undefined ? 60 : Number(env.SUBMIT_GRACE_SECONDS);
@@ -41,7 +38,9 @@ function loadConfig(env = process.env) {
     submitGraceMs: graceSeconds * 1000,
     seedTeacher: {
       email: String(env.SEED_TEACHER_EMAIL || DEFAULT_TEACHER_EMAIL).trim().toLowerCase(),
-      password: seedPassword || DEFAULT_TEACHER_PASSWORD
+      // Null in production when unset: seeding an empty database then fails,
+      // but a database that already has a teacher boots without it.
+      password: seedPassword || (isProduction ? null : DEFAULT_TEACHER_PASSWORD)
     },
     ai: {
       // "none" keeps every AI feature off. See src/ai/index.js.

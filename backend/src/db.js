@@ -595,6 +595,12 @@ function createStore(db, content) {
     const userCount = db.prepare("SELECT COUNT(*) AS count FROM users").get().count;
 
     if (userCount === 0 && seedTeacher) {
+      if (!seedTeacher.password) {
+        throw new Error(
+          "SEED_TEACHER_PASSWORD must be set to create the first teacher account in an empty production database."
+        );
+      }
+
       createUser({ email: seedTeacher.email, password: seedTeacher.password });
     }
 
