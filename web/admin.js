@@ -149,11 +149,16 @@
       </button>
     `).join("");
 
+    const resultsEvent = state.results && state.results.event;
     const resultsBlock = state.results
       ? `
         <div class="results-breakdown" style="margin-top:18px">
           <p class="panel-label">Submissions</p>
-          <h3>${escapeHtml(state.results.event.title)} (${escapeHtml(state.results.event.join_code)})</h3>
+          <h3>${escapeHtml(resultsEvent.title)} (${escapeHtml(resultsEvent.join_code)})</h3>
+          <div class="row" style="margin-top:10px">
+            <span class="pill">${resultsEvent.breakdown_released ? "Breakdown visible to students" : "Breakdown hidden from students"}</span>
+            ${resultsEvent.results_released_at ? "" : `<button id="releaseBtn" class="secondary">Release results</button>`}
+          </div>
           <div class="stack" style="margin-top:14px">
             ${state.results.attempts.length
               ? state.results.attempts.map(attempt => `
@@ -164,8 +169,10 @@
                   </div>
                   <div class="event-card__meta">
                     <span>${escapeHtml(attempt.student_group)}</span>
-                    <span>${escapeHtml(attempt.status)}</span>
+                    <span>${escapeHtml(attempt.reset_at ? "reset" : attempt.status)}</span>
+                    ${attempt.late ? `<span class="bad">late</span>` : ""}
                     <span>${attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : "Not submitted"}</span>
+                    ${attempt.reset_at ? "" : `<button class="secondary" data-reset-attempt="${attempt.id}">Reset</button>`}
                   </div>
                 </div>
               `).join("")
@@ -288,8 +295,10 @@
             ...selection,
             joinCode,
             durationMinutes: durationMinutes ? Number(durationMinutes) : null,
-            startAt: startAt || null,
-            endAt: endAt || null
+            // datetime-local has no time zone; converting here uses the
+            // teacher's browser zone and sends an absolute UTC time.
+            startAt: startAt ? new Date(startAt).toISOString() : null,
+            endAt: endAt ? new Date(endAt).toISOString() : null
           })
         });
 
@@ -297,6 +306,40 @@
       } catch (error) {
         alert(error.message);
       }
+    });
+
+    const releaseBtn = document.getElementById("releaseBtn");
+
+    if (releaseBtn) {
+      releaseBtn.addEventListener("click", async () => {
+        if (!confirm("Release results? Students will see which questions they got right and the correct options.")) {
+          return;
+        }
+
+        try {
+          await api(`/api/events/${state.selectedEventId}/release`, { method: "POST" });
+          await loadResults(state.selectedEventId);
+        } catch (error) {
+          alert(error.message);
+        }
+      });
+    }
+
+    Array.from(screen.querySelectorAll("[data-reset-attempt]")).forEach(button => {
+      button.addEventListener("click", async () => {
+        const attemptId = Number(button.getAttribute("data-reset-attempt"));
+
+        if (!confirm("Reset this attempt? It stays in the record, and the student can start the test again.")) {
+          return;
+        }
+
+        try {
+          await api(`/api/events/${state.selectedEventId}/attempts/${attemptId}/reset`, { method: "POST" });
+          await loadResults(state.selectedEventId);
+        } catch (error) {
+          alert(error.message);
+        }
+      });
     });
 
     Array.from(screen.querySelectorAll("[data-event-id]")).forEach(button => {

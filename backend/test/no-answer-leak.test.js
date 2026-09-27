@@ -4,8 +4,16 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
-const { buildApp, login, startAttempt, submit, allKeys } = require("./helpers");
-const { PUBLIC_FILES } = require("../src/app");
+const { buildApp, login, startAttempt, submit, getAttempt, allKeys } = require("./helpers");
+const { PUBLIC_FILES, listPublicFiles } = require("../src/app");
+
+test("the public file list comes from web/, without build config", () => {
+  const files = Array.from(listPublicFiles());
+  ["index.html", "admin.html", "app.js", "admin.js", "style.css", "type-registry.js", "types/mcq.js"]
+    .forEach(name => assert.ok(files.includes(name), name));
+  ["vite.config.js", "package.json"].forEach(name => assert.ok(!files.includes(name), name));
+  assert.ok(files.every(name => /\.(html|css|js)$/.test(name)));
+});
 
 // "details" is the teacher-facing focus note, which often gives the method away.
 const ANSWER_KEYS = ["answer", "answerIndex", "correctIndex", "correct_index", "accepted", "rubric", "solution", "details"];
@@ -50,9 +58,11 @@ test("answer keys never reach students", async t => {
   await t.test("join, start and submit responses carry no answer fields", async () => {
     const join = await request(app).post("/api/events/join").send({ joinCode: "DEMO123" });
     const started = await startAttempt(app);
+    const resumed = await getAttempt(app, started.attempt);
     const submitted = await submit(app, started.attempt, { "P5-01": 0 });
+    const afterSubmit = await getAttempt(app, started.attempt);
 
-    [join.body, started, submitted.body].forEach((body, i) => {
+    [join.body, started, resumed.body, submitted.body, afterSubmit.body].forEach((body, i) => {
       const keys = allKeys(body);
       ANSWER_KEYS.forEach(key => assert.ok(!keys.has(key), `response ${i} has "${key}"`));
     });
@@ -80,6 +90,16 @@ test("answer keys never reach students", async t => {
       assert.equal(res.status, 404, `${method} ${url}`);
       assert.match(res.headers["content-type"], /application\/json/);
       assert.equal(typeof res.body.error, "string");
+    }
+  });
+
+  await t.test("the student page learns its question-type renderers from the server", async () => {
+    const res = await request(app).get("/api/web-types");
+    assert.equal(res.status, 200);
+    assert.ok(res.body.renderers.includes("types/mcq.js"));
+
+    for (const file of res.body.renderers) {
+      assert.equal((await request(app).get(`/${file}`)).status, 200, file);
     }
   });
 

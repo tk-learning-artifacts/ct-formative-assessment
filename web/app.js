@@ -3,6 +3,12 @@
   const themeToggle = document.getElementById("themeToggle");
   const root = document.documentElement;
   const THEME_KEY = "ct-quest-theme";
+  const ATTEMPT_KEY = "ct-quest-attempt";
+  const Types = window.CTQuestTypes;
+  const h = { escapeHtml };
+
+  // Waits before each retry of a failed submission, in seconds.
+  const RETRY_DELAYS = [1, 2, 4, 8, 15, 30, 30, 30, 60, 60];
 
   let ACTIVE_BANK = [];
 
@@ -11,7 +17,6 @@
     group: "",
     joinCode: "",
     eventTitle: "",
-    durationMinutes: null,
     attemptId: null,
     attemptToken: null,
     deadlineMs: null,
@@ -23,7 +28,7 @@
   };
 
   function answeredCount() {
-    return Object.keys(state.answers).length;
+    return ACTIVE_BANK.filter(q => state.answers[q.id] !== undefined).length;
   }
 
   function clamp(n, a, b) {
@@ -45,6 +50,50 @@
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
   }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ---------- Attempt saved in this tab (survives a refresh) ----------
+  // sessionStorage can be missing or throw (private mode, blocked storage);
+  // the test still works, it just cannot resume after a refresh.
+
+  function saveAttempt(extra) {
+    try {
+      sessionStorage.setItem(ATTEMPT_KEY, JSON.stringify({
+        attemptId: state.attemptId,
+        token: state.attemptToken,
+        answers: state.answers,
+        i: state.i,
+        name: state.name,
+        group: state.group,
+        joinCode: state.joinCode,
+        ...extra
+      }));
+    } catch (_error) {
+      // Ignore: resume is a convenience.
+    }
+  }
+
+  function readSavedAttempt() {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(ATTEMPT_KEY) || "null");
+      return saved && saved.attemptId && saved.token ? saved : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function clearSavedAttempt() {
+    try {
+      sessionStorage.removeItem(ATTEMPT_KEY);
+    } catch (_error) {
+      // Ignore.
+    }
+  }
+
+  // ---------- Theme ----------
 
   function getPreferredTheme() {
     const saved = localStorage.getItem(THEME_KEY);
@@ -76,6 +125,8 @@
     });
   }
 
+  // ---------- API ----------
+
   async function api(path, options) {
     // Merge rather than spread headers, so a caller's extra header (such as
     // the attempt token) does not drop Content-Type and empty the JSON body.
@@ -90,11 +141,20 @@
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new Error(payload.error || "Request failed.");
+      const error = new Error(payload.error || "Request failed.");
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
     }
 
     return payload;
   }
+
+  function attemptHeaders() {
+    return { "X-Attempt-Token": state.attemptToken };
+  }
+
+  // ---------- Timer ----------
 
   function formatRemaining(ms) {
     const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
@@ -118,7 +178,7 @@
     }
 
     const remaining = state.deadlineMs - Date.now();
-    pill.textContent = `${formatRemaining(remaining)} left`;
+    pill.textContent = remaining > 0 ? `${formatRemaining(remaining)} left` : "Time is up";
     pill.classList.toggle("pill--timer-low", remaining <= 60 * 1000);
   }
 
@@ -145,39 +205,85 @@
     }, 1000);
   }
 
-  function captureCurrentSelection() {
-    const q = ACTIVE_BANK[state.i];
-    const selected = screen.querySelector('input[name="opt"]:checked');
+  // ---------- Answers ----------
 
-    if (q && selected) {
-      state.answers[q.id] = Number(selected.value);
+  function captureCurrentAnswer() {
+    const q = ACTIVE_BANK[state.i];
+    const container = document.getElementById("answerArea");
+
+    if (!q || !container) {
+      return;
+    }
+
+    const response = Types.get(q.type).readResponse(container, q);
+
+    if (response !== undefined) {
+      state.answers[q.id] = response;
+    }
+
+    saveAttempt();
+  }
+
+  function showStatus(message) {
+    const el = document.getElementById("submitStatus");
+    if (el) {
+      el.textContent = message;
+      el.hidden = !message;
     }
   }
 
+  // Submits the answers. Network failures and server errors are retried with
+  // growing waits, so an auto-submit at the deadline survives a flaky
+  // connection; answers stay saved in this tab meanwhile.
   async function submitAttempt({ auto = false } = {}) {
     if (state.submitting || !state.attemptId) {
       return;
     }
 
-    captureCurrentSelection();
+    captureCurrentAnswer();
     state.submitting = true;
 
-    try {
-      const payload = await api(`/api/attempts/${state.attemptId}/submit`, {
-        method: "POST",
-        headers: { "X-Attempt-Token": state.attemptToken },
-        body: JSON.stringify({ answers: state.answers })
-      });
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        showStatus(attempt === 0 ? "Sending your answers..." : `Sending your answers (try ${attempt + 1})...`);
+        const payload = await api(`/api/attempts/${state.attemptId}/submit`, {
+          method: "POST",
+          headers: attemptHeaders(),
+          body: JSON.stringify({ answers: state.answers })
+        });
 
-      stopTimer();
-      renderResults(payload, { auto });
-    } catch (error) {
-      state.submitting = false;
-      alert(auto ? `Time is up, but your answers could not be sent: ${error.message}` : error.message);
+        stopTimer();
+        saveAttempt({ submitted: true });
+        await showResults(payload, { auto });
+        return;
+      } catch (error) {
+        if (error.status === 409) {
+          // Already submitted (for example by another tab): show the result.
+          stopTimer();
+          await resumeAttempt(readSavedAttempt() || { attemptId: state.attemptId, token: state.attemptToken });
+          return;
+        }
+
+        const retryable = !error.status || error.status >= 500;
+
+        if (!retryable || attempt >= RETRY_DELAYS.length) {
+          state.submitting = false;
+          showStatus("");
+          alert(auto ? `Time is up, but your answers could not be sent: ${error.message}` : error.message);
+          return;
+        }
+
+        const wait = RETRY_DELAYS[attempt];
+        showStatus(`Could not reach the server. Your answers are saved here; trying again in ${wait}s...`);
+        await sleep(wait * 1000);
+      }
     }
   }
 
+  // ---------- Screens ----------
+
   function renderStart(errorMessage) {
+    stopTimer();
     screen.innerHTML = `
       <section class="card start-layout">
         <div class="panel">
@@ -217,22 +323,19 @@
 
           <ul class="rule-list">
             <li>Use only the code shared for your class event.</li>
-            <li>Read every question carefully before moving on.</li>
-            <li>Submit only when you are sure your answers are complete.</li>
+            <li>You get one attempt, so read every question carefully.</li>
+            <li>You can submit from any question; unanswered questions score zero.</li>
           </ul>
         </div>
       </section>
     `;
 
-    const joinCodeEl = document.getElementById("joinCode");
-    const nameEl = document.getElementById("name");
-    const groupEl = document.getElementById("group");
     const button = document.getElementById("startBtn");
 
     button.addEventListener("click", async () => {
-      const joinCode = joinCodeEl.value.trim().toUpperCase();
-      const name = nameEl.value.trim();
-      const group = groupEl.value.trim();
+      const joinCode = document.getElementById("joinCode").value.trim().toUpperCase();
+      const name = document.getElementById("name").value.trim();
+      const group = document.getElementById("group").value.trim();
 
       if (!joinCode || !name || !group) {
         renderStart("Please enter your join code, name, and class/group.");
@@ -245,38 +348,96 @@
 
         const payload = await api("/api/attempts", {
           method: "POST",
-          body: JSON.stringify({
-            joinCode,
-            studentName: name,
-            studentGroup: group
-          })
+          body: JSON.stringify({ joinCode, studentName: name, studentGroup: group })
         });
 
         state.name = name;
         state.group = group;
-        state.joinCode = payload.event.joinCode;
-        state.eventTitle = payload.event.title;
-        state.durationMinutes = payload.event.durationMinutes;
-        state.attemptId = payload.attempt.id;
         state.attemptToken = payload.attempt.token;
-        state.submitting = false;
-        state.i = 0;
-        state.answers = {};
-        state.startedAt = Date.now();
-        ACTIVE_BANK = payload.questions;
-
-        startTimer(payload.attempt.deadlineAt, payload.serverNow);
-        renderQuestion();
+        enterAttempt(payload, {}, 0);
       } catch (error) {
+        const saved = readSavedAttempt();
+
+        // This student already has an attempt running. If this tab holds its
+        // token, carry on with it; otherwise only the teacher can help.
+        if (error.status === 409 && error.payload && error.payload.code === "attempt-in-progress" &&
+            saved && saved.attemptId === error.payload.attemptId) {
+          await resumeAttempt(saved);
+          return;
+        }
+
         renderStart(error.message);
       }
     });
   }
 
+  function enterAttempt(payload, answers, index) {
+    state.joinCode = payload.event.joinCode;
+    state.eventTitle = payload.event.title;
+    state.attemptId = payload.attempt.id;
+    state.name = payload.attempt.studentName || state.name;
+    state.group = payload.attempt.studentGroup || state.group;
+    state.submitting = false;
+    state.answers = answers || {};
+    state.startedAt = payload.attempt.startedAt ? Date.parse(payload.attempt.startedAt) : Date.now();
+    ACTIVE_BANK = payload.questions;
+    state.i = clamp(index || 0, 0, Math.max(0, ACTIVE_BANK.length - 1));
+
+    saveAttempt();
+    startTimer(payload.attempt.deadlineAt, payload.serverNow);
+    renderQuestion();
+
+    if (state.deadlineMs !== null && Date.now() >= state.deadlineMs) {
+      stopTimer();
+      submitAttempt({ auto: true });
+    }
+  }
+
+  // Picks up the attempt saved in this tab: back into the questions if it is
+  // still open, or to the results if it was submitted.
+  async function resumeAttempt(saved) {
+    state.attemptId = saved.attemptId;
+    state.attemptToken = saved.token;
+
+    let payload;
+
+    try {
+      payload = await api(`/api/attempts/${saved.attemptId}`, { method: "GET", headers: attemptHeaders() });
+    } catch (error) {
+      if (!error.status || error.status >= 500) {
+        renderStart("Could not reach the server to resume your test. Refresh to try again.");
+        return;
+      }
+
+      clearSavedAttempt();
+      renderStart(error.message);
+      return;
+    }
+
+    if (payload.attempt.status === "reset") {
+      clearSavedAttempt();
+      renderStart("Your teacher reset your attempt. You can start again.");
+      return;
+    }
+
+    state.name = payload.attempt.studentName;
+    state.group = payload.attempt.studentGroup;
+
+    if (payload.attempt.status === "submitted") {
+      state.joinCode = payload.event.joinCode;
+      state.eventTitle = payload.event.title;
+      renderResults(payload);
+      return;
+    }
+
+    enterAttempt(payload, saved.answers || {}, saved.i || 0);
+  }
+
   function renderQuestion() {
     const q = ACTIVE_BANK[state.i];
-    const chosen = state.answers[q.id];
+    const renderer = Types.get(q.type);
     const currentNumber = state.i + 1;
+    const isLast = state.i === ACTIVE_BANK.length - 1;
     const progressPct = Math.round((currentNumber / ACTIVE_BANK.length) * 100);
 
     const metaPills = `
@@ -291,17 +452,6 @@
     const code = q.code
       ? `<p class="code-label">${escapeHtml(q.code.language)}</p><pre><code>${escapeHtml(q.code.source)}</code></pre>`
       : "";
-
-    const optionsHtml = q.options.map((opt, idx) => {
-      const checked = chosen === idx ? "checked" : "";
-
-      return `
-        <label class="opt">
-          <input type="radio" name="opt" value="${idx}" ${checked} />
-          <div class="opt__text">${escapeHtml(opt)}</div>
-        </label>
-      `;
-    }).join("");
 
     screen.innerHTML = `
       <section class="card question-card">
@@ -344,14 +494,16 @@
           </div>
 
           <div class="options-card">
-            <p class="panel-label">Choose One Answer</p>
-            <div class="options">${optionsHtml}</div>
+            <div id="answerArea">${renderer.renderInput(q, state.answers[q.id], h)}</div>
+
+            <p class="notice" id="submitStatus" hidden></p>
 
             <div class="nav">
               <button id="backBtn" class="secondary" ${state.i === 0 ? "disabled" : ""}>Back</button>
               <div class="row">
                 <span class="pill">Answered: ${answeredCount()} / ${ACTIVE_BANK.length}</span>
-                <button class="primary" id="nextBtn">${state.i === ACTIVE_BANK.length - 1 ? "Submit challenge" : "Next mission"}</button>
+                ${isLast ? "" : `<button class="secondary" id="nextBtn">Next mission</button>`}
+                <button class="primary" id="submitBtn">Submit challenge</button>
               </div>
             </div>
           </div>
@@ -361,66 +513,101 @@
 
     updateTimerPill();
 
+    document.getElementById("answerArea").addEventListener("change", captureCurrentAnswer);
+
     document.getElementById("backBtn").addEventListener("click", () => {
+      captureCurrentAnswer();
       state.i = clamp(state.i - 1, 0, ACTIVE_BANK.length - 1);
+      saveAttempt();
       renderQuestion();
     });
 
-    document.getElementById("nextBtn").addEventListener("click", async () => {
-      const selected = screen.querySelector('input[name="opt"]:checked');
-      if (!selected) {
-        alert("Pick an answer before continuing.");
+    if (!isLast) {
+      document.getElementById("nextBtn").addEventListener("click", () => {
+        captureCurrentAnswer();
+        state.i = clamp(state.i + 1, 0, ACTIVE_BANK.length - 1);
+        saveAttempt();
+        renderQuestion();
+      });
+    }
+
+    document.getElementById("submitBtn").addEventListener("click", async () => {
+      captureCurrentAnswer();
+      const missing = ACTIVE_BANK.length - answeredCount();
+
+      if (missing > 0 && !confirm(`You have ${missing} unanswered question${missing === 1 ? "" : "s"}. Submit anyway? Unanswered questions score zero.`)) {
         return;
       }
 
-      state.answers[q.id] = Number(selected.value);
-
-      if (state.i === ACTIVE_BANK.length - 1) {
-        await submitAttempt();
-      } else {
-        state.i += 1;
-        renderQuestion();
-      }
+      await submitAttempt();
     });
   }
 
+  // After submitting: the total comes straight back; the breakdown, if the
+  // teacher has released it, comes from the token-guarded GET.
+  async function showResults(submitPayload, { auto }) {
+    let view = { attempt: submitPayload.attempt, event: { title: state.eventTitle, joinCode: state.joinCode }, result: submitPayload.result };
+
+    if (submitPayload.result.breakdownReleased) {
+      try {
+        view = await api(`/api/attempts/${state.attemptId}`, { method: "GET", headers: attemptHeaders() });
+      } catch (_error) {
+        // Show the total; the breakdown can be fetched again on refresh.
+      }
+    }
+
+    renderResults(view, { auto });
+  }
+
   function renderResults(payload, { auto = false } = {}) {
-    const score = payload.result.score;
-    const perQ = payload.result.perQuestion;
-    const max = payload.result.max;
+    stopTimer();
+
+    const result = payload.result || { score: 0, max: 0, breakdownReleased: false };
+    const perQ = result.perQuestion || null;
+    const late = payload.attempt && payload.attempt.late;
     const mins = state.startedAt
       ? Math.max(1, Math.round((Date.now() - state.startedAt) / 60000))
       : null;
 
+    // The backup code records the student's own answers and total only.
     const code = b64EncodeUnicode(JSON.stringify({
       name: state.name,
       group: state.group,
       joinCode: state.joinCode,
       eventTitle: state.eventTitle,
-      score,
-      max,
-      answers: perQ.map(item => ({
-        id: item.id,
-        chosen: item.chosen,
-        earned: item.earned,
-        max: item.max
-      }))
+      attemptId: state.attemptId,
+      score: result.score,
+      max: result.max,
+      answers: state.answers
     }));
 
-    const rows = perQ.map(item => {
-      const isGood = item.earned === item.max;
+    const rows = perQ ? perQ.map(item => {
+      const renderer = (() => {
+        try {
+          return Types.get(item.type);
+        } catch (_error) {
+          return null;
+        }
+      })();
+      const chosen = renderer ? renderer.describeResponse(item.response, h) : "";
+      const correct = item.correctResponse && renderer ? renderer.describeResponse(item.correctResponse, h) : "";
+      const feedback = item.detail && item.detail.ai === "scored" && item.detail.feedback ? item.detail.feedback : "";
+      const pending = item.status !== "scored";
       const meta = [item.level, item.topic, item.qType].filter(Boolean).join(" / ");
 
       return `
         <div class="result-row">
           <div>
-            <strong>${escapeHtml(item.id)}</strong> ${escapeHtml(item.title)}
+            <strong>${escapeHtml(item.id)}</strong> ${escapeHtml(item.title || "")}
             ${meta ? `<div class="result-meta">${escapeHtml(meta)}</div>` : ""}
+            <div class="result-meta">Your answer: ${escapeHtml(chosen)}${correct && !item.correct ? ` / Correct: ${escapeHtml(correct)}` : ""}</div>
+            ${feedback ? `<div class="result-meta">Feedback: ${escapeHtml(feedback)}</div>` : ""}
+            ${pending ? `<div class="result-meta">Waiting for your teacher to mark this.</div>` : ""}
           </div>
-          <div>${isGood ? `<span class="good">${item.earned}/${item.max}</span>` : `<span class="bad">${item.earned}/${item.max}</span>`}</div>
+          <div>${item.correct ? `<span class="good">${item.earned}/${item.max}</span>` : `<span class="bad">${item.earned}/${item.max}</span>`}</div>
         </div>
       `;
-    }).join("");
+    }).join("") : "";
 
     screen.innerHTML = `
       <section class="card results-card">
@@ -432,7 +619,7 @@
           <div class="summary-grid">
             <div class="summary-chip summary-chip--score">
               Score
-              <strong>${score} / ${max}</strong>
+              <strong>${result.score} / ${result.max}</strong>
             </div>
             <div class="summary-chip summary-chip--pace">
               Time
@@ -440,7 +627,7 @@
             </div>
             <div class="summary-chip summary-chip--level">
               Answered
-              <strong>${perQ.length}</strong>
+              <strong>${Object.keys(state.answers).length}</strong>
             </div>
           </div>
         </div>
@@ -449,19 +636,22 @@
           <p class="panel-label">Submission Status</p>
           <h3>Saved Online</h3>
           ${auto ? `<p class="notice">Time ran out, so your answers were submitted automatically.</p>` : ""}
-          <p class="muted">Your answers were submitted to the backend successfully. Teachers can retrieve them from the event dashboard.</p>
+          ${late ? `<p class="notice">This was submitted after the time limit, so your teacher will see it marked late.</p>` : ""}
+          <p class="muted">Your answers were submitted successfully. Your teacher can see them on the event dashboard.</p>
         </div>
 
         <div class="results-breakdown" style="margin-top:18px">
           <p class="panel-label">Per Question</p>
           <h3>Breakdown</h3>
-          <div style="margin-top:12px">${rows}</div>
+          ${perQ
+            ? `<div style="margin-top:12px">${rows}</div>`
+            : `<p class="muted">Your teacher will release the breakdown of each question later. Come back to this page, or ask your teacher.</p>`}
         </div>
 
         <div class="results-breakdown" style="margin-top:18px">
           <p class="panel-label">Backup Result Code</p>
           <h3>Copy If Needed</h3>
-          <p class="muted">This backup code is optional now, but it can still help if you want an extra submission record.</p>
+          <p class="muted">This backup code is optional, but it can help if you want an extra submission record.</p>
           <div class="codebox">${code}</div>
 
           <div class="nav">
@@ -487,7 +677,6 @@
       state.group = "";
       state.joinCode = "";
       state.eventTitle = "";
-      state.durationMinutes = null;
       state.attemptId = null;
       state.attemptToken = null;
       state.deadlineMs = null;
@@ -495,11 +684,30 @@
       state.i = 0;
       state.answers = {};
       state.startedAt = null;
-      stopTimer();
+      clearSavedAttempt();
       renderStart();
     });
   }
 
-  initTheme();
-  renderStart();
+  async function boot() {
+    initTheme();
+
+    try {
+      await Types.load();
+    } catch (_error) {
+      screen.innerHTML = `<section class="card"><p class="notice notice--danger">Could not load the test. Check your connection and refresh.</p></section>`;
+      return;
+    }
+
+    const saved = readSavedAttempt();
+
+    if (saved) {
+      await resumeAttempt(saved);
+      return;
+    }
+
+    renderStart();
+  }
+
+  boot();
 })();

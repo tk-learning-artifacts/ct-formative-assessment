@@ -70,7 +70,13 @@ async function login(app, { email, password } = DEMO_TEACHER) {
   return res.body.token;
 }
 
-async function startAttempt(app, { joinCode = "DEMO123", studentName = "Test Student", studentGroup = "S1-1" } = {}) {
+// Each call gets a fresh student name unless one is given, because a student
+// may only have one attempt per event.
+let studentCounter = 0;
+
+async function startAttempt(app, { joinCode = "DEMO123", studentName = null, studentGroup = "S1-1" } = {}) {
+  studentCounter += 1;
+  studentName = studentName || `Test Student ${studentCounter}`;
   const res = await request(app).post("/api/attempts").send({ joinCode, studentName, studentGroup });
 
   if (res.status !== 201) {
@@ -88,6 +94,16 @@ function submit(app, attempt, answers, token = attempt.token) {
   }
 
   return req.send({ answers });
+}
+
+function getAttempt(app, attempt, token = attempt.token) {
+  const req = request(app).get(`/api/attempts/${attempt.id}`);
+
+  if (token) {
+    req.set("X-Attempt-Token", token);
+  }
+
+  return req;
 }
 
 // Recursively collects every object key in a JSON value.
@@ -111,5 +127,6 @@ module.exports = {
   login,
   startAttempt,
   submit,
+  getAttempt,
   allKeys
 };

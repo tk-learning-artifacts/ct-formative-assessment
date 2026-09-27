@@ -4,10 +4,11 @@ const crypto = require("crypto");
 const Database = require("better-sqlite3");
 const { migrate } = require("./migrations");
 const { loadContent, DEFAULT_CONTENT_DIR } = require("./content");
-const { DEFAULT_DB_PATH } = require("./config");
-const { hashPassword } = require("./security");
+const { DEFAULT_DB_PATH, DEFAULT_TEACHER_EMAIL, DEFAULT_TEACHER_PASSWORD } = require("./config");
+const { hashPassword, verifyPassword } = require("./security");
 const scoring = require("./scoring");
 const selection = require("./selection");
+const { studentKey } = require("./policy");
 
 function nowIso() {
   return new Date().toISOString();
@@ -22,6 +23,13 @@ function generateJoinCode(length = 6) {
   }
 
   return code;
+}
+
+function httpError(status, message, extra = {}) {
+  const error = new Error(message);
+  error.status = status;
+  Object.assign(error, extra);
+  return error;
 }
 
 // Replaces the content tables with what is in backend/content/. Content files
@@ -100,7 +108,13 @@ function syncContent(db, content) {
   })();
 }
 
-function openDatabase({ dbPath = DEFAULT_DB_PATH, contentDir = DEFAULT_CONTENT_DIR, log = () => {} } = {}) {
+function openDatabase({
+  dbPath = DEFAULT_DB_PATH,
+  contentDir = DEFAULT_CONTENT_DIR,
+  seedTeacher = { email: DEFAULT_TEACHER_EMAIL, password: DEFAULT_TEACHER_PASSWORD },
+  isProduction = false,
+  log = () => {}
+} = {}) {
   const resolvedPath = dbPath === ":memory:" ? dbPath : path.resolve(dbPath);
 
   if (process.env.NODE_ENV === "test" && resolvedPath === DEFAULT_DB_PATH) {
@@ -111,17 +125,30 @@ function openDatabase({ dbPath = DEFAULT_DB_PATH, contentDir = DEFAULT_CONTENT_D
     fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
   }
 
+  // Content is validated before migrating, because migrations may read it
+  // (for example, to backfill tags into old snapshots).
+  const content = loadContent(contentDir);
   const db = new Database(resolvedPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
-  const migration = migrate(db, { dbPath: resolvedPath, log });
-  const content = loadContent(contentDir);
-  syncContent(db, content);
+  let store;
 
-  const store = createStore(db, content);
-  store.migration = migration;
-  store.seed();
+  try {
+    const migration = migrate(db, { dbPath: resolvedPath, ctx: { content, log }, log });
+    syncContent(db, content);
+
+    store = createStore(db, content);
+    store.migration = migration;
+    store.seed(seedTeacher);
+
+    if (isProduction) {
+      store.assertNoDefaultPasswords();
+    }
+  } catch (error) {
+    db.close();
+    throw error;
+  }
 
   return store;
 }
@@ -151,13 +178,11 @@ function createStore(db, content) {
     endAt = null,
     createdBy
   }) {
-    const resolvedFilter = filter || selection.legacyModeToFilter(selectionMode);
+    const resolvedFilter = filter || selection.legacyModeToFilter(selectionMode, content);
     const questions = previewQuestions(resolvedFilter);
 
     if (!questions.length) {
-      const error = new Error("No questions match that selection.");
-      error.status = 400;
-      throw error;
+      throw httpError(400, "No questions match that selection.");
     }
 
     const insertEvent = db.prepare(`
@@ -202,16 +227,14 @@ function createStore(db, content) {
     }
 
     const { filter_json: filterJson, ...rest } = row;
-    const filter = filterJson ? JSON.parse(filterJson) : selection.legacyModeToFilter(row.selection_mode);
+    const filter = filterJson ? JSON.parse(filterJson) : selection.legacyModeToFilter(row.selection_mode, content);
     return { ...rest, filter, filter_summary: selection.summarizeFilter(filter) };
   }
 
+  const EVENT_COLUMNS = "id, title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at, results_released_at, created_by, created_at";
+
   function getEventById(eventId) {
-    return eventRow(db.prepare(`
-      SELECT id, title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at, created_by, created_at
-      FROM events
-      WHERE id = ?
-    `).get(eventId));
+    return eventRow(db.prepare(`SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`).get(eventId));
   }
 
   function getEventForTeacher(eventId, userId) {
@@ -221,7 +244,8 @@ function createStore(db, content) {
 
   function listEventsForTeacher(userId) {
     return db.prepare(`
-      SELECT e.id, e.title, e.join_code, e.status, e.selection_mode, e.filter_json, e.duration_minutes, e.start_at, e.end_at, e.created_at,
+      SELECT e.id, e.title, e.join_code, e.status, e.selection_mode, e.filter_json, e.duration_minutes, e.start_at, e.end_at,
+             e.results_released_at, e.created_at,
              (SELECT COUNT(*) FROM attempts a WHERE a.event_id = e.id) AS attempt_count,
              (SELECT COUNT(*) FROM event_questions q WHERE q.event_id = e.id) AS question_count
       FROM events e
@@ -240,61 +264,107 @@ function createStore(db, content) {
   }
 
   function getEventByJoinCode(joinCode) {
-    const event = db.prepare(`
-      SELECT id, title, join_code, status, selection_mode, duration_minutes, start_at, end_at
+    return db.prepare(`
+      SELECT id, title, join_code, status, selection_mode, duration_minutes, start_at, end_at, results_released_at
       FROM events
       WHERE join_code = ?
-    `).get(joinCode);
-
-    return event || null;
+    `).get(joinCode) || null;
   }
 
-  function createAttempt({ eventId, studentName, studentGroup, tokenHash, startedAt, deadlineAt }) {
-    const result = db.prepare(`
-      INSERT INTO attempts (event_id, student_name, student_group, status, started_at, token_hash, deadline_at)
-      VALUES (?, ?, ?, 'started', ?, ?, ?)
-    `).run(eventId, studentName, studentGroup, startedAt, tokenHash, deadlineAt);
+  // The live attempt for this student in this event, if any. Reset attempts
+  // do not count, and neither do unsubmitted attempts from before the
+  // upgrade: they have no token, so they can never be finished.
+  function findLiveAttempt(eventId, key) {
+    return db.prepare(`
+      SELECT id, status, deadline_at
+      FROM attempts
+      WHERE event_id = ? AND student_key = ? AND reset_at IS NULL
+        AND NOT (status = 'started' AND token_hash IS NULL)
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(eventId, key) || null;
+  }
 
-    return Number(result.lastInsertRowid);
+  // One attempt per student per event. The check and the insert share a
+  // transaction, and better-sqlite3 is synchronous, so two simultaneous
+  // starts cannot both succeed.
+  function startAttempt({ eventId, studentName, studentGroup, tokenHash, startedAt, deadlineAt }) {
+    const key = studentKey(studentName, studentGroup);
+
+    return db.transaction(() => {
+      const existing = findLiveAttempt(eventId, key);
+
+      if (existing) {
+        const inProgress = existing.status === "started" && (!existing.deadline_at || Date.now() <= Date.parse(existing.deadline_at));
+
+        throw httpError(409, existing.status === "submitted"
+          ? "You have already submitted this test. Ask your teacher if you need another try."
+          : inProgress
+            ? "You already started this test. Continue on the device where you started, or ask your teacher to reset your attempt."
+            : "Your time for this test has run out. Ask your teacher if you need another try.", {
+          code: existing.status === "submitted" ? "already-submitted" : inProgress ? "attempt-in-progress" : "attempt-expired",
+          attemptId: existing.id
+        });
+      }
+
+      const result = db.prepare(`
+        INSERT INTO attempts (event_id, student_name, student_group, student_key, status, started_at, token_hash, deadline_at)
+        VALUES (?, ?, ?, ?, 'started', ?, ?, ?)
+      `).run(eventId, studentName, studentGroup, key, startedAt, tokenHash, deadlineAt);
+
+      return Number(result.lastInsertRowid);
+    })();
   }
 
   function getAttempt(attemptId) {
     return db.prepare(`
-      SELECT a.id, a.event_id, a.student_name, a.student_group, a.status, a.started_at, a.deadline_at, a.token_hash,
-             e.title, e.join_code, e.duration_minutes
+      SELECT a.id, a.event_id, a.student_name, a.student_group, a.status, a.started_at, a.submitted_at, a.deadline_at,
+             a.late, a.reset_at, a.score, a.max_score, a.token_hash,
+             e.title, e.join_code, e.duration_minutes, e.start_at, e.end_at, e.results_released_at
       FROM attempts a
       JOIN events e ON e.id = a.event_id
       WHERE a.id = ?
     `).get(attemptId) || null;
   }
 
+  function attemptEvent(attempt) {
+    return {
+      id: attempt.event_id,
+      title: attempt.title,
+      join_code: attempt.join_code,
+      duration_minutes: attempt.duration_minutes,
+      start_at: attempt.start_at,
+      end_at: attempt.end_at,
+      results_released_at: attempt.results_released_at
+    };
+  }
+
   // Scores every question of the event through the scorer registry and stores
-  // the result. Returns { score, max, perQuestion } without any answer keys.
-  function submitAttempt(attempt, rawAnswers) {
+  // the result. The caller shows the student only what policy.js allows.
+  function submitAttempt(attempt, rawAnswers, { late = false } = {}) {
     const questions = getEventQuestions(attempt.event_id);
     const answers = rawAnswers && typeof rawAnswers === "object" && !Array.isArray(rawAnswers) ? rawAnswers : {};
 
     const clearAnswers = db.prepare("DELETE FROM answers WHERE attempt_id = ?");
     const insertAnswer = db.prepare(`
-      INSERT INTO answers (attempt_id, question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status)
-      VALUES (@attempt_id, @question_id, @question_type, @response_json, @chosen_index, @correct_index, @earned_points, @max_points, @score_status)
+      INSERT INTO answers (attempt_id, question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status, detail_json)
+      VALUES (@attempt_id, @question_id, @question_type, @response_json, @chosen_index, @correct_index, @earned_points, @max_points, @score_status, @detail_json)
     `);
     const finalizeAttempt = db.prepare(`
       UPDATE attempts
-      SET status = 'submitted', submitted_at = ?, score = ?, max_score = ?
-      WHERE id = ? AND status = 'started'
+      SET status = 'submitted', submitted_at = ?, score = ?, max_score = ?, late = ?
+      WHERE id = ? AND status = 'started' AND reset_at IS NULL
     `);
 
     let score = 0;
     let max = 0;
-    const perQuestion = [];
 
     db.transaction(() => {
       clearAnswers.run(attempt.id);
 
       questions.forEach(question => {
         const raw = Object.prototype.hasOwnProperty.call(answers, question.id) ? answers[question.id] : undefined;
-        const { response, result, legacy } = scoring.scoreResponse(question, raw);
+        const { recorded, result, legacy } = scoring.scoreResponse(question, raw);
 
         score += result.earned;
         max += result.max;
@@ -303,50 +373,79 @@ function createStore(db, content) {
           attempt_id: attempt.id,
           question_id: question.id,
           question_type: question.type,
-          response_json: JSON.stringify(response),
+          response_json: JSON.stringify(recorded),
           chosen_index: legacy.chosenIndex,
           correct_index: legacy.correctIndex,
           earned_points: result.earned,
           max_points: result.max,
-          score_status: result.status
-        });
-
-        perQuestion.push({
-          id: question.id,
-          title: question.title,
-          level: question.level,
-          topic: question.topic,
-          qType: question.qType,
-          type: question.type,
-          chosen: response,
-          earned: result.earned,
-          max: result.max,
-          status: result.status
+          score_status: result.status,
+          detail_json: result.detail ? JSON.stringify(result.detail) : null
         });
       });
 
-      const updated = finalizeAttempt.run(nowIso(), score, max, attempt.id);
+      const updated = finalizeAttempt.run(nowIso(), score, max, late ? 1 : 0, attempt.id);
 
       if (updated.changes !== 1) {
-        const error = new Error("This attempt has already been submitted.");
-        error.status = 409;
-        throw error;
+        throw httpError(409, "This attempt has already been submitted.");
       }
     })();
 
-    return { score, max, perQuestion };
+    return { score, max };
+  }
+
+  function answersFor(attemptId) {
+    return db.prepare(`
+      SELECT question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status, detail_json
+      FROM answers
+      WHERE attempt_id = ?
+      ORDER BY id ASC
+    `).all(attemptId);
+  }
+
+  // The full per-question breakdown for one attempt, built from the stored
+  // answers and the event snapshot the student answered. policy.js decides
+  // whether a student may see it.
+  function getAttemptResult(attempt) {
+    if (attempt.status !== "submitted") {
+      return null;
+    }
+
+    const byId = new Map(getEventQuestions(attempt.event_id).map(question => [question.id, question]));
+
+    const perQuestion = answersFor(attempt.id).map(row => {
+      const question = byId.get(row.question_id) || { id: row.question_id };
+      const correctText = Array.isArray(question.options) && row.correct_index !== null ? question.options[row.correct_index] : null;
+
+      return {
+        id: row.question_id,
+        title: question.title || null,
+        level: question.level || null,
+        topic: question.topic || null,
+        qType: question.qType || null,
+        type: row.question_type,
+        response: row.response_json === null ? null : JSON.parse(row.response_json),
+        correctResponse: row.correct_index === null ? null : { index: row.correct_index, text: correctText },
+        earned: row.earned_points,
+        max: row.max_points,
+        correct: row.score_status === "scored" ? row.earned_points === row.max_points : null,
+        status: row.score_status,
+        detail: row.detail_json === null ? null : JSON.parse(row.detail_json)
+      };
+    });
+
+    return { score: attempt.score, max: attempt.max_score, perQuestion };
   }
 
   function getResults(eventId) {
     const attempts = db.prepare(`
-      SELECT id, student_name, student_group, status, started_at, deadline_at, submitted_at, score, max_score
+      SELECT id, student_name, student_group, status, started_at, deadline_at, submitted_at, late, reset_at, score, max_score
       FROM attempts
       WHERE event_id = ?
-      ORDER BY started_at DESC
+      ORDER BY started_at DESC, id DESC
     `).all(eventId);
 
     const answersByAttempt = db.prepare(`
-      SELECT attempt_id, question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status
+      SELECT attempt_id, question_id, question_type, response_json, chosen_index, correct_index, earned_points, max_points, score_status, detail_json
       FROM answers
       WHERE attempt_id IN (SELECT id FROM attempts WHERE event_id = ?)
       ORDER BY attempt_id ASC, id ASC
@@ -363,7 +462,8 @@ function createStore(db, content) {
         correctIndex: row.correct_index,
         earnedPoints: row.earned_points,
         maxPoints: row.max_points,
-        scoreStatus: row.score_status
+        scoreStatus: row.score_status,
+        detail: row.detail_json === null ? null : JSON.parse(row.detail_json)
       });
 
       return acc;
@@ -371,8 +471,22 @@ function createStore(db, content) {
 
     return attempts.map(attempt => ({
       ...attempt,
+      late: Boolean(attempt.late),
       answers: answersByAttempt[attempt.id] || []
     }));
+  }
+
+  function resetAttempt(eventId, attemptId, userId) {
+    const result = db.prepare(`
+      UPDATE attempts SET reset_at = ?, reset_by = ?
+      WHERE id = ? AND event_id = ? AND reset_at IS NULL
+    `).run(nowIso(), userId, attemptId, eventId);
+
+    return result.changes === 1;
+  }
+
+  function releaseResults(eventId) {
+    db.prepare("UPDATE events SET results_released_at = COALESCE(results_released_at, ?) WHERE id = ?").run(nowIso(), eventId);
   }
 
   function findUserByEmail(email) {
@@ -394,6 +508,36 @@ function createStore(db, content) {
     `).run(String(email).trim().toLowerCase(), hashPassword(password), role, nowIso());
 
     return Number(result.lastInsertRowid);
+  }
+
+  // Sets a password, creating the teacher account if it does not exist yet.
+  // Returns "updated" or "created".
+  function setPassword(email, password) {
+    const normalized = String(email).trim().toLowerCase();
+    const user = findUserByEmail(normalized);
+
+    if (user) {
+      updatePasswordHash(user.id, hashPassword(password));
+      return "updated";
+    }
+
+    createUser({ email: normalized, password });
+    return "created";
+  }
+
+  // Production refuses to run while any account still accepts the demo
+  // password, whether it was seeded by this code or by the original app.
+  function assertNoDefaultPasswords() {
+    const offenders = db.prepare("SELECT email, password_hash FROM users").all()
+      .filter(user => verifyPassword(DEFAULT_TEACHER_PASSWORD, user.password_hash).ok)
+      .map(user => user.email);
+
+    if (offenders.length) {
+      throw new Error(
+        `These accounts still use the demo password: ${offenders.join(", ")}. ` +
+        "Run `npm run set-password -- <email>` (or `node backend/scripts/set-password.js <email>` in the container) before starting in production."
+      );
+    }
   }
 
   function listOntology() {
@@ -447,17 +591,17 @@ function createStore(db, content) {
     }));
   }
 
-  function seed() {
+  function seed(seedTeacher) {
     const userCount = db.prepare("SELECT COUNT(*) AS count FROM users").get().count;
 
-    if (userCount === 0) {
-      createUser({ email: "teacher@ctquest.local", password: "changeme123" });
+    if (userCount === 0 && seedTeacher) {
+      createUser({ email: seedTeacher.email, password: seedTeacher.password });
     }
 
     const eventCount = db.prepare("SELECT COUNT(*) AS count FROM events").get().count;
 
     if (eventCount === 0) {
-      const teacher = db.prepare("SELECT id FROM users WHERE email = ?").get("teacher@ctquest.local");
+      const teacher = db.prepare("SELECT id FROM users ORDER BY id ASC LIMIT 1").get();
 
       if (teacher) {
         createEventWithQuestions({
@@ -483,14 +627,20 @@ function createStore(db, content) {
     listEventsForTeacher,
     getEventQuestions,
     getEventByJoinCode,
-    createAttempt,
+    startAttempt,
     getAttempt,
+    attemptEvent,
     submitAttempt,
+    getAttemptResult,
     getResults,
+    resetAttempt,
+    releaseResults,
     findUserByEmail,
     findUserById,
     updatePasswordHash,
     createUser,
+    setPassword,
+    assertNoDefaultPasswords,
     listOntology,
     listOntologyEdges,
     listOutcomes,

@@ -1,3 +1,4 @@
+const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const jwt = require("jsonwebtoken");
@@ -6,24 +7,50 @@ const { openDatabase } = require("./db");
 const { verifyPassword, hashPassword, createAttemptToken, verifyAttemptToken } = require("./security");
 const scoring = require("./scoring");
 const selection = require("./selection");
+const policy = require("./policy");
 const { createAiProvider } = require("./ai");
 
 const webDir = path.resolve(__dirname, "../../web");
+const MAX_DURATION_MINUTES = 24 * 60;
 
-// Only these files from web/ are served. Everything else in that folder
-// (package.json, vite.config.js, anything added later) stays private.
-const PUBLIC_FILES = new Set(["index.html", "admin.html", "app.js", "admin.js", "style.css"]);
+// The files served from web/: its .html, .css and .js files (not build
+// config such as vite.config.js) and the question-type renderers in
+// web/types/. Derived from the folder, so a new renderer needs no edit here.
+// Nothing else (package.json, dotfiles, backend/) is reachable.
+function listPublicFiles(dir = webDir) {
+  const top = fs.readdirSync(dir)
+    .filter(name => /\.(html|css|js)$/.test(name) && !/\.config\.js$/.test(name))
+    .filter(name => fs.statSync(path.join(dir, name)).isFile());
+  const typesDir = path.join(dir, "types");
+  const types = fs.existsSync(typesDir)
+    ? fs.readdirSync(typesDir).filter(name => name.endsWith(".js")).map(name => `types/${name}`)
+    : [];
+
+  return new Set(top.concat(types).sort());
+}
+
+const PUBLIC_FILES = listPublicFiles();
+const TYPE_RENDERERS = Array.from(PUBLIC_FILES).filter(name => name.startsWith("types/"));
 
 function normalizeJoinCode(rawCode) {
   return String(rawCode || "").trim().toUpperCase();
 }
 
+// Only absolute times are accepted: an ISO 8601 string ending in Z or a UTC
+// offset. A bare "2026-10-01T09:00" would be read in the server's time zone
+// (UTC in Docker), which is not what a teacher in Singapore meant.
 function parseOptionalDate(value, fieldName) {
-  if (!value) {
+  if (value === undefined || value === null || value === "") {
     return null;
   }
 
-  const date = new Date(value);
+  const text = String(value).trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/i.test(text)) {
+    throw new Error(`${fieldName} must be an ISO date-time with a time zone, e.g. 2026-10-01T01:00:00.000Z.`);
+  }
+
+  const date = new Date(text);
 
   if (Number.isNaN(date.getTime())) {
     throw new Error(`${fieldName} is not a valid date/time.`);
@@ -54,6 +81,22 @@ function ensureEventAccessible(event) {
   return null;
 }
 
+// The attempt's deadline: the earlier of start + duration and the event's
+// end_at, or null when neither is set.
+function computeDeadline(event, startedAtMs) {
+  const candidates = [];
+
+  if (event.duration_minutes) {
+    candidates.push(startedAtMs + event.duration_minutes * 60 * 1000);
+  }
+
+  if (event.end_at) {
+    candidates.push(Date.parse(event.end_at));
+  }
+
+  return candidates.length ? new Date(Math.min(...candidates)).toISOString() : null;
+}
+
 function publicEvent(event) {
   return {
     id: event.id,
@@ -72,8 +115,18 @@ function countBy(items, key) {
   }, {});
 }
 
+function teacherEvent(event) {
+  const { created_by: _createdBy, ...rest } = event;
+  return { ...rest, breakdown_released: policy.breakdownReleased(event) };
+}
+
 function createApp({ config = loadConfig(), store = null, log = console.log } = {}) {
-  const db = store || openDatabase({ dbPath: config.dbPath, log });
+  const db = store || openDatabase({
+    dbPath: config.dbPath,
+    seedTeacher: config.seedTeacher,
+    isProduction: config.isProduction,
+    log
+  });
   const ai = createAiProvider(config.ai);
   const app = express();
 
@@ -126,6 +179,59 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     } catch (_error) {
       res.status(401).json({ error: "Invalid or expired token." });
     }
+  }
+
+  // Loads the teacher's own event or answers 404, the same as a missing one.
+  function ownEvent(req, res) {
+    const eventId = Number(req.params.id);
+    const event = Number.isInteger(eventId) ? db.getEventForTeacher(eventId, req.user.sub) : null;
+
+    if (!event) {
+      res.status(404).json({ error: "Event not found." });
+      return null;
+    }
+
+    return event;
+  }
+
+  const ATTEMPT_NOT_FOUND = "Attempt not found, or the attempt token does not match.";
+
+  // Resolves an attempt from :id and the X-Attempt-Token header. A missing
+  // attempt and a wrong token get the same 404, so ids cannot be enumerated.
+  function attemptFromRequest(req, res) {
+    const attemptId = Number(req.params.id);
+    const attempt = Number.isInteger(attemptId) ? db.getAttempt(attemptId) : null;
+    const token = req.get("X-Attempt-Token");
+
+    if (attempt && !attempt.token_hash) {
+      res.status(403).json({ error: "This attempt was started before an upgrade and cannot be continued. Please start the test again." });
+      return null;
+    }
+
+    if (!token) {
+      res.status(401).json({ error: "Attempt token required." });
+      return null;
+    }
+
+    if (!attempt || !verifyAttemptToken(token, attempt.token_hash)) {
+      res.status(404).json({ error: ATTEMPT_NOT_FOUND });
+      return null;
+    }
+
+    return attempt;
+  }
+
+  function attemptSummary(attempt) {
+    return {
+      id: attempt.id,
+      status: attempt.reset_at ? "reset" : attempt.status,
+      studentName: attempt.student_name,
+      studentGroup: attempt.student_group,
+      startedAt: attempt.started_at,
+      submittedAt: attempt.submitted_at,
+      deadlineAt: attempt.deadline_at,
+      late: Boolean(attempt.late)
+    };
   }
 
   // ---------- Teacher auth ----------
@@ -259,8 +365,8 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       return;
     }
 
-    if (durationMinutes !== null && (!Number.isFinite(durationMinutes) || durationMinutes <= 0)) {
-      res.status(400).json({ error: "Duration must be a positive number of minutes." });
+    if (durationMinutes !== null && (!Number.isFinite(durationMinutes) || durationMinutes <= 0 || durationMinutes > MAX_DURATION_MINUTES)) {
+      res.status(400).json({ error: `Duration must be a positive number of minutes, at most ${MAX_DURATION_MINUTES} (24 hours).` });
       return;
     }
 
@@ -284,7 +390,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
         createdBy: req.user.sub
       });
 
-      const { created_by: _createdBy, ...event } = db.getEventById(eventId);
+      const event = teacherEvent(db.getEventById(eventId));
       event.question_count = db.getEventQuestions(eventId).length;
 
       res.status(201).json({ event });
@@ -299,24 +405,52 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
   });
 
   app.get("/api/events/:id/results", requireAuth, (req, res) => {
-    const eventId = Number(req.params.id);
-    const found = Number.isInteger(eventId) ? db.getEventForTeacher(eventId, req.user.sub) : null;
+    const event = ownEvent(req, res);
 
-    // Another teacher's event looks exactly like a missing one.
-    if (!found) {
-      res.status(404).json({ error: "Event not found." });
+    if (!event) {
       return;
     }
 
-    const { created_by: _createdBy, ...event } = found;
-
     res.json({
-      event,
-      attempts: db.getResults(eventId)
+      event: teacherEvent(event),
+      attempts: db.getResults(event.id)
     });
   });
 
+  app.post("/api/events/:id/release", requireAuth, (req, res) => {
+    const event = ownEvent(req, res);
+
+    if (!event) {
+      return;
+    }
+
+    db.releaseResults(event.id);
+    res.json({ event: teacherEvent(db.getEventById(event.id)) });
+  });
+
+  app.post("/api/events/:id/attempts/:attemptId/reset", requireAuth, (req, res) => {
+    const event = ownEvent(req, res);
+
+    if (!event) {
+      return;
+    }
+
+    const attemptId = Number(req.params.attemptId);
+
+    if (!Number.isInteger(attemptId) || !db.resetAttempt(event.id, attemptId, req.user.sub)) {
+      res.status(404).json({ error: "Attempt not found in this event, or already reset." });
+      return;
+    }
+
+    res.json({ ok: true, attemptId });
+  });
+
   // ---------- Students ----------
+
+  // The question-type renderers the student page loads.
+  app.get("/api/web-types", (_req, res) => {
+    res.json({ renderers: TYPE_RENDERERS });
+  });
 
   app.post("/api/events/join", (req, res) => {
     const event = db.getEventByJoinCode(normalizeJoinCode(req.body.joinCode));
@@ -350,18 +484,30 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     }
 
     const startedAtMs = Date.now();
-    const deadlineAt = event.duration_minutes
-      ? new Date(startedAtMs + event.duration_minutes * 60 * 1000).toISOString()
-      : null;
+    const deadlineAt = computeDeadline(event, startedAtMs);
     const { token, tokenHash } = createAttemptToken();
-    const attemptId = db.createAttempt({
-      eventId: event.id,
-      studentName,
-      studentGroup,
-      tokenHash,
-      startedAt: new Date(startedAtMs).toISOString(),
-      deadlineAt
-    });
+    let attemptId;
+
+    try {
+      attemptId = db.startAttempt({
+        eventId: event.id,
+        studentName,
+        studentGroup,
+        tokenHash,
+        startedAt: new Date(startedAtMs).toISOString(),
+        deadlineAt
+      });
+    } catch (error) {
+      if (error.status === 409) {
+        res.status(409).json({
+          error: error.message,
+          code: error.code,
+          attemptId: error.code === "attempt-in-progress" ? error.attemptId : undefined
+        });
+        return;
+      }
+      throw error;
+    }
 
     res.status(201).json({
       attempt: {
@@ -378,27 +524,36 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     });
   });
 
-  app.post("/api/attempts/:id/submit", (req, res) => {
-    const attemptId = Number(req.params.id);
-    const token = req.get("X-Attempt-Token");
-    const attempt = Number.isInteger(attemptId) ? db.getAttempt(attemptId) : null;
+  // Resume after a refresh, and fetch results later (including answers that
+  // are scored after submission, such as AI-scored ones).
+  app.get("/api/attempts/:id", (req, res) => {
+    const attempt = attemptFromRequest(req, res);
 
     if (!attempt) {
-      res.status(404).json({ error: "Attempt not found." });
       return;
     }
 
-    if (!token) {
-      res.status(401).json({ error: "Attempt token required." });
+    const event = db.attemptEvent(attempt);
+    const reset = Boolean(attempt.reset_at);
+
+    res.json({
+      attempt: attemptSummary(attempt),
+      serverNow: new Date().toISOString(),
+      event: publicEvent(event),
+      questions: reset ? [] : db.getEventQuestions(attempt.event_id).map(scoring.toPublicQuestion),
+      result: reset ? null : policy.studentResultView(event, db.getAttemptResult(attempt))
+    });
+  });
+
+  app.post("/api/attempts/:id/submit", (req, res) => {
+    const attempt = attemptFromRequest(req, res);
+
+    if (!attempt) {
       return;
     }
 
-    if (!verifyAttemptToken(token, attempt.token_hash)) {
-      res.status(403).json({
-        error: attempt.token_hash
-          ? "This attempt token is not valid."
-          : "This attempt was started before an upgrade and cannot be submitted. Please start the test again."
-      });
+    if (attempt.reset_at) {
+      res.status(409).json({ error: "Your teacher reset this attempt. Start the test again." });
       return;
     }
 
@@ -407,37 +562,36 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       return;
     }
 
-    const now = Date.now();
+    // After the grace window the answers are still stored, flagged late for
+    // the teacher, rather than thrown away.
     const deadlineMs = attempt.deadline_at ? Date.parse(attempt.deadline_at) : null;
-
-    if (deadlineMs !== null && now > deadlineMs + config.submitGraceMs) {
-      res.status(410).json({ error: "The time limit for this attempt has expired." });
-      return;
-    }
-
-    let result;
+    const late = deadlineMs !== null && Date.now() > deadlineMs + config.submitGraceMs;
+    let totals;
 
     try {
-      result = db.submitAttempt(attempt, req.body.answers);
+      totals = db.submitAttempt(attempt, req.body.answers, { late });
     } catch (error) {
       res.status(error.status || 500).json({ error: error.status ? error.message : "Could not save this submission." });
       return;
     }
 
+    const saved = db.getAttempt(attempt.id);
+    const event = db.attemptEvent(saved);
+
+    // The submit response carries the total only; the breakdown, when
+    // released, comes from GET /api/attempts/:id through policy.js.
     res.json({
-      attempt: {
-        id: attempt.id,
-        studentName: attempt.student_name,
-        studentGroup: attempt.student_group,
-        startedAt: attempt.started_at,
-        late: deadlineMs !== null && now > deadlineMs
-      },
+      attempt: attemptSummary(saved),
       event: {
-        title: attempt.title,
-        joinCode: attempt.join_code,
-        durationMinutes: attempt.duration_minutes
+        title: saved.title,
+        joinCode: saved.join_code,
+        durationMinutes: saved.duration_minutes
       },
-      result
+      result: {
+        score: totals.score,
+        max: totals.max,
+        breakdownReleased: policy.breakdownReleased(event)
+      }
     });
   });
 
@@ -473,5 +627,6 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
 
 module.exports = {
   createApp,
+  listPublicFiles,
   PUBLIC_FILES
 };
