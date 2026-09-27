@@ -11,6 +11,9 @@
 //   describeResponse(response, h)        text for the results breakdown
 //   renderCode(code, h)                  optional; HTML for the question's
 //                                        code block instead of the default
+//   renderContext(question, h)           optional; HTML shown under the
+//                                        question (instructions, target
+//                                        output), not on the answer side
 // })
 
 (function () {

@@ -198,15 +198,9 @@
       const poolLines = question.lines.filter(line => !used.has(line.id));
       const language = question.language ? h.escapeHtml(question.language) : "code";
 
-      const target = question.expectedOutput
-        ? `<p class="code-label">It should print</p><pre class="pa-target">${h.escapeHtml(question.expectedOutput)}</pre>`
-        : "";
-
       return `
         <div class="pa" data-parsons>
           <p class="answer-label">Build the program</p>
-          <p class="pa-help">Press Add to put a line in your program, or drag it by the handle. Leave out lines you don't need. The indentation is already in each line.</p>
-          ${target}
 
           <p class="code-label" id="paProgramLabel">Your program (${language})</p>
           <ol class="pa-list pa-program" data-pa-program aria-labelledby="paProgramLabel">
@@ -222,6 +216,19 @@
 
           <p class="pa-status" data-pa-status aria-live="polite"></p>
         </div>
+      `;
+    },
+
+    // The instructions and target output sit with the question, so the
+    // answer side holds only the program and the lines to use.
+    renderContext(question, h) {
+      const target = question.expectedOutput
+        ? `<p class="code-label">It should print</p><pre class="pa-target">${h.escapeHtml(question.expectedOutput)}</pre>`
+        : "";
+
+      return `
+        <p class="pa-help">Press Add to put a line in your program, or drag it by the handle. Leave out lines you don't need. The indentation is already in each line.</p>
+        ${target}
       `;
     },
 

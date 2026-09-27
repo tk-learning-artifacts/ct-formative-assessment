@@ -952,7 +952,7 @@ textarea.open-response {
 
 /* Parsons: the program being built and the pool of unused lines. */
 .pa-help {
-  margin-bottom: 4px;
+  margin: 12px 0 4px;
   font-size: 0.8125rem;
   color: var(--color-ink-soft);
 }

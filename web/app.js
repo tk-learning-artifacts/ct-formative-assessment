@@ -446,6 +446,7 @@
           <p class="prompt-text">${escapeHtml(q.prompt)}</p>
           ${art}
           ${code}
+          ${renderer.renderContext ? renderer.renderContext(q, h) : ""}
         </section>
 
         <section class="card" aria-label="Your answer">
