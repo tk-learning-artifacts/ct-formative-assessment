@@ -48,7 +48,7 @@ ct-formative-assessment/
 │   ├── types/                One renderer per question type (mcq, code-trace, parsons, code-reading, open-response-ai, blocks)
 │   ├── lib/                  Files shared with the server: blocks-engine.js (the block language, run by both sides) and blocks.css
 │   ├── vendor/               Vendored libraries, never packaged: blockly-13.3.0/ (Apache-2.0, with its licence and provenance)
-│   ├── admin.html / admin.js Teacher portal: event picker with live preview and a compact question preview, results, per-outcome summary, AI marking
+│   ├── admin.html / admin.js Teacher portal: an event list in the sidebar; the main area shows the chosen event (results, questions, settings, per-outcome summary, AI marking) or the new-event form (quick setup, Customise picker, live and question previews)
 │   ├── style.css             Shared styles on Slate's theme contract (light only)
 │   └── vite.config.js        Dev server config (proxy + multi-page build)
 ├── docs/adr/                 Architecture decision records

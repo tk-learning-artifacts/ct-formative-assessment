@@ -1250,33 +1250,65 @@ textarea.open-response {
   min-width: 0;
 }
 
-/* On a phone or narrow window, once an event is chosen its results come
-   first, above the new-event form and the event list. Only the order on
-   screen changes; the tab order still starts at the form. */
+/* The sidebar holds only the event list; the main area shows the chosen
+   event or the new-event form. */
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.side-head h2 {
+  font-size: 1.125rem;
+}
+
+.dash__back {
+  justify-self: start;
+}
+
+.form-actions--start {
+  justify-content: flex-start;
+}
+
+/* On a phone or narrow window the list comes first. Opening an event or the
+   form replaces it, and "All events" brings it back. */
 @media (max-width: 999.98px) {
-  .dash:has(.results-head) .dash__main {
-    order: -1;
-    scroll-margin-top: 12px;
+  .dash--open .dash__side,
+  .dash:not(.dash--open) .dash__main {
+    display: none;
   }
 }
 
 @media (min-width: 1000px) {
   .dash {
-    grid-template-columns: 22rem minmax(0, 1fr);
+    grid-template-columns: 20rem minmax(0, 1fr);
   }
 
-  /* Choosing what to test needs the room: the form takes the full width
-     while the picker is open, and results move below it. */
-  .dash:has(#advancedPicker[open]) {
-    grid-template-columns: minmax(0, 1fr);
+  .dash__side {
+    position: sticky;
+    top: 12px;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
   }
 
-  .dash:has(#advancedPicker[open]) .form-grid {
+  .dash__back {
+    display: none;
+  }
+
+  /* The form has the main area's width: four short fields to a row, the two
+     settings side by side, and the quick setup cards in two columns. */
+  .dash__main .form-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .dash:has(#advancedPicker[open]) .form-grid .field--full {
+  .dash__main .form-grid .setting {
     grid-column: span 2;
+  }
+
+  .dash__main .quick__list {
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    align-items: start;
   }
 }
 

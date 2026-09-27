@@ -82,4 +82,4 @@ The transport would follow ADR 0003's tier for server apps: a `statements` table
 
 - Light-only was decided in Slate for one teacher at one desk. Students use their own devices, some set to dark. Is light-only still right for the student page?
 - Should the progress dots become buttons that jump to a question? That is a behaviour change, so it was left out.
-- On a phone the teacher's results sit below the new-event form and the event list. Should results come first on small screens?
+- On a phone the teacher's results sat below the new-event form and the event list. Decided 2026-09-27: the page is now a list and a detail view, and on a phone opening an event shows it in place of the list (ADR 0003).

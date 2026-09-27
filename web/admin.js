@@ -2,14 +2,16 @@
   const screen = document.getElementById("screen");
   const TOKEN_KEY = "ct-quest-token";
   const PREVIEW_DEBOUNCE_MS = 300;
-  // The dashboard's single-column layout; matches the query in style.css.
-  const NARROW_DASH = "(max-width: 999.98px)";
 
   const state = {
     token: localStorage.getItem(TOKEN_KEY),
     user: null,
     events: [],
     selectedEventId: null,
+    // What the main area shows: "event" (the chosen event), "create" (the
+    // new-event form) or null (a prompt to pick one). On a phone the event
+    // list is hidden while a view is open, with a link back to it.
+    view: null,
     results: null,
     outcomesSummary: null,
     outcomesSort: { key: "meanPercentage", dir: "asc" },
@@ -81,6 +83,12 @@
   const NAVIGATION_LABELS = {
     free: "Free navigation",
     linear: "In order, no going back"
+  };
+
+  // Short audience names for the compact event rows.
+  const AUDIENCE_SHORT = {
+    core: "Core",
+    rgsynapse: "RGSynapse"
   };
 
   // Loosest to strictest: "each" shows a result immediately, "release" holds
@@ -1899,25 +1907,41 @@
     `;
   }
 
+  // Which question bank an event draws on, in a word. Kept on the compact
+  // row so an event titled for one cohort but built from another bank shows.
+  function audienceText(event) {
+    const audiences = event.filter && Array.isArray(event.filter.audiences) && event.filter.audiences.length
+      ? event.filter.audiences
+      : ["core"];
+
+    return audiences.map(id => AUDIENCE_SHORT[id] || id).join(" + ");
+  }
+
+  // One compact row per event: title and join code, then the facts a teacher
+  // scans for. The full summary and settings are on the event's own view.
   function renderEventList() {
     const events = visibleEvents();
-    const cards = events.map(event => `
-      <li>
-        <button class="event-card ${state.selectedEventId === event.id ? "event-card--active" : ""}" data-event-id="${event.id}" ${state.selectedEventId === event.id ? `aria-current="true"` : ""}>
-          <span class="event-card__title">${escapeHtml(event.title)}</span>
-          <span class="tag tag--code">${escapeHtml(event.join_code)}</span>
-          <span class="event-card__meta">
-            ${isAdmin() ? `<span class="event-card__owner">${event.owned ? "Yours" : escapeHtml(event.owner_email || "Unknown teacher")}</span>` : ""}
-            <span>${escapeHtml(event.filter_summary || event.selection_mode)}</span>
-            <span>${escapeHtml(presetLine(event))}</span>
-            <span>${event.duration_minutes ? `${event.duration_minutes} min` : "No time limit"}</span>
-            <span>${event.attempt_count} attempt${event.attempt_count === 1 ? "" : "s"}</span>
-            <span>${escapeHtml(FEEDBACK_LABELS[event.feedback_mode] || FEEDBACK_LABELS.release)}</span>
-            <span>${escapeHtml(NAVIGATION_LABELS[event.navigation_mode] || NAVIGATION_LABELS.free)}</span>
-          </span>
-        </button>
-      </li>
-    `).join("");
+    const cards = events.map(event => {
+      const active = state.view === "event" && state.selectedEventId === event.id;
+      const facts = [
+        audienceText(event),
+        `${event.attempt_count} attempt${event.attempt_count === 1 ? "" : "s"}`,
+        event.duration_minutes ? `${event.duration_minutes} min` : "No time limit"
+      ];
+
+      return `
+        <li>
+          <button class="event-card ${active ? "event-card--active" : ""}" data-event-id="${event.id}" ${active ? `aria-current="true"` : ""}>
+            <span class="event-card__title">${escapeHtml(event.title)}</span>
+            <span class="tag tag--code">${escapeHtml(event.join_code)}</span>
+            <span class="event-card__meta">
+              ${isAdmin() ? `<span class="event-card__owner">${event.owned ? "Yours" : escapeHtml(event.owner_email || "Unknown teacher")}</span>` : ""}
+              <span>${facts.map(escapeHtml).join(" · ")}</span>
+            </span>
+          </button>
+        </li>
+      `;
+    }).join("");
 
     if (cards) {
       return `<ul class="event-list">${cards}</ul>`;
@@ -1925,23 +1949,12 @@
 
     return state.events.length
       ? `<p class="muted card__pad">No events match this filter.</p>`
-      : `<p class="muted card__pad">No events yet. Create one with the form above.</p>`;
+      : `<p class="muted card__pad">No events yet. Use New event to make one.</p>`;
   }
 
   function bindEventListEvents() {
     Array.from(screen.querySelectorAll("[data-event-id]")).forEach(button => {
-      button.addEventListener("click", async () => {
-        state.selectedEventId = Number(button.getAttribute("data-event-id"));
-        state.editingSettings = false;
-        await loadResults(state.selectedEventId);
-
-        // In the single-column layout the results now sit above the form
-        // (style.css), so bring them into view from the event list below.
-        if (window.matchMedia(NARROW_DASH).matches) {
-          const main = screen.querySelector(".dash__main");
-          if (main) main.scrollIntoView({ block: "start" });
-        }
-      });
+      button.addEventListener("click", () => openEvent(Number(button.getAttribute("data-event-id"))));
     });
 
     Array.from(screen.querySelectorAll("[data-event-scope]")).forEach(button => {
@@ -2047,23 +2060,9 @@
 
         ${renderOutcomesSummaryBlock()}
       `
-      : `
-        <section class="card card--raised">
-          <div class="section-heading">
-            <h2>Results</h2>
-            <p>Pick an event to see its submissions.</p>
-          </div>
-        </section>
-      `;
+      : "";
 
-    screen.innerHTML = `
-      <div class="toolbar">
-        <span class="muted">Signed in as <strong>${escapeHtml(state.user.email)}</strong> (${escapeHtml(state.user.role)})</span>
-        <button id="logoutBtn" class="btn btn--destructive btn--sm">Log out</button>
-      </div>
-
-      <div class="dash">
-        <div class="dash__side">
+    const createBlock = `
           <section class="card" aria-labelledby="newEventHeading">
             <div class="section-heading">
               <h2 id="newEventHeading">New event</h2>
@@ -2115,17 +2114,47 @@
               <button id="createEventBtn" class="btn btn--accent">Create event</button>
             </div>
           </section>
+    `;
 
-          <section class="card card--flush" aria-labelledby="eventsHeading">
-            <div class="section-heading card__pad">
+    const emptyBlock = `
+          <section class="card card--raised">
+            <div class="section-heading">
+              <h2>${state.events.length ? "Pick an event" : "No events yet"}</h2>
+              <p>${state.events.length ? "Choose one from the list to see its results, questions and settings, or start a new one." : "Create an event to get a join code for your students."}</p>
+            </div>
+            <div class="form-actions form-actions--start">
+              <button type="button" class="btn btn--accent" data-new-event>New event</button>
+            </div>
+          </section>
+    `;
+
+    const mainBlock = state.view === "create"
+      ? createBlock
+      : state.view === "event" && state.results
+        ? resultsBlock
+        : emptyBlock;
+    const viewOpen = state.view === "create" || (state.view === "event" && Boolean(state.results));
+
+    screen.innerHTML = `
+      <div class="toolbar">
+        <span class="muted">Signed in as <strong>${escapeHtml(state.user.email)}</strong> (${escapeHtml(state.user.role)})</span>
+        <button id="logoutBtn" class="btn btn--destructive btn--sm">Log out</button>
+      </div>
+
+      <div class="dash ${viewOpen ? "dash--open" : ""}">
+        <nav class="dash__side" aria-labelledby="eventsHeading">
+          <section class="card card--flush">
+            <div class="side-head card__pad">
               <h2 id="eventsHeading">${isAdmin() ? "Events" : "Your events"}</h2>
+              <button type="button" class="btn ${state.view === "create" ? "btn--secondary" : "btn--accent"} btn--sm" data-new-event ${state.view === "create" ? `aria-current="true"` : ""}>+ New event</button>
             </div>
             <div id="eventListBody">${renderEventFilter()}${renderEventList()}</div>
           </section>
-        </div>
+        </nav>
 
         <div class="dash__main">
-          ${resultsBlock}
+          ${viewOpen ? `<button type="button" class="dash__back btn btn--ghost btn--sm" data-back>&larr; All events</button>` : ""}
+          ${mainBlock}
         </div>
       </div>
     `;
@@ -2135,6 +2164,7 @@
       state.user = null;
       state.events = [];
       state.selectedEventId = null;
+      state.view = null;
       state.results = null;
       state.outcomesSummary = null;
       state.eventQuestions = null;
@@ -2143,7 +2173,9 @@
       renderLogin();
     });
 
-    document.getElementById("createEventBtn").addEventListener("click", async () => {
+    const createBtn = document.getElementById("createEventBtn");
+
+    if (createBtn) createBtn.addEventListener("click", async () => {
       const title = document.getElementById("title").value.trim();
       const joinCode = document.getElementById("joinCode").value.trim();
       const durationMinutes = document.getElementById("durationMinutes").value;
@@ -2182,19 +2214,40 @@
         }
 
         state.pickerEdited = false;
+        state.view = "event";
+        state.selectedEventId = created.event.id;
+        state.editingSettings = false;
 
         await loadDashboard();
+        await loadResults(created.event.id);
       } catch (error) {
         alert(error.message);
       }
     });
 
-    bindQuickSetupEvents();
-    renderQuickSummary();
-    bindAdvancedPickerEvents();
-    bindAdvancedToggle();
-    bindSettingsEvents();
-    updateCreateButtonState();
+    Array.from(screen.querySelectorAll("[data-new-event]")).forEach(button => {
+      button.addEventListener("click", openCreate);
+    });
+
+    const backBtn = screen.querySelector("[data-back]");
+
+    if (backBtn) {
+      backBtn.addEventListener("click", () => {
+        state.view = null;
+        renderDashboard();
+        const heading = document.getElementById("eventsHeading");
+        if (heading) heading.scrollIntoView({ block: "start" });
+      });
+    }
+
+    if (state.view === "create") {
+      bindQuickSetupEvents();
+      renderQuickSummary();
+      bindAdvancedPickerEvents();
+      bindAdvancedToggle();
+      bindSettingsEvents();
+      updateCreateButtonState();
+    }
 
     const editSettingsBtn = document.getElementById("editSettingsBtn");
 
@@ -2272,6 +2325,26 @@
     bindQuestionPreviewEvents(document.getElementById("eventQuestionsSection"));
   }
 
+  // Opens an event in the main area. On a phone the list gives way to it.
+  async function openEvent(eventId) {
+    state.selectedEventId = eventId;
+    state.view = "event";
+    state.editingSettings = false;
+    await loadResults(eventId);
+    window.scrollTo({ top: 0 });
+  }
+
+  // Opens the new-event form in the main area, with a fresh preview.
+  function openCreate() {
+    state.view = "create";
+    state.editingSettings = false;
+    renderDashboard();
+    schedulePreview();
+    window.scrollTo({ top: 0 });
+    const title = document.getElementById("title");
+    if (title) title.focus({ preventScroll: true });
+  }
+
   async function loadResults(eventId) {
     try {
       const [results, outcomesSummary, questions] = await Promise.all([
@@ -2329,10 +2402,16 @@
     state.user = mePayload.user;
     state.events = eventsPayload.events;
 
+    // With no events yet, the form is the only useful thing to show.
+    if (!state.view && !state.events.length) {
+      state.view = "create";
+    }
+
     if (state.selectedEventId) {
       const stillExists = state.events.some(event => event.id === state.selectedEventId);
       if (!stillExists) {
         state.selectedEventId = null;
+        state.view = state.view === "event" ? null : state.view;
         state.results = null;
         state.outcomesSummary = null;
         state.eventQuestions = null;
