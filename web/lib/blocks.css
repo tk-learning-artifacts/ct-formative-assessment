@@ -162,8 +162,9 @@
 }
 
 @media (max-width: 640px) {
+  /* The toolbox sits across the top on a phone, so the editor is taller. */
   .bk-workspace {
-    height: 380px;
+    height: 480px;
   }
 }
 

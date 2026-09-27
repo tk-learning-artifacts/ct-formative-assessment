@@ -15,6 +15,8 @@
   const BLOCKLY_DIR = "/vendor/blockly-13.3.0/";
   const CELL = 40;
   const STEP_MS = 320;
+  // Space above the grid, so a speech bubble on the top row is not cut off.
+  const HEADROOM = 26;
 
   // Scratch's category hues, darkened so white text on each clears 4.5:1.
   const COLOURS = {
@@ -188,7 +190,7 @@
     const start = stage.start;
 
     return `
-      <svg class="bk-stage__svg" viewBox="-2 -2 ${cols * CELL + 4} ${rows * CELL + 4}" role="img" aria-labelledby="${idPrefix}-desc">
+      <svg class="bk-stage__svg" viewBox="-2 -${HEADROOM} ${cols * CELL + 4} ${rows * CELL + HEADROOM + 2}" role="img" aria-labelledby="${idPrefix}-desc">
         <desc id="${idPrefix}-desc">${escapeHtml(describeStage(stage))}</desc>
         ${cells.join("")}
         <g class="bk-sprite" data-bk-sprite style="transform: translate(${start.x * CELL + CELL / 2}px, ${start.y * CELL + CELL / 2}px)">
@@ -198,7 +200,7 @@
             <circle class="bk-sprite__eye" cx="4" cy="-4" r="2.2" />
             <circle class="bk-sprite__eye" cx="4" cy="4" r="2.2" />
           </g>
-          <g class="bk-bubble" data-bk-bubble hidden>
+          <g class="bk-bubble" data-bk-bubble display="none">
             <rect x="8" y="-38" rx="7" width="40" height="22" />
             <text x="28" y="-23" text-anchor="middle" data-bk-bubble-text></text>
           </g>
@@ -305,6 +307,18 @@
     return el.clientWidth < 520;
   }
 
+  // Scrolls so the program's first block sits near the top left of the
+  // editor, where students look first, rather than wherever Blockly puts it.
+  function showProgram(workspace) {
+    const hat = workspace.getTopBlocks(true).find(block => block.type === "when_run") || workspace.getTopBlocks(true)[0];
+    if (!hat) {
+      return;
+    }
+    const at = hat.getRelativeToSurfaceXY();
+    const scale = workspace.scale;
+    workspace.scroll(16 - at.x * scale, 16 - at.y * scale);
+  }
+
   // Given blocks get a dashed outline, so students can tell them apart.
   function markGiven(workspace) {
     workspace.getAllBlocks(false).forEach(block => {
@@ -366,6 +380,7 @@
     Blockly.serialization.workspaces.load(initialState(question, entry.response), workspace);
     editor.loading = false;
     markGiven(workspace);
+    showProgram(workspace);
     updateViews(editor);
 
     workspace.addChangeListener(event => {
@@ -447,16 +462,22 @@
     parts.body.style.transform = `rotate(${degrees}deg)`;
   }
 
-  function say(parts, text) {
+  // The bubble sits up and to the right of the sprite, or up and to the
+  // left on the right half of the grid, so it stays inside the stage.
+  function say(parts, text, frame) {
+    // SVG has no hidden attribute; display does the same job.
     if (text === null || text === undefined || text === "") {
-      parts.bubble.setAttribute("hidden", "");
+      parts.bubble.setAttribute("display", "none");
       return;
     }
     parts.bubbleText.textContent = text;
     const width = Math.max(28, 12 + String(text).length * 8);
+    const cols = Number(parts.stage.getAttribute("data-bk-cols")) || 1;
+    const left = frame && frame.x >= cols / 2 ? -8 - width : 8;
     parts.bubble.querySelector("rect").setAttribute("width", String(width));
-    parts.bubbleText.setAttribute("x", String(8 + width / 2));
-    parts.bubble.removeAttribute("hidden");
+    parts.bubble.querySelector("rect").setAttribute("x", String(left));
+    parts.bubbleText.setAttribute("x", String(left + width / 2));
+    parts.bubble.removeAttribute("display");
   }
 
   function resetStage(questionId, question) {
@@ -565,7 +586,7 @@
         }
       }
       if (frame.event === "say") {
-        say(parts, frame.said);
+        say(parts, frame.said, frame);
       }
       if (frame.event === "crash") {
         parts.stage.classList.add("bk-stage--crashed");
@@ -600,6 +621,7 @@
         editor.workspace.clear();
         window.Blockly.serialization.workspaces.load(engine().toBlocklyState(startWorkspace(editor.question), null), editor.workspace);
         markGiven(editor.workspace);
+        showProgram(editor.workspace);
       }
     }
   });
@@ -613,7 +635,7 @@
       const example = question.example;
 
       return `
-        <div class="bk-stage" data-bk-stage="${id}">
+        <div class="bk-stage" data-bk-stage="${id}" data-bk-cols="${example.grid[0].length}">
           <div class="bk-stage__frame">${stageSvg(example, `bk-${id}`)}</div>
           <div class="bk-stage__bar">
             <button type="button" class="btn btn--primary bk-run" data-bk-action="run" data-bk-question="${id}" data-bk-run>&#9654; Run</button>
@@ -652,11 +674,10 @@
           <details class="bk-view bk-keys">
             <summary>Using the keyboard</summary>
             <ul>
-              <li>Tab to the editor. The arrow keys move between blocks and the gaps in them.</li>
-              <li><kbd>T</kbd> opens the toolbox; choose a block with the arrow keys and press <kbd>Enter</kbd> to take it.</li>
-              <li>Move it with the arrow keys to the gap you want and press <kbd>Enter</kbd> to drop it, or <kbd>Esc</kbd> to cancel.</li>
-              <li><kbd>M</kbd> picks up the block you are on to move it; <kbd>Delete</kbd> removes it; <kbd>Enter</kbd> on a number or menu edits it.</li>
-              <li><kbd>W</kbd> goes back to your program. Tab on to leave the editor.</li>
+              <li>Tab into the editor: you land in the toolbox. The arrow keys choose a block; <kbd>Enter</kbd> takes a copy.</li>
+              <li>The arrow keys then move it from gap to gap in your program. <kbd>Enter</kbd> drops it there; <kbd>Esc</kbd> cancels.</li>
+              <li><kbd>W</kbd> jumps to your program, and the arrow keys move between its blocks. On a number or a menu, <kbd>Enter</kbd> edits it; type, then <kbd>Enter</kbd> again.</li>
+              <li><kbd>M</kbd> moves the block you are on, <kbd>Delete</kbd> removes it, and <kbd>T</kbd> goes back to the toolbox.</li>
             </ul>
           </details>
         </div>

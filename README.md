@@ -4,7 +4,7 @@ A web-based Computational Thinking (CT) formative-assessment platform. Teachers 
 
 Two audiences are supported: the original **core** P5 to S2 Bebras-style puzzles (the default), and **RGSynapse** (Raffles Girls' School Sec 1 and Sec 2, students who already write some Swift and Python and build with AI assistants). Questions are tagged against a CT ontology based on Brennan & Resnick (2012) and against learning outcomes, so events can be built from any mix of level, outcome, CT concept or practice, and question type.
 
-The design decisions are recorded in [docs/adr/0001-ct-platform-model.md](docs/adr/0001-ct-platform-model.md), the per-event feedback and navigation settings and the quick setup presets in [docs/adr/0003-assessment-settings.md](docs/adr/0003-assessment-settings.md), the admin (head of department) role in [docs/adr/0004-admin-role.md](docs/adr/0004-admin-role.md), and the look of the pages in [docs/adr/0002-adopt-slate-visual-conventions.md](docs/adr/0002-adopt-slate-visual-conventions.md). Explainers for the concepts it uses are in [docs/learn/](docs/learn/).
+The design decisions are recorded in [docs/adr/0001-ct-platform-model.md](docs/adr/0001-ct-platform-model.md), the per-event feedback and navigation settings and the quick setup presets in [docs/adr/0003-assessment-settings.md](docs/adr/0003-assessment-settings.md), the admin (head of department) role in [docs/adr/0004-admin-role.md](docs/adr/0004-admin-role.md), the block programming (Scratch-like) question type in [docs/adr/0006-block-programming-questions.md](docs/adr/0006-block-programming-questions.md), and the look of the pages in [docs/adr/0002-adopt-slate-visual-conventions.md](docs/adr/0002-adopt-slate-visual-conventions.md). Explainers for the concepts it uses are in [docs/learn/](docs/learn/).
 
 ---
 
@@ -19,7 +19,7 @@ ct-formative-assessment/
 │   │   ├── learning-outcomes.json  LOs mapped to ontology nodes
 │   │   ├── legacy-modes.json     Question ids behind the old ALL/P5/P6/S1/S2 modes
 │   │   ├── presets.json          Quick setup cards: named filters plus their knobs
-│   │   └── questions/            Question banks (core.json, rgsynapse.json, type-samples.json, ai-samples.json)
+│   │   └── questions/            Question banks (core.json, rgsynapse.json, type-samples.json, ai-samples.json, blocks.json)
 │   ├── src/
 │   │   ├── server.js         Entry point: loads config, starts the app
 │   │   ├── app.js            Express app: routes, JWT auth, static allowlist
@@ -45,7 +45,9 @@ ct-formative-assessment/
 ├── web/                      Frontend: plain HTML/CSS/JS, no framework
 │   ├── index.html / app.js   Student quiz UI (countdown, auto-submit, resume after refresh)
 │   ├── type-registry.js      Loads the question-type renderers
-│   ├── types/                One renderer per question type (mcq, code-trace, parsons, open-response-ai)
+│   ├── types/                One renderer per question type (mcq, code-trace, parsons, open-response-ai, blocks)
+│   ├── lib/                  Files shared with the server: blocks-engine.js (the block language, run by both sides) and blocks.css
+│   ├── vendor/               Vendored libraries, never packaged: blockly-13.3.0/ (Apache-2.0, with its licence and provenance)
 │   ├── admin.html / admin.js Teacher portal: event picker with live preview, results, per-outcome summary, AI marking
 │   ├── style.css             Shared styles on Slate's theme contract (light only)
 │   └── vite.config.js        Dev server config (proxy + multi-page build)
@@ -58,13 +60,15 @@ ct-formative-assessment/
 
 ### How it fits together
 
-**Production:** Express serves the `.html`, `.css` and `.js` files in `web/` (except build config such as `vite.config.js`) plus the renderers in `web/types/`, and handles all `/api/*` routes in a single process on port 3000. The list is derived from the folder at startup. Nothing else in `web/` or `backend/` is reachable over HTTP. Unknown `/api/*` routes return a JSON 404.
+**Production:** Express serves the `.html`, `.css` and `.js` files in `web/` (except build config such as `vite.config.js`), the renderers in `web/types/`, and the `.js` and `.css` files in `web/lib/` and in each folder of `web/vendor/`, and handles all `/api/*` routes in a single process on port 3000. The list is derived from the folder at startup. Nothing else in `web/` or `backend/` is reachable over HTTP. Unknown `/api/*` routes return a JSON 404.
 
 **Development:** Vite runs a dev server on port 5173 with hot reload and proxies all `/api/*` requests to the Express backend on port 3000. The two processes run concurrently via `npm run dev`.
 
 **Content:** On boot the backend validates everything in `backend/content/` (a bad tag or answer key stops the server with a list of problems) and copies it into indexed SQLite tables, so event filters run as SQL. When an event is created its questions are snapshotted into `event_questions`, so editing content never changes a running event.
 
 **Look.** The pages follow Slate's visual conventions: every colour and font in `web/style.css` is a named token in one `:root` block, so a retint is one edit there. There is no dark mode. Status colours (correct, late, needs marking, released) use four fixed tones, and each is paired with a word.
+
+**Block programming.** A `blocks` question gives the student a Blockly editor (vendored, Scratch-style blocks) holding a partly built program whose given blocks cannot be moved, and a stage: a sprite on a grid. Run animates the program on the example grid as often as they like. The server marks the submitted block tree by running it itself, on the example and on hidden grids, with the same engine file (`web/lib/blocks-engine.js`) the page animates with; nothing is ever evaluated, and a step limit stops endless loops. The hidden grids and the reference solution never reach students. See ADR 0006.
 
 **Answer keys** stay on the server. Students receive each question through its type's public projection, which leaves out `answer`, the teacher-only `details` note and any other marking fields.
 
@@ -184,6 +188,7 @@ The suite uses Node's built-in test runner (`node:test`) with `supertest` for HT
 | `filters.test.js` | Pinned legacy modes, the core-audience default, AI-scored questions opt-in and last, v2 filters, preview = event count, ontology/outcomes/catalog endpoints |
 | `events.test.js` | Absolute times only, 24-hour duration cap |
 | `scoring.test.js` | Types loaded from files, public projection checked for every type, plugging in a new type |
+| `blocks.test.js` | Block programs: shape checks and size limits, the interpreter and its step limit, the given blocks kept in place (and re-checked on the server), offered blocks only, partial credit by grids passed, the block limit, validation of broken questions, no hidden grid or solution in what students get, the served engine being the scorer's own file, the vendored Blockly served with its header, and an HTTP attempt to the released breakdown |
 | `question-types.test.js` | Code-trace normalisation and partial credit (blank lines at either end ignored for per-line credit); Parsons scoring, opaque ids and a shuffle that never shows a correct order, both keyed with the server secret (the attacks that recovered the answer unkeyed are replayed); an HTTP attempt from start to released breakdown |
 | `outcomes-summary.test.js` | Per-outcome and per-node results: rollups, reset, late and unsubmitted attempts, unmarked AI answers left out of the averages, owner scoping |
 | `content.test.js` | Content validation catches bad tags, bands, keys, cycles and legacy modes |
@@ -251,7 +256,9 @@ All content is JSON under `backend/content/`. Restart the server (nodemon does t
 - Spread correct answers across positions; the 44 shipped multiple-choice questions have eleven keys at each of positions 0 to 3.
 - Adding a core question does not change the legacy `ALL` or single-level modes. They are pinned in `legacy-modes.json`, and only an edit there changes them.
 
-Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question id. It gets the question and returns either the answer value (matched against option text or its leading number) or `{ pick: optionText => boolean }`. Parse the numbers from the question's text where you can. For code, either parse what you need or pin the exact source and translate it to JavaScript. Code-trace solvers return the program's output; Parsons solvers get the program built from each accepted order and return what it prints, which must equal `expectedOutput`. When `python3` or `swift` is installed, the answer-key test also runs these programs for real. A question that genuinely cannot be computed goes in `NOT_COMPUTABLE` in `test/solvers/index.js` with a reason. `npm test` fails if a question has neither.
+Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question id. It gets the question and returns either the answer value (matched against option text or its leading number) or `{ pick: optionText => boolean }`. Parse the numbers from the question's text where you can. For code, either parse what you need or pin the exact source and translate it to JavaScript. Code-trace solvers return the program's output; Parsons solvers get the program built from each accepted order and return what it prints, which must equal `expectedOutput`. Block solvers work out each grid's expectation from the grid alone (the flag and stars reachable, the number of stars to say); the test also runs the question's reference solution through the scorer on every grid, and, when `python3` is installed, runs its Python view on every grid. When `python3` or `swift` is installed, the answer-key test also runs these programs for real. A question that genuinely cannot be computed goes in `NOT_COMPUTABLE` in `test/solvers/index.js` with a reason. `npm test` fails if a question has neither.
+
+**Add a block programming question** (`"type": "blocks"`, see ADR 0006): give `world: "maze"`, an `example` stage (`grid` rows of `#` wall, `.` floor, `G` flag, `*` star; `start: { x, y, facing }`; `expect` with any of `reachGoal`, `collectAll`, `say`), secret `cases` in the same shape, a `startProgram` with the given blocks marked `"locked": true` (and `"editable": true` where a field may change), the `toolbox` block types, optional `variables`, `stepLimit`, `maxBlocks`, `showPython` and `marking: { "partial": "cases" }`, and a secret `solution`. The block names are in `BLOCKS` in `web/lib/blocks-engine.js`. The server will not start unless the solution passes every stage and the starting program alone fails one. Writing the tree by hand is fiddly; building it in a script and checking it with the scorer's `validate` is quicker.
 
 **Add a quick setup preset** to `presets.json` with `id`, `label`, a one-line `description`, a `filter` (the event filter shape, without `questionIds`) and `knobs` (any of `who`, `emphasis`, `length`). A preset spanning several audiences must offer `who`; one that fixes `nodes` cannot offer `emphasis`; one that names an AI-scored type must say `"aiScored": true`. Every preset must match at least one question with its default settings, or the server will not start. See ADR 0003, section 5.
 
@@ -259,7 +266,9 @@ Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question 
 
 **Add a learning outcome** to `learning-outcomes.json` with `id`, `statement`, `nodes`, `levels` and optional `audiences` (empty means all).
 
-**Add a question type:** add `backend/src/scoring/types/<type>.js` (see `mcq.js` for the exports: `publicFields`, `sample`, `validate`, `normalizeResponse`, `recordResponse`, `score`), and `web/types/<type>.js` registering `renderInput`, `readResponse` and `describeResponse`. Then add a matcher to the answer-key test. No shared file needs editing. See the ADR, section 6.
+**Vendor a frontend library** under `web/vendor/<name>-<version>/`: its licence beside it, and a header comment in each served file giving the version, source URL, checksum and licence (see the Blockly files). Never load one from a CDN.
+
+**Add a question type:** add `backend/src/scoring/types/<type>.js` (see `mcq.js` for the exports: `publicFields`, `sample`, `validate`, `normalizeResponse`, `recordResponse`, `score`), and `web/types/<type>.js` registering `renderInput`, `readResponse` and `describeResponse` (and a `ready` promise if it loads files of its own, as the block renderer does). Then add a matcher to the answer-key test. No shared file needs editing. See the ADR, section 6.
 
 ---
 
