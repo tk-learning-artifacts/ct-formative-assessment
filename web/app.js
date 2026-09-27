@@ -12,6 +12,11 @@
   const MARKING_POLL_SECONDS = 15;
   const MARKING_POLLS = 40;
 
+  // During a test the page also re-reads the attempt this often (seconds),
+  // and after each move between questions, so a teacher's change to the
+  // settings or the time reaches the student (ADR 0003 §10).
+  const SETTINGS_POLL_SECONDS = 30;
+
   let ACTIVE_BANK = [];
 
   const state = {
@@ -22,11 +27,20 @@
     attemptId: null,
     attemptToken: null,
     deadlineMs: null,
+    deadlineAt: null,
     timerId: null,
     markingTimerId: null,
     progressTimerId: null,
     submitting: false,
     committing: false,
+    // True while the question screen is showing, so the settings poll
+    // knows to keep going.
+    inAttempt: false,
+    syncing: false,
+    markingPolls: 0,
+    // A one-off note that the teacher changed the settings, shown until the
+    // student moves to another question.
+    notice: "",
     i: 0,
     answers: {},
     startedAt: null,
@@ -196,6 +210,7 @@
   // device clock is wrong still gets the right amount of time.
   function startTimer(deadlineAt, serverNow) {
     stopTimer();
+    state.deadlineAt = deadlineAt || null;
 
     if (!deadlineAt) {
       state.deadlineMs = null;
@@ -213,6 +228,18 @@
         submitAttempt({ auto: true });
       }
     }, 1000);
+  }
+
+  // Starts the timer, and submits at once if the deadline has already
+  // passed (for example, the teacher moved it earlier). A late submit is
+  // still stored; the server flags it for the teacher.
+  function applyDeadline(deadlineAt, serverNow) {
+    startTimer(deadlineAt, serverNow);
+
+    if (state.deadlineMs !== null && Date.now() >= state.deadlineMs) {
+      stopTimer();
+      submitAttempt({ auto: true });
+    }
   }
 
   // ---------- Answers ----------
@@ -262,12 +289,17 @@
   // Submits the answers. Network failures and server errors are retried with
   // growing waits, so an auto-submit at the deadline survives a flaky
   // connection; answers stay saved in this tab meanwhile.
-  async function submitAttempt({ auto = false } = {}) {
+  // capture: false leaves the question on screen out, for a skip that ran
+  // into the time limit.
+  async function submitAttempt({ auto = false, capture = true } = {}) {
     if (state.submitting || !state.attemptId) {
       return;
     }
 
-    captureCurrentAnswer();
+    if (capture) {
+      captureCurrentAnswer();
+    }
+
     stopProgressPoll();
     state.submitting = true;
 
@@ -310,6 +342,26 @@
 
   // ---------- Committing one answer ----------
 
+  // While a commit is in flight the answer cannot be edited, so the locked
+  // answer drawn afterwards is always the one the server stored.
+  function setAnswerAreaBusy(busy) {
+    const area = document.getElementById("answerArea");
+
+    if (area) {
+      area.inert = busy;
+      area.classList.toggle("answer-area--busy", busy);
+      area.setAttribute("aria-busy", busy ? "true" : "false");
+    }
+  }
+
+  function postCommit(q, response) {
+    return api(`/api/attempts/${state.attemptId}/answers/${encodeURIComponent(q.id)}/commit`, {
+      method: "POST",
+      headers: attemptHeaders(),
+      body: JSON.stringify({ response: response === undefined ? null : response })
+    });
+  }
+
   // Sends the current question's answer (or a skip) as final. On success the
   // answer is locked, and under "each" its result comes back. Returns
   // whether it was committed.
@@ -322,27 +374,32 @@
 
     captureCurrentAnswer();
     state.committing = true;
+    setAnswerAreaBusy(true);
     updateNavButtons();
 
     try {
-      const payload = await api(`/api/attempts/${state.attemptId}/answers/${encodeURIComponent(q.id)}/commit`, {
-        method: "POST",
-        headers: attemptHeaders(),
-        body: JSON.stringify({ response: skip || state.answers[q.id] === undefined ? null : state.answers[q.id] })
-      });
+      const payload = await postCommit(q, skip ? null : state.answers[q.id]);
 
       if (skip) {
         delete state.answers[q.id];
       }
 
       setCommitted(payload.progress);
+      state.markingPolls = 0;
       saveAttempt();
       return true;
     } catch (error) {
       const code = error.payload && error.payload.code;
 
       if (code === "time-up") {
-        await submitAttempt({ auto: true });
+        // A skipped question is sent blank, whatever was typed into it.
+        if (skip) {
+          delete state.answers[q.id];
+          saveAttempt();
+        }
+
+        state.committing = false;
+        await submitAttempt({ auto: true, capture: !skip });
         return false;
       }
 
@@ -351,9 +408,19 @@
         return false;
       }
 
-      if (code === "answer-locked" || code === "out-of-order") {
-        // Another tab moved on: take the server's record and carry on from it.
-        await refreshProgress();
+      if (code === "answer-locked") {
+        // Already stored: a response that never arrived, or another tab.
+        // Show what the server has for this question before moving on.
+        state.committing = false;
+        await syncFromServer({ stayOn: q.id });
+        return false;
+      }
+
+      if (code === "out-of-order" || code === "commit-not-used") {
+        // Another tab moved on, or the teacher changed the settings: take
+        // the server's record and carry on from it.
+        state.committing = false;
+        await syncFromServer();
         return false;
       }
 
@@ -361,32 +428,12 @@
       return false;
     } finally {
       state.committing = false;
+      setAnswerAreaBusy(false);
       updateNavButtons();
     }
   }
 
-  // Re-reads the committed answers from the server and redraws the question.
-  async function refreshProgress() {
-    try {
-      const payload = await api(`/api/attempts/${state.attemptId}`, { method: "GET", headers: attemptHeaders() });
-
-      if (payload.attempt.status !== "started") {
-        await resumeAttempt(readSavedAttempt() || { attemptId: state.attemptId, token: state.attemptToken });
-        return;
-      }
-
-      setCommitted(payload.progress);
-
-      if (isLinear()) {
-        state.i = clamp(firstOpenIndex(), 0, ACTIVE_BANK.length - 1);
-      }
-
-      saveAttempt();
-      renderQuestion();
-    } catch (_error) {
-      showStatus("Could not reach the server. Try again in a moment.");
-    }
-  }
+  // ---------- Picking up the teacher's changes ----------
 
   function stopProgressPoll() {
     if (state.progressTimerId) {
@@ -395,44 +442,194 @@
     }
   }
 
-  // Under "each", a checked AI-scored answer is marked in the background.
-  // While any is still being marked, check back, and redraw the question if
-  // it is the one on screen.
-  function pollWhilePending(polls = 0) {
+  function hasPendingResult() {
+    return Object.values(state.committed).some(item => item.result && item.result.status === "pending");
+  }
+
+  // Re-reads the attempt in a while: every MARKING_POLL_SECONDS while an
+  // answer checked under "each" is being marked (at most MARKING_POLLS
+  // times), otherwise every SETTINGS_POLL_SECONDS.
+  function scheduleSync() {
     stopProgressPoll();
 
-    const pending = Object.values(state.committed).some(item => item.result && item.result.status === "pending");
+    if (!state.inAttempt || state.submitting) {
+      return;
+    }
 
-    if (!pending || polls >= MARKING_POLLS) {
+    const marking = hasPendingResult() && state.markingPolls < MARKING_POLLS;
+
+    state.progressTimerId = setTimeout(() => {
+      state.progressTimerId = null;
+
+      if (marking) {
+        state.markingPolls += 1;
+      }
+
+      syncFromServer();
+    }, (marking ? MARKING_POLL_SECONDS : SETTINGS_POLL_SECONDS) * 1000);
+  }
+
+  // What the question screen shows of the attempt, for telling whether a
+  // re-read changed anything: the settings, the deadline, which questions
+  // are locked or skipped, and the result under the current question. A
+  // result arriving for another question does not redraw the one being
+  // answered.
+  function progressSignature() {
+    const q = ACTIVE_BANK[state.i];
+    const locked = ACTIVE_BANK.map(item => state.committed[item.id] ? (state.committed[item.id].skipped ? "s" : "c") : "-").join("");
+    return JSON.stringify([state.eventTitle, state.feedbackMode, state.navigationMode, state.deadlineAt, locked, q ? state.committed[q.id] || null : null]);
+  }
+
+  // The first question with neither a committed nor a typed answer, or, if
+  // every one has something, the last uncommitted question.
+  function firstUnansweredIndex() {
+    const open = ACTIVE_BANK.findIndex(q => !state.committed[q.id] && state.answers[q.id] === undefined);
+
+    if (open !== -1) {
+      return open;
+    }
+
+    for (let idx = ACTIVE_BANK.length - 1; idx >= 0; idx -= 1) {
+      if (!state.committed[ACTIVE_BANK[idx].id]) {
+        return idx;
+      }
+    }
+
+    return ACTIVE_BANK.length - 1;
+  }
+
+  // The teacher switched to in order mid-test. The student carries on from
+  // the first question they have not answered; the answers they gave before
+  // it are committed now, in order, so they cannot go back to them.
+  async function catchUpInOrder() {
+    const target = firstUnansweredIndex();
+    state.committing = true;
+
+    try {
+      for (let idx = 0; idx < target; idx += 1) {
+        const q = ACTIVE_BANK[idx];
+
+        if (state.committed[q.id]) {
+          continue;
+        }
+
+        const payload = await postCommit(q, state.answers[q.id]);
+        setCommitted(payload.progress);
+      }
+    } catch (error) {
+      const code = error.payload && error.payload.code;
+
+      if (code === "time-up") {
+        state.committing = false;
+        await submitAttempt({ auto: true });
+        return;
+      }
+
+      // Anything not committed is still sent with the rest at submit.
+      showStatus(error.status ? error.message : "Could not reach the server. Your answers are saved here.");
+    } finally {
+      state.committing = false;
+    }
+
+    state.i = clamp(Math.min(target, firstOpenIndex()), 0, ACTIVE_BANK.length - 1);
+  }
+
+  // A note on what the teacher changed, in the student's terms.
+  function changeNotice(before) {
+    const parts = [];
+
+    if (before.navigationMode !== state.navigationMode) {
+      parts.push(isLinear()
+        ? "Questions now come in order, and you can't go back. The answers you had given are recorded."
+        : "You can now move between questions. Answers already locked stay locked.");
+    }
+
+    if (before.feedbackMode !== state.feedbackMode) {
+      parts.push(feedbackEach()
+        ? "You can now check each answer to see if it's right."
+        : state.feedbackMode === "end"
+          ? "You'll see which answers were right when you submit."
+          : "Your teacher will show you which answers were right later.");
+    }
+
+    if (before.deadlineAt !== state.deadlineAt) {
+      parts.push(state.deadlineAt ? "The time for this test has changed." : "This test no longer has a time limit.");
+    }
+
+    return parts.length ? `Your teacher changed this test. ${parts.join(" ")}` : "";
+  }
+
+  // Re-reads the attempt: settings, committed answers and the deadline. If
+  // anything changed, the question is redrawn (the timer restarts with the
+  // new deadline). stayOn keeps the student on that question, to show its
+  // stored result, instead of moving them to the first open one.
+  async function syncFromServer({ stayOn = null } = {}) {
+    if (!state.attemptId || !state.inAttempt || state.submitting || state.committing || state.syncing) {
+      scheduleSync();
       return;
     }
 
     const attemptId = state.attemptId;
+    state.syncing = true;
 
-    state.progressTimerId = setTimeout(async () => {
-      state.progressTimerId = null;
+    try {
+      const payload = await api(`/api/attempts/${attemptId}`, { method: "GET", headers: attemptHeaders() });
 
-      try {
-        const payload = await api(`/api/attempts/${attemptId}`, { method: "GET", headers: attemptHeaders() });
-
-        if (state.attemptId !== attemptId || state.submitting || payload.attempt.status !== "started") {
-          return;
-        }
-
-        setCommitted(payload.progress);
-        const q = ACTIVE_BANK[state.i];
-
-        if (q && state.committed[q.id]) {
-          captureCurrentAnswer();
-          renderQuestion({ polls: polls + 1 });
-          return;
-        }
-      } catch (_error) {
-        // Try again next time.
+      if (state.attemptId !== attemptId || state.submitting || state.committing || !state.inAttempt) {
+        return;
       }
 
-      pollWhilePending(polls + 1);
-    }, MARKING_POLL_SECONDS * 1000);
+      if (payload.attempt.status !== "started") {
+        state.syncing = false;
+        await resumeAttempt(readSavedAttempt() || { attemptId: state.attemptId, token: state.attemptToken });
+        return;
+      }
+
+      captureCurrentAnswer();
+
+      const before = { feedbackMode: state.feedbackMode, navigationMode: state.navigationMode, deadlineAt: state.deadlineAt };
+      const signature = progressSignature();
+      const progress = payload.progress || {};
+
+      state.eventTitle = payload.event.title;
+      state.feedbackMode = progress.feedbackMode || state.feedbackMode;
+      state.navigationMode = progress.navigationMode || state.navigationMode;
+      setCommitted(progress);
+
+      if ((payload.attempt.deadlineAt || null) !== state.deadlineAt) {
+        applyDeadline(payload.attempt.deadlineAt, payload.serverNow);
+
+        if (state.submitting) {
+          return;
+        }
+      }
+
+      if (progressSignature() === signature && !stayOn) {
+        return;
+      }
+
+      state.notice = changeNotice(before) || state.notice;
+
+      if (before.navigationMode !== "linear" && isLinear()) {
+        await catchUpInOrder();
+
+        if (state.submitting) {
+          return;
+        }
+      } else if (stayOn && state.committed[stayOn]) {
+        state.i = ACTIVE_BANK.findIndex(q => q.id === stayOn);
+      } else if (isLinear()) {
+        state.i = clamp(firstOpenIndex(), 0, ACTIVE_BANK.length - 1);
+      }
+
+      saveAttempt();
+      renderQuestion();
+    } catch (_error) {
+      // Try again at the next poll or move.
+    } finally {
+      state.syncing = false;
+      scheduleSync();
+    }
   }
 
   // ---------- Results, shared by the per-question feedback and the breakdown ----------
@@ -517,6 +714,8 @@
 
   function renderStart(errorMessage) {
     stopTimer();
+    state.inAttempt = false;
+    stopProgressPoll();
     screen.innerHTML = `
       <section class="card join">
         <form class="stack" id="joinForm" novalidate>
@@ -622,6 +821,9 @@
 
     state.i = clamp(target, 0, Math.max(0, ACTIVE_BANK.length - 1));
 
+    state.inAttempt = true;
+    state.notice = "";
+    state.markingPolls = 0;
     saveAttempt();
     startTimer(payload.attempt.deadlineAt, payload.serverNow);
     renderQuestion();
@@ -725,13 +927,17 @@
     return parts.length ? `<p class="muted small q-hint">${parts.join(" ")}</p>` : "";
   }
 
+  // Moves to a question, then re-reads the attempt in the background in case
+  // the teacher changed something.
   function goTo(index) {
     state.i = clamp(index, 0, ACTIVE_BANK.length - 1);
+    state.notice = "";
     saveAttempt();
     renderQuestion();
+    syncFromServer();
   }
 
-  function renderQuestion({ polls = 0 } = {}) {
+  function renderQuestion() {
     const q = ACTIVE_BANK[state.i];
     const renderer = Types.get(q.type);
     const currentNumber = state.i + 1;
@@ -800,6 +1006,7 @@
             : renderer.renderInput(q, state.answers[q.id], h)}</div>
 
           ${committedPanel(q)}
+          ${state.notice ? `<p class="notice notice--warning q-change" role="status">${escapeHtml(state.notice)}</p>` : ""}
           ${modeHint()}
 
           <p class="notice q-status" id="submitStatus" role="status" hidden></p>
@@ -810,7 +1017,7 @@
     `;
 
     updateTimerPill();
-    pollWhilePending(polls);
+    scheduleSync();
 
     const answerArea = document.getElementById("answerArea");
     answerArea.addEventListener("change", captureCurrentAnswer);
@@ -942,6 +1149,7 @@
 
   function renderResults(payload, { auto = false, polls = 0 } = {}) {
     stopTimer();
+    state.inAttempt = false;
     stopProgressPoll();
 
     const result = payload.result || { score: 0, max: 0, breakdownReleased: false };
@@ -1048,6 +1256,7 @@
       state.attemptId = null;
       state.attemptToken = null;
       state.deadlineMs = null;
+      state.deadlineAt = null;
       state.submitting = false;
       state.i = 0;
       state.answers = {};

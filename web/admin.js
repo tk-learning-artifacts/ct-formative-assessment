@@ -36,6 +36,12 @@
       difficultyMax: "",
       limit: ""
     },
+    // Set once the teacher changes anything in Customise, and cleared when
+    // they choose a card or knob. While set, a preset preview leaves the
+    // picker alone, so closing Customise keeps their edits.
+    pickerEdited: false,
+    // Whether the chosen event's "Edit settings" form is open.
+    editingSettings: false,
     // The event settings (ADR 0003), kept across re-renders.
     settings: {
       feedbackMode: "release",
@@ -131,6 +137,8 @@
   }
 
   // Each AI-scored answer, with a small form to set the score and feedback.
+  // A committed answer can be marked before the student submits, so under
+  // "after each question" they see the mark straight away.
   function aiAnswersBlock(attempt) {
     return attempt.answers
       .filter(answer => answer.questionType === "open-response-ai")
@@ -149,7 +157,7 @@
             </div>
             <p class="ai-review__answer">${escapeHtml(answer.response && answer.response.text ? answer.response.text : "No answer")}</p>
             ${aiFeedback ? `<p class="muted small">AI feedback: ${escapeHtml(aiFeedback)}</p>` : ""}
-            ${attempt.status === "submitted" ? `
+            ${!attempt.reset_at && (attempt.status === "submitted" || answer.committedAt) ? `
               <div class="ai-review__form">
                 <div class="field">
                   <label for="score-${key}">Score</label>
@@ -302,7 +310,7 @@
       state.preview = payload;
       state.previewError = null;
 
-      if (fromPreset) {
+      if (fromPreset && !state.pickerEdited) {
         fillPickerFromFilter(payload.filter);
         refreshAdvancedPicker();
       }
@@ -549,6 +557,7 @@
       input.addEventListener("change", () => {
         const preset = presetById(input.value);
         state.quick = { ...preset.defaults };
+        state.pickerEdited = false;
         state.preview = null;
         refreshQuickSetup();
         schedulePreview();
@@ -559,6 +568,7 @@
     container.querySelectorAll("[data-quick-knob]").forEach(select => {
       select.addEventListener("change", () => {
         state.quick = { ...state.quick, [select.getAttribute("data-quick-knob")]: select.value };
+        state.pickerEdited = false;
         schedulePreview();
         renderQuickSummary();
         updateCreateButtonState();
@@ -866,6 +876,7 @@
     }
 
     function onPickerChange() {
+      state.pickerEdited = true;
       schedulePreview();
       renderPreviewPanel();
       updateCreateButtonState();
@@ -1104,6 +1115,203 @@
     });
   }
 
+  // ---------- Editing an event's settings ----------
+
+  const SETTING_FIELD_LABELS = {
+    title: "Title",
+    feedback_mode: "Feedback",
+    navigation_mode: "Navigation",
+    duration_minutes: "Time limit",
+    start_at: "Opens",
+    end_at: "Deadline"
+  };
+
+  function formatTime(iso) {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  }
+
+  // An ISO time as a datetime-local value in the teacher's own zone.
+  function toLocalInput(iso) {
+    if (!iso) {
+      return "";
+    }
+
+    const date = new Date(iso);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+
+  // Where the event's questions came from, for its card.
+  function presetLine(event) {
+    if (!event.preset) {
+      return "Custom selection";
+    }
+
+    return `From preset: ${event.preset.summary}${event.preset.customised ? ", then customised" : ""}`;
+  }
+
+  // One audit value in words.
+  function settingValueText(field, value) {
+    if (field === "feedback_mode") {
+      return FEEDBACK_LABELS[value] || value;
+    }
+
+    if (field === "navigation_mode") {
+      return NAVIGATION_LABELS[value] || value;
+    }
+
+    if (field === "duration_minutes") {
+      return value === null ? "No time limit" : `${value} min`;
+    }
+
+    if (field === "start_at" || field === "end_at") {
+      return value === null ? "Not set" : formatTime(value);
+    }
+
+    return value === null ? "None" : value;
+  }
+
+  function renderSettingsHistory(changes) {
+    if (!changes || !changes.length) {
+      return "";
+    }
+
+    return `
+      <details class="history">
+        <summary>Settings history (${changes.length} change${changes.length === 1 ? "" : "s"})</summary>
+        <ol class="history__list">
+          ${changes.map(change => `
+            <li class="history__item">
+              <span class="muted small">${escapeHtml(formatTime(change.changedAt))}</span>
+              <span><strong>${escapeHtml(SETTING_FIELD_LABELS[change.field] || change.field)}</strong>:
+                ${escapeHtml(settingValueText(change.field, change.oldValue))} &rarr; ${escapeHtml(settingValueText(change.field, change.newValue))}</span>
+              ${change.changedBy ? `<span class="muted small">${escapeHtml(change.changedBy)}</span>` : ""}
+            </li>
+          `).join("")}
+        </ol>
+      </details>
+    `;
+  }
+
+  // The form's starting values, so only fields the teacher touched are sent.
+  function editFormValues(event) {
+    return {
+      title: event.title,
+      feedbackMode: event.feedback_mode || "release",
+      navigationMode: event.navigation_mode || "free",
+      durationMinutes: event.duration_minutes ? String(event.duration_minutes) : "",
+      startAt: toLocalInput(event.start_at),
+      endAt: toLocalInput(event.end_at)
+    };
+  }
+
+  function renderEditSettings(event) {
+    const values = editFormValues(event);
+    const radios = (name, labels) => Object.keys(labels).map(value => `
+      <label class="check">
+        <input type="radio" name="edit-${name}" value="${value}" ${values[name] === value ? "checked" : ""} />
+        ${escapeHtml(labels[value])}
+      </label>
+    `).join("");
+
+    return `
+      <form class="edit-settings" id="editSettingsForm" novalidate>
+        <div class="section-heading">
+          <h3>Edit settings</h3>
+        </div>
+        <p class="notice">Students already taking the test pick up changes on their next move, or within 30 seconds. A new time limit or deadline resets each student's own end time (their start plus the limit, or the deadline if sooner); anyone now past it has their answers sent and marked late. Answers students have locked stay locked, and switching to in order moves each student on to their first unanswered question.</p>
+        <div class="form-grid">
+          <div class="field field--full">
+            <label for="editTitle">Title</label>
+            <input id="editTitle" type="text" value="${escapeHtml(values.title)}" />
+          </div>
+          <div class="field">
+            <label for="editDuration">Time limit, min <span class="field__hint">empty for none</span></label>
+            <input id="editDuration" type="number" min="1" value="${escapeHtml(values.durationMinutes)}" />
+          </div>
+          <div class="field">
+            <label for="editStartAt">Opens <span class="field__hint">optional</span></label>
+            <input id="editStartAt" type="datetime-local" value="${escapeHtml(values.startAt)}" />
+          </div>
+          <div class="field">
+            <label for="editEndAt">Deadline <span class="field__hint">optional</span></label>
+            <input id="editEndAt" type="datetime-local" value="${escapeHtml(values.endAt)}" />
+          </div>
+          <fieldset class="setting field--full">
+            <legend class="legend">Students see which answers were right</legend>
+            <div class="setting__options">${radios("feedbackMode", { each: "After each question", end: "At the end of the test", release: "When I release them" })}</div>
+          </fieldset>
+          <fieldset class="setting field--full">
+            <legend class="legend">Moving between questions</legend>
+            <div class="setting__options">${radios("navigationMode", { free: "Free: back, next and skip", linear: "In order: forward only" })}</div>
+          </fieldset>
+        </div>
+        <p class="muted small mt-s">The questions can't be changed, because students' answers refer to them. For a different set, create a new event.</p>
+        <div class="form-actions">
+          <button type="button" class="btn btn--secondary" id="cancelEditBtn">Cancel</button>
+          <button type="submit" class="btn btn--accent" id="saveEditBtn">Save changes</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function bindEditSettings(event) {
+    const form = document.getElementById("editSettingsForm");
+
+    if (!form) {
+      return;
+    }
+
+    document.getElementById("cancelEditBtn").addEventListener("click", () => {
+      state.editingSettings = false;
+      renderDashboard();
+    });
+
+    form.addEventListener("submit", async submitEvent => {
+      submitEvent.preventDefault();
+      const before = editFormValues(event);
+      const now = {
+        title: document.getElementById("editTitle").value.trim(),
+        feedbackMode: form.querySelector('input[name="edit-feedbackMode"]:checked').value,
+        navigationMode: form.querySelector('input[name="edit-navigationMode"]:checked').value,
+        durationMinutes: document.getElementById("editDuration").value,
+        startAt: document.getElementById("editStartAt").value,
+        endAt: document.getElementById("editEndAt").value
+      };
+      const body = {};
+
+      Object.keys(now).forEach(key => {
+        if (now[key] === before[key]) {
+          return;
+        }
+
+        if (key === "durationMinutes") {
+          body[key] = now[key] ? Number(now[key]) : null;
+        } else if (key === "startAt" || key === "endAt") {
+          // datetime-local has no zone: read it in the teacher's own zone.
+          body[key] = now[key] ? new Date(now[key]).toISOString() : null;
+        } else {
+          body[key] = now[key];
+        }
+      });
+
+      if (!Object.keys(body).length) {
+        state.editingSettings = false;
+        renderDashboard();
+        return;
+      }
+
+      try {
+        await api(`/api/events/${event.id}`, { method: "PATCH", body: JSON.stringify(body) });
+        state.editingSettings = false;
+        const eventsPayload = await api("/api/events", { method: "GET" });
+        state.events = eventsPayload.events;
+        await loadResults(event.id);
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+  }
+
   // ---------- Dashboard ----------
 
   function renderDashboard() {
@@ -1114,6 +1322,7 @@
           <span class="tag tag--code">${escapeHtml(event.join_code)}</span>
           <span class="event-card__meta">
             <span>${escapeHtml(event.filter_summary || event.selection_mode)}</span>
+            <span>${escapeHtml(presetLine(event))}</span>
             <span>${event.duration_minutes ? `${event.duration_minutes} min` : "No time limit"}</span>
             <span>${event.attempt_count} attempt${event.attempt_count === 1 ? "" : "s"}</span>
             <span>${escapeHtml(FEEDBACK_LABELS[event.feedback_mode] || FEEDBACK_LABELS.release)}</span>
@@ -1122,8 +1331,6 @@
         </button>
       </li>
     `).join("");
-
-    const formatTime = iso => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
     const attemptStatus = attempt => attempt.reset_at
       ? `<span class="tag status status--neutral">Reset</span>`
@@ -1151,8 +1358,15 @@
                     ? `<span class="tag status status--positive">Students can see their breakdown</span>`
                     : `<span class="tag status status--neutral">Breakdown hidden from students</span>`}
               ${resultsEvent.results_released_at || (resultsEvent.feedback_mode && resultsEvent.feedback_mode !== "release") ? "" : `<button id="releaseBtn" class="btn btn--accent btn--sm">Release results</button>`}
+              ${state.editingSettings ? "" : `<button id="editSettingsBtn" class="btn btn--secondary btn--sm">Edit settings</button>`}
             </div>
           </div>
+          <p class="muted small results-facts">
+            ${escapeHtml(presetLine(resultsEvent))} · ${escapeHtml(resultsEvent.filter_summary || resultsEvent.selection_mode)} ·
+            ${resultsEvent.duration_minutes ? `${resultsEvent.duration_minutes} min` : "No time limit"}${resultsEvent.end_at ? ` · Deadline ${escapeHtml(formatTime(resultsEvent.end_at))}` : ""}
+          </p>
+          ${state.editingSettings ? renderEditSettings(resultsEvent) : ""}
+          ${renderSettingsHistory(state.results.settingChanges)}
           ${state.results.attempts.length
             ? `<ul class="attempts">${state.results.attempts.map(attempt => `
               <li class="attempt">
@@ -1163,7 +1377,7 @@
                     ${attempt.late ? `<span class="tag status status--warning">Late</span>` : ""}
                     <span class="muted small">${attempt.submitted_at ? formatTime(attempt.submitted_at) : "Not submitted"}</span>
                   </span>
-                  <span class="attempt__score">${attempt.score ?? 0}/${attempt.max_score ?? 0}</span>
+                  <span class="attempt__score">${attempt.max_score === null ? "&ndash;" : `${attempt.score ?? 0}/${attempt.max_score}`}</span>
                   ${attempt.reset_at ? "<span></span>" : `<button class="btn btn--destructive btn--sm" data-reset-attempt="${attempt.id}" aria-label="Reset attempt for ${escapeHtml(attempt.student_name)}">Reset</button>`}
                 </div>
                 ${aiAnswersBlock(attempt)}
@@ -1278,8 +1492,10 @@
 
       // Customise only takes over while it is open. Otherwise the quick setup
       // choice decides, or the legacy question set if presets did not load.
+      // basedOnPreset lets the server record which card Customise started
+      // from, and whether the teacher changed it.
       const selection = advancedActive()
-        ? { filter: pickerFilter() }
+        ? { filter: pickerFilter(), ...(state.presets && state.quick ? { basedOnPreset: state.quick } : {}) }
         : quickActive()
           ? { preset: state.quick }
           : { selectionMode: document.getElementById("selectionMode").value };
@@ -1305,6 +1521,8 @@
           alert(created.warning);
         }
 
+        state.pickerEdited = false;
+
         await loadDashboard();
       } catch (error) {
         alert(error.message);
@@ -1317,6 +1535,21 @@
     bindAdvancedToggle();
     bindSettingsEvents();
     updateCreateButtonState();
+
+    const editSettingsBtn = document.getElementById("editSettingsBtn");
+
+    if (editSettingsBtn) {
+      editSettingsBtn.addEventListener("click", () => {
+        state.editingSettings = true;
+        renderDashboard();
+        const title = document.getElementById("editTitle");
+        if (title) {
+          title.focus();
+        }
+      });
+    }
+
+    bindEditSettings(resultsEvent);
 
     const releaseBtn = document.getElementById("releaseBtn");
 
@@ -1375,6 +1608,7 @@
     Array.from(screen.querySelectorAll("[data-event-id]")).forEach(button => {
       button.addEventListener("click", async () => {
         state.selectedEventId = Number(button.getAttribute("data-event-id"));
+        state.editingSettings = false;
         await loadResults(state.selectedEventId);
       });
     });

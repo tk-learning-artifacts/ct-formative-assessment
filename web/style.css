@@ -845,6 +845,16 @@ pre {
   cursor: default;
 }
 
+/* While a commit is in flight the answer cannot be edited (the area is
+   inert); dimmed so that shows. */
+.answer-area--busy {
+  opacity: 0.6;
+}
+
+.q-change {
+  margin-top: 12px;
+}
+
 .q-feedback {
   margin-top: 12px;
   padding: 8px 12px;
@@ -1275,6 +1285,58 @@ textarea.open-response {
     grid-row: 3;
     justify-self: end;
   }
+}
+
+/* Event facts, settings edit and history */
+.results-facts {
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+
+.edit-settings {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 6px;
+  background: var(--color-surface-2);
+}
+
+.edit-settings .notice {
+  margin: 8px 0 10px;
+  background: var(--color-bg);
+}
+
+.edit-settings .form-actions {
+  gap: 8px;
+}
+
+.history {
+  margin: 0 0 10px;
+}
+
+.history summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+}
+
+.history__list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-line);
+}
+
+.history__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--color-line);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
 }
 
 /* AI answer review */
