@@ -1660,6 +1660,13 @@ textarea.open-response {
 .quick {
   display: grid;
   gap: 8px;
+  /* A fieldset is as wide as its min-content by default, so the question
+     preview's code lines would push it past the column. */
+  min-width: 0;
+}
+
+.quick > * {
+  min-width: 0;
 }
 
 .quick__list {
@@ -2034,6 +2041,17 @@ textarea.open-response {
 .qp-opt {
   flex-wrap: wrap;
   cursor: default;
+}
+
+.qp-opt .opt__text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The preview shows a question whole: no height cap on its code, grids and
+   programs, unlike the short code boxes elsewhere on the page. */
+.qp-row__body .codebox {
+  max-height: none;
 }
 
 .qp-teacher p + p {

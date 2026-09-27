@@ -829,10 +829,7 @@
         <h3>${preview.count} question${preview.count === 1 ? "" : "s"}</h3>
         <span class="muted small">${preview.totalPoints} point${preview.totalPoints === 1 ? "" : "s"}</span>
         ${aiFlag !== undefined ? `<span class="tag ${aiFlag ? "tag--accent" : ""}">${aiFlag ? "Uses AI scoring" : "No AI scoring"}</span>` : ""}
-        ${preview.count
-          ? `<button type="button" class="btn btn--ghost btn--sm" id="togglePreviewQuestionsBtn" aria-expanded="${state.previewQuestionsOpen}">${state.previewQuestionsOpen ? "Hide questions" : "Preview questions"}</button>`
-          : ""
-        }
+        ${qpToggleButton(preview)}
       </div>
       ${preview.count === 0 ? `<p class="notice notice--critical mt-s">No questions match. Widen the selection before you create the event.</p>` : ""}
       ${preview.warning ? `<p class="notice notice--warning mt-s">${escapeHtml(preview.warning)}</p>` : ""}
@@ -851,25 +848,40 @@
       }
     `;
 
-    const toggleBtn = document.getElementById("togglePreviewQuestionsBtn");
-
-    if (toggleBtn) {
-      toggleBtn.addEventListener("click", () => {
-        state.previewQuestionsOpen = !state.previewQuestionsOpen;
-
-        // Toggling on needs the full teacher views, which the summary
-        // request above did not fetch; toggling off can redraw at once.
-        if (state.previewQuestionsOpen) {
-          runPreview();
-        } else {
-          renderPreviewPanel();
-        }
-      });
-    }
+    bindQpToggle(el);
 
     if (showQuestionPreview) {
       bindQuestionPreviewEvents(el);
     }
+  }
+
+  // The "Preview questions" toggle. It appears twice: under the quick setup
+  // cards (the default path) and in the Customise panel, and both flip the
+  // same state.
+  function qpToggleButton(preview) {
+    return preview.count
+      ? `<button type="button" class="btn btn--ghost btn--sm" data-qp-toggle aria-expanded="${state.previewQuestionsOpen}">${state.previewQuestionsOpen ? "Hide questions" : "Preview questions"}</button>`
+      : "";
+  }
+
+  function bindQpToggle(container) {
+    const button = container.querySelector("[data-qp-toggle]");
+
+    if (!button) {
+      return;
+    }
+
+    button.addEventListener("click", () => {
+      state.previewQuestionsOpen = !state.previewQuestionsOpen;
+
+      // Toggling on needs the full teacher views, which the summary
+      // request did not fetch; toggling off can redraw at once.
+      if (state.previewQuestionsOpen) {
+        runPreview();
+      }
+      renderPreviewPanel();
+      renderQuickSummary();
+    });
   }
 
   function advancedIsOpen() {
@@ -1032,14 +1044,25 @@
     }
 
     const preview = state.preview;
+    const showQuestionPreview = state.previewQuestionsOpen && state.previewIncludesQuestions;
     el.innerHTML = `
       <div class="row small">
         <span>${preview.count} question${preview.count === 1 ? "" : "s"}, ${preview.totalPoints} point${preview.totalPoints === 1 ? "" : "s"}</span>
         <span class="tag ${preview.aiRequired ? "tag--accent" : ""}">${preview.aiRequired ? "Uses AI scoring" : "No AI scoring"}</span>
+        ${qpToggleButton(preview)}
       </div>
       ${preview.count === 0 ? `<p class="notice notice--critical mt-s">No questions match. Pick another setting before you create the event.</p>` : ""}
       ${preview.warning ? `<p class="notice notice--warning mt-s">${escapeHtml(preview.warning)}</p>` : ""}
+      ${state.previewQuestionsOpen
+        ? (showQuestionPreview ? renderQuestionPreview(preview.questions) : `<p class="muted small">Loading questions&hellip;</p>`)
+        : ""}
     `;
+
+    bindQpToggle(el);
+
+    if (showQuestionPreview) {
+      bindQuestionPreviewEvents(el);
+    }
   }
 
   function bindQuickSetupEvents() {
