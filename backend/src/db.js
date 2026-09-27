@@ -598,12 +598,14 @@ function createStore(db, content) {
   // ---------- AI-scored answers (src/ai/jobs.js and the teacher review) ----------
 
   // An attempt's total is always the sum of its answers, so a late AI score
-  // or a teacher's override changes the total the student sees.
+  // or a teacher's override changes the total the student sees. An attempt
+  // still in progress has no total yet (an answer committed under "each" can
+  // be scored before submit); submitAttempt sums every row when it finishes.
   function recomputeAttemptScore(attemptId) {
     db.prepare(`
       UPDATE attempts
       SET score = (SELECT COALESCE(SUM(earned_points), 0) FROM answers WHERE attempt_id = ?)
-      WHERE id = ?
+      WHERE id = ? AND status = 'submitted'
     `).run(attemptId, attemptId);
   }
 

@@ -351,7 +351,7 @@ test("each: an AI-scored answer is being marked until the job scores it", async 
     globalThis.fetch = original;
   });
 
-  const { app, event } = await setup(t, { AI_PROVIDER: "openrouter", AI_API_KEY: "sk-or-test-key" });
+  const { app, event, store } = await setup(t, { AI_PROVIDER: "openrouter", AI_API_KEY: "sk-or-test-key" });
   const ev = await event({ feedbackMode: "each" }, { filter: { audiences: ["rgsynapse"], questionIds: ["RGS-S1-03", "AIS-S1-01"] } });
   const { attempt } = await startAttempt(app, { joinCode: ev.joinCode });
 
@@ -372,6 +372,13 @@ test("each: an AI-scored answer is being marked until the job scores it", async 
   assert.equal(scored.earned, 2);
   assert.equal(scored.correct, true);
   assert.deepEqual(scored.detail, { source: "ai", feedbackCode: "correct", feedback: "You spotted the unindented line." });
+
+  // The attempt has no total until it is submitted, so the teacher's table
+  // does not show a part score against a maximum of 0 mid-test.
+  const midTest = store.getResults(ev.id).find(row => row.id === attempt.id);
+  assert.equal(midTest.status, "started");
+  assert.equal(midTest.score, null);
+  assert.equal(midTest.max_score, null);
 
   const sent = await submit(app, attempt, {});
   assert.equal(sent.body.result.score, 2, "the committed AI score counts in the total");
