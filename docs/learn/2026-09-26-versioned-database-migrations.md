@@ -1,5 +1,5 @@
 ---
-title: "Versioned database migrations with PRAGMA user_version"
+title: "Database migrations tracked by name"
 date: 2026-09-26
 project: ct-formative-assessment
 tags:
@@ -10,42 +10,41 @@ tags:
 status: unread
 ---
 
-# Versioned database migrations with PRAGMA user_version
+# Database migrations tracked by name
 
-Picture a building renovated floor by floor over several years. Every renovation has a numbered work order, and a plaque at the entrance records the last one completed. When a new crew arrives, they read the plaque, skip everything up to that number, and carry out the remaining work orders in sequence. Nobody tries to guess from the paint colour what has already been done. A versioned migration system works the same way, and in SQLite the plaque is a single number in the database file header called user_version.
+Picture a building renovated over several years by different crews. Every job has a work order, and the site office keeps a logbook. Each finished job is signed off by its work-order name and date. A new crew reads the logbook, skips every job already signed off, and does the rest in date order. Two crews who each wrote a work order the same week never both claim to be "job four". CT Quest's database now works this way. The logbook is a table called schema_migrations.
 
 ## What we did in this project
 
-The original CT Quest created its tables with "create table if not exists". That works on a fresh database and does nothing on an existing one. The production database lives in a Docker volume, so adding a column that way would silently never reach it, and the next query using that column would crash.
+The original CT Quest created its tables with "create table if not exists". That works on a fresh database and does nothing on an existing one. The production database lives in a Docker volume, so a new column added that way would never reach it, and the next query using the column would crash.
 
-Migrations now live in backend/src/migrations. Each is a numbered file exporting a version, a name and an up function. Version 1 is the baseline, which is the original schema word for word, still written with "if not exists". Old databases report user_version zero while already holding those tables. For them, running the baseline changes nothing and the version moves to 1. A fresh database gets the tables at that step and then follows exactly the same path. Version 2 is the platform core. Version 3 corrects four broken questions inside existing event snapshots.
+Migrations live in backend/src/migrations. Each is a file named with a twelve-digit timestamp, year down to minute, then a short slug, for example 202609260100-platform-core. The file name is the migration's id. On startup the runner reads the folder, sorts the names, and looks up which ids are already recorded in schema_migrations, a table with the id and the time it was applied. It runs every missing one in order. Each runs inside a transaction together with its own logbook row, so a migration that throws halfway leaves no partial tables and no record,.
 
-On startup the runner reads user_version. If the database is newer than the code, it refuses to run, because an old build must not write to a schema it does not understand. It runs each pending migration inside a transaction, and the version bump happens inside that same transaction. If a migration throws halfway, the partial work and the version bump both roll back, and the file is back at the previous version. A test proves this by adding a deliberately broken migration that creates a table and then throws. Afterwards the version is unchanged and the half-made table is gone.
+The first file is the baseline: the original schema word for word, still "if not exists". Databases made by the original code have those tables but no logbook, and report SQLite's built-in version number, PRAGMA user_version, as zero. For them the baseline changes nothing, and they continue through the later files like a fresh database. The runner refuses two cases with a clear message. One is a database whose logbook names a migration this code does not know, meaning newer code has touched it. The other is a database with a non-zero user_version but no logbook, which only a pre-review build of this branch could have made.
 
-Version 2 needed the correct_index column in the answers table to allow empty values, because future question types have no option index. SQLite cannot relax a column constraint in place, so the migration builds a new answers table, copies every row across with their original ids, drops the old table and renames the new one. Foreign keys are dangerous during a rebuild like this. If a rebuilt table has children with cascading deletes, dropping it deletes the children. SQLite ignores the pragma that switches foreign keys off while a transaction is open, so the runner switches them off before the loop and back on afterwards. Inside each transaction it runs a foreign key check and aborts if anything points nowhere. The answers table has no children, which makes it the safe one to rebuild.
+The platform-core migration adds the new columns, including a late flag, a normalised student key, reset fields, a results-released time and a detail column for structured scoring. It also rebuilds the answers table, because SQLite cannot relax a NOT NULL constraint in place. Foreign keys are dangerous during a rebuild, and SQLite ignores the pragma that disables them while a transaction is open. So the runner switches them off before the loop, back on afterwards, and runs a foreign key check before each commit.
 
-Version 2 also rewrites each frozen event snapshot from the old shape, a bare answer index field, to the new shape with a type and an answer object. That way runtime code only ever reads one shape. It also fills in each old attempt's deadline from its start time and the event's duration. Version 3 patches four questions in snapshots, but only where the snapshot still holds the known-bad version. Submitted scores are left alone.
+While copying answers, the migration records what the student actually saw. Each old answer only stored an option index, so it looks up that event's snapshot as it was and writes both the index and the option's text. It also rewrites old snapshots into the new shape and backfills ontology and learning-outcome tags from the bank question with the same id. To do that it needs the content, so the runner passes each migration a context object carrying the validated content. That is why content is now loaded and validated before migrating.
 
-Before migrating a database that already holds data, the runner copies it with SQLite's "vacuum into" command to a file named after the target and source versions and a timestamp. Rolling back in production means stopping the container and swapping files.
+The last migration fixes four flawed questions inside snapshots, but only for events with no submitted attempts. An event that already has submissions keeps exactly the snapshot its students answered. Its stored answers, their recorded option text and the scores awarded all stay consistent, so a teacher's results view never pairs a student's old choice with changed option text. The cost is real: any further student on such an event still sees the flawed question, and the migration logs each event it left alone so a teacher can start a fresh one.
 
-The tests use a real fixture. Before any code changed, the original main-branch server was run and driven through a join, an attempt and a submission, and the resulting database was dumped to backend/test/fixtures/v1-app.sql. The migration test loads that dump and upgrades it. It then checks that the row counts survive (one user, two events, 25 snapshot rows, two attempts, 20 answers), that Ada's 16 out of 90 is intact, and that the legacy teacher password still logs in. Another test compares every table's columns and every index name between the migrated database and a freshly created one, and they must be identical. That catches drift, where a fresh install and an upgraded install quietly end up with different schemas.
+Before migrating a database that holds data, the runner copies it with SQLite's "vacuum into" command to a file named after the target and the last applied migration plus a timestamp. Rolling back means stopping the container and swapping files.
+
+The tests load a real fixture, dumped from a database made by the original main-branch code. It includes one student, Chen, who chose every option the fix changes. The test checks that Chen's answer to S2-02 still says "8", that the score stays 15 out of 90, and that the fresh and migrated schemas are identical.
 
 ## Why this choice, and what the alternatives were
 
-The user_version approach needs no migrations table and no dependency, and it is about a hundred lines. It suits SQLite, where one process owns the file. Tools like Knex migrations or Umzug keep a table of applied migration names, support down migrations and work across Postgres and MySQL. That is worth having when the planned Postgres move happens. Until then they add a dependency and a second source of truth.
+The first version of this runner used user_version alone: one integer, bumped by each numbered migration. It needs no table and suits a single file, but it forces a single global sequence. Two Phase 2 branches written in parallel would both create "migration 4", each valid alone, and whoever merged second would have to renumber and hope nobody had run the old number. A logbook of names removes the collision. Each branch adds a timestamped file, and on merge only their relative order needs a glance. The cost is one extra table and a rule about file names, which a test enforces.
 
-Object-relational mappers that "auto-sync" the schema from model definitions are fast to start with, but they guess at renames and can drop columns. Nobody should accept that risk on a volume holding real students' results.
+Tools like Knex migrations or Umzug do the same with down migrations and several engines, and will be worth it for the planned Postgres move.
 
-The migrations have no down steps. Writing a reverse for a table rebuild is error-prone, and the automatic backup is the rollback plan.
-
-The weak spot is parallel branches. Two branches that each add migration 4 will both look valid alone. Whoever merges second must renumber, and the consecutive-version check at load time turns a missed renumber into a startup error rather than a silent skip.
+Patching every snapshot would have corrected future students on old events, but at the price of history that no longer matches what students saw. Truthful records and consistent scores were judged more important, because a teacher can always create a new event.
 
 ## Glossary
 
-Migration: a numbered, one-way change to the database schema or data.
-PRAGMA: an SQLite command that reads or sets a database setting, here user_version.
+Migration: a named, one-way change to the database schema or data.
+Schema_migrations: the table recording which migrations have run.
+PRAGMA user_version: an integer SQLite stores in the file header, used here only to recognise old databases.
 Transaction: a group of changes that commit together or not at all.
 Foreign key: a column that must point at an existing row in another table.
-Cascade delete: deleting a parent row automatically deletes its children.
-Schema drift: fresh and upgraded databases ending up with different structures.
-Fixture: saved test data, here a dump of a real version 1 database.
+Snapshot: the frozen copy of an event's questions taken when the event was created.
