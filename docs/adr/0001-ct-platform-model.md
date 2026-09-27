@@ -74,7 +74,7 @@ Each LO has `id`, `statement`, `nodes` (at least one ontology node), `levels` (a
 | Field | Required | Notes |
 |---|---|---|
 | `id` | yes | Unique across all banks, e.g. `P6-01`, `RGS-S1-02` |
-| `type` | yes | A registered, active type: `mcq` or `open-response-ai` |
+| `type` | yes | A registered, active type: `mcq`, `code-trace`, `parsons`, `code-reading`, `blocks` or `open-response-ai` |
 | `audience`, `level` | yes | Level must be offered by the audience |
 | `title`, `prompt` | yes | Plain text; `prompt` keeps line breaks |
 | `art` | no | Monospaced figure (grids and similar) |
@@ -96,7 +96,7 @@ Three more types became active in Phase 2 (2026-09-27):
 - `parsons`: the student orders `lines: [{ id, text }]`, with indentation inside the text, and leaves out distractors. `language`, `answer: { order, alternatives? }`, optional `expectedOutput` (public) and `marking: { partial: "longest-run" }`. Students get the lines under opaque ids, in a fixed shuffle that is never a correct order or the content order; validation rejects a question with no such order. Both the ids and the shuffle's seed are HMACs under a key derived from `JWT_SECRET`, so a student who has the source can neither guess content ids by hashing them nor replay the shuffle to recover the order the author wrote (unkeyed, both recovered the full answer in review). Rotating `JWT_SECRET` changes the ids, so a Parsons answer in progress then is lost. The response is stored as `{ lines: [{ id, text }] }`.
 - `open-response-ai`: free text scored by the AI provider against `rubric: [{ id, description, points }]` (at least 2 criteria, one worth the full points and one worth 0; server-only), with optional `responseMaxChars` (20 to 1000). Scoring is asynchronous; see §10. Its questions live in `questions/ai-samples.json`. They have no single key to compute, so their solvers compute the facts each full-credit criterion relies on, and the answer-key test checks that the criterion names them.
 
-A fifth, `code-reading`, became active on 2026-09-27: a description of what a snippet does plus an optional follow-up, each part marked on its own. See ADR 0005.
+A fifth, `code-reading`, became active on 2026-09-27: a description of what a snippet does plus an optional follow-up, each part marked on its own. See ADR 0005. A sixth, `blocks`, became active the same day: the student finishes a Scratch-like block program, and the server marks it by running it on the example grid and on hidden ones. See ADR 0006.
 
 Reserved types have a module file each but no scorer, and the loader rejects questions that use them:
 
@@ -123,7 +123,7 @@ A reserved type exports only `type`, `status: "reserved"`, `label` and `descript
 
 `status` is `scored` for synchronous types. AI-scored types store `pending` at submit, and a background job later sets `scored` or `needs-review` and fills `answers.detail_json` (§10), so a submission never waits on a model.
 
-**Client.** `web/type-registry.js` loads every renderer in `web/types/`, as listed by `GET /api/web-types` (derived from the folder). A renderer registers `renderInput(question, response, h)`, `readResponse(container, question)` and `describeResponse(response, h)`, and the student page and the results view dispatch through it. `readResponse` may return `null` to clear a saved answer, and a renderer may add `renderCode(code, h)` to draw the code block itself (code-trace adds line numbers). Renderers exist for `mcq`, `code-trace` and `parsons`. The static allowlist is derived from `web/` too: its `.html`, `.css` and `.js` files except `*.config.js`, plus `web/types/*.js`.
+**Client.** `web/type-registry.js` loads every renderer in `web/types/`, as listed by `GET /api/web-types` (derived from the folder). A renderer registers `renderInput(question, response, h)`, `readResponse(container, question)` and `describeResponse(response, h)`, and the student page and the results view dispatch through it. `readResponse` may return `null` to clear a saved answer, and a renderer may add `renderCode(code, h)` to draw the code block itself (code-trace adds line numbers). A renderer that loads files of its own may also register `ready`, a promise the registry waits for (blocks loads its engine this way). Renderers exist for every active type. The static allowlist is derived from `web/` too: its `.html`, `.css` and `.js` files except `*.config.js`, plus `web/types/*.js`, the `.js` and `.css` files in `web/lib/` (shared with the server) and those in each folder of `web/vendor/` (ADR 0006).
 
 To add a type: add `backend/src/scoring/types/<type>.js`, `web/types/<type>.js`, and a solver or matcher in the answer-key test. No shared file changes.
 

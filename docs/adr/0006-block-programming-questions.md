@@ -1,7 +1,7 @@
 # ADR 0006: Block programming questions
 
 - **Status:** Accepted, 2026-09-27 (branch `feat/blocks`). Akmal asked for a question type in which students complete a program in a Scratch-like environment, run it and have it marked. He left the editor, the world and the details to this work; the choices below are decided here and open to his review.
-- **Scope:** A new active question type, `blocks`: the editor, the world the program acts on, the program format, how the given blocks are kept in place, running with a step limit, marking on the server, what students are and are not sent, boot-time validation, the six shipped questions, and the student page at 390px, by touch and by keyboard. Builds on ADR 0001 §5–6 (the question schema and the scorer registry). ADR 0005 is the code-reading type, written in parallel on `feat/code-reading`.
+- **Scope:** A new active question type, `blocks`: the editor, the world the program acts on, the program format, how the given blocks are kept in place, running with a step limit, marking on the server, what students are and are not sent, boot-time validation, the six shipped questions, and the student page at 390px, by touch and by keyboard. Builds on ADR 0001 §5–6 (the question schema and the scorer registry). ADR 0005 is the code-reading type, written in parallel on `feat/code-reading`; both were merged with the teacher question preview on `int/types-preview`, where the blocks type gained a `teacherView` (below).
 
 ## Context
 
@@ -65,6 +65,8 @@ Students receive `world`, `example`, `startProgram`, `toolbox`, `variables`, `st
 
 The type has **no `keyResponse`**, so the released breakdown shows the student's own program as text and never a correct one. Showing the reference solution would give away the answer to the hidden grids, and a block program has many correct forms anyway.
 
+**The teacher's view** is the exception, since a teacher may see everything (ADR 0001 §6). The type's `teacherView` adds `programText`: the starting program and the reference solution in words (the engine's `toText`) and the solution as Python (`toPython`), worked out on the server because the teacher page loads neither the engine nor Blockly. The compact question preview in `admin.html` shows the example grid, the starting program, the toolbox and limits, and, marked teacher only, every hidden grid, the reference solution in both forms and the marking rule. `test/new-types-leak.test.js` checks that none of it reaches a student in any feedback timing or navigation mode.
+
 ### 6. Validation at boot
 
 `validate` rejects a question unless: the world exists; the example and each case are valid stages (rectangular grid, known characters, at most one flag, a start on a floor cell, an `expect` its grid can satisfy); the toolbox names only blocks of that world, never "when Run clicked", and no variable block without variables; the starting program is well formed and follows the locking rule; the reference `solution` is well formed, keeps the given blocks, uses only offered blocks, and **passes every stage**; and the starting program on its own **fails at least one**, so there is something to do. `stepLimit`, `maxBlocks`, `showPython` and `marking` are checked for type and range.
@@ -110,7 +112,7 @@ Shared, and kept small: the static allowlist in `backend/src/app.js` also serves
 - A new world means a new `WORLDS` entry, its blocks, and a stage drawing in the renderer.
 - Blockly is 640 KB to download once per device. Upgrading it means replacing the vendored files and their header, and re-running the browser checks, because its keyboard model is still changing between major versions.
 - The block list is shared by content already in events (`event_questions` snapshots). Removing or renaming a block type would make old snapshots and stored answers unreadable; add blocks, do not rename them.
-- Teachers see the per-stage outcomes in the results JSON but the teacher page does not show them yet; it shows the score. A per-type teacher view (being added on `feat/question-preview`) could show the program text and the outcomes.
+- Teachers see the per-stage outcomes in the results JSON but the results view does not show them yet; it shows the score. The question preview shows each question's hidden grids and reference solution (section 5), so a teacher can read the outcomes against them; showing them per answer is still to do.
 
 ## Still open
 

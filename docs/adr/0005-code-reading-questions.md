@@ -1,6 +1,6 @@
 # ADR 0005: Code-reading questions
 
-- **Status:** Accepted, 2026-09-27. Built on branch `feat/code-reading`.
+- **Status:** Accepted, 2026-09-27. Built on branch `feat/code-reading`, merged with the teacher question preview and ADR 0006 (block programming) on `int/types-preview`, where the preview gained code-reading rows.
 - **Scope:** A new question type, `code-reading`, its renderer, ten questions (eight of the new type and two written "explain it" questions of the existing `open-response-ai` type), two learning outcomes, a quick setup preset and the tests.
 
 ## Context
@@ -46,7 +46,7 @@ The description is worth `points - followUp.points`, the follow-up its own point
 
 ### 5. Keys are computed by running the code
 
-Each question has a spec in `test/solvers/type-code-reading.js` that pins the exact source and gives a JavaScript translation, a set of inputs, and one claim per option: a function saying whether an output is what that description promises. The answer-key test requires exactly one description's claim to hold on every input and that it is the key, and does the same for a `choice` follow-up, whose options are parsed and run ("which list makes it say 7"). For a `line` follow-up the spec gives the replacement line and a goal. The code with that line replaced must meet the goal on every input, and the original must fail it on at least one. An option with no claim, for example after its text was edited, fails the test.
+Each question has a spec in `test/solvers/type-code-reading.js` that pins the exact source and gives a JavaScript translation, a set of inputs, and one claim per option: a function saying whether an output is what that description promises. The answer-key test requires exactly one description's claim to hold on every input and that it is the key, and does the same for a `choice` follow-up, whose options are parsed and run ("which list makes it say 7"). For a `line` follow-up the spec gives the replacement line and a goal. The code with that line replaced must meet the goal on every input, and the original must fail it on at least one. When more than one line fixes the code on its own, the spec lists each fix, every one must work, and the key lists all their lines (CR-RGS-S2-01 accepts line 3 or line 5). An option with no claim, for example after its text was edited, fails the test.
 
 `test/code-reading.test.js` runs the real Python and Swift where `python3` and `swift` are installed. It runs each program on the same inputs, compares the output with the translation, and runs the program with the follow-up line replaced to confirm the fix works. The pseudocode and Scratch-style questions have no interpreter, so their translation stands, pinned to the source. The written questions' solvers return the facts their full-credit criterion names, as in `ai-samples.js`.
 
@@ -66,7 +66,7 @@ Each question has a spec in `test/solvers/type-code-reading.js` that pins the ex
 
 ### 7. Teacher view
 
-The teacher's results show each attempt's total and the outcomes summary, as for other automatic types. The response records hold both parts for any later per-question view. The parallel teacher-preview work is expected to give every type a default `teacherView`; this type exports none.
+The teacher's results show each attempt's total and the outcomes summary, as for other automatic types. The response records hold both parts for any later per-question view. This type exports no `teacherView`: the stored question already holds everything a teacher needs, and the compact question preview in `admin.html` draws it with line numbers, both parts with their points and keys marked, and the glossary notes.
 
 ## Consequences
 
