@@ -17,6 +17,7 @@ ct-formative-assessment/
 │   │   ├── audiences.json        Levels and audiences
 │   │   ├── ontology.json         CT ontology (Brennan & Resnick + CT Quest sub-nodes)
 │   │   ├── learning-outcomes.json  LOs mapped to ontology nodes
+│   │   ├── legacy-modes.json     Question ids behind the old ALL/P5/P6/S1/S2 modes
 │   │   └── questions/            Question banks (core.json, rgsynapse.json)
 │   ├── src/
 │   │   ├── server.js         Entry point: loads config, starts the app
@@ -25,15 +26,20 @@ ct-formative-assessment/
 │   │   ├── db.js             Opens SQLite, runs migrations, syncs content, all queries
 │   │   ├── content.js        Loads and validates backend/content/
 │   │   ├── selection.js      Event filters -> question lists
+│   │   ├── policy.js         One attempt per student; when students see their breakdown
 │   │   ├── security.js       Password hashing, attempt tokens
-│   │   ├── scoring/          Scorer registry (mcq active, other types reserved)
-│   │   ├── migrations/       Versioned schema migrations (PRAGMA user_version)
-│   │   └── ai/               AI extension point: provider interface, typed payload, output validation (off by default)
+│   │   ├── scoring/          Scorer registry; one module per question type in scoring/types/
+│   │   ├── migrations/       Timestamped migrations, recorded in schema_migrations
+│   │   └── ai/               AI extension point: guarded provider, typed payload, output validation (off by default)
+│   ├── scripts/
+│   │   └── set-password.js   Set or create a teacher's password
 │   ├── test/                 node:test + supertest suite, answer-key solvers, v1 fixture
 │   └── data/
 │       └── app.db            SQLite database (auto-created, gitignored)
 ├── web/                      Frontend: plain HTML/CSS/JS, no framework
-│   ├── index.html / app.js   Student quiz UI (countdown, auto-submit)
+│   ├── index.html / app.js   Student quiz UI (countdown, auto-submit, resume after refresh)
+│   ├── type-registry.js      Loads the question-type renderers
+│   ├── types/                One renderer per question type (mcq.js)
 │   ├── admin.html / admin.js Teacher portal
 │   ├── style.css             Shared styles (dark/light mode)
 │   └── vite.config.js        Dev server config (proxy + multi-page build)
@@ -46,41 +52,48 @@ ct-formative-assessment/
 
 ### How it fits together
 
-**Production:** Express serves an allowlist of five files from `web/` (`index.html`, `admin.html`, `app.js`, `admin.js`, `style.css`) and handles all `/api/*` routes in a single process on port 3000. Nothing else in `web/` or `backend/` is reachable over HTTP. Unknown `/api/*` routes return a JSON 404.
+**Production:** Express serves the `.html`, `.css` and `.js` files in `web/` (except build config such as `vite.config.js`) plus the renderers in `web/types/`, and handles all `/api/*` routes in a single process on port 3000. The list is derived from the folder at startup. Nothing else in `web/` or `backend/` is reachable over HTTP. Unknown `/api/*` routes return a JSON 404.
 
 **Development:** Vite runs a dev server on port 5173 with hot reload and proxies all `/api/*` requests to the Express backend on port 3000. The two processes run concurrently via `npm run dev`.
 
 **Content:** On boot the backend validates everything in `backend/content/` (a bad tag or answer key stops the server with a list of problems) and copies it into indexed SQLite tables, so event filters run as SQL. When an event is created its questions are snapshotted into `event_questions`, so editing content never changes a running event.
 
-**Answer keys** stay on the server. Students receive each question through its type's public projection, which leaves out `answer` and any other marking fields. The submit response reports points per question, not the correct option.
+**Answer keys** stay on the server. Students receive each question through its type's public projection, which leaves out `answer`, the teacher-only `details` note and any other marking fields.
+
+**Results.** Each student gets one attempt per event (a teacher can reset it). On submit the student sees their total. The per-question breakdown appears once the event's deadline (`end_at`) passes or the teacher presses "Release results".
 
 ### Database schema
 
 | Table | Purpose |
 |---|---|
 | `users` | Teacher accounts (email + per-user salted scrypt hash) |
-| `events` | Join-code sessions: time window, duration, `selection_mode` (legacy mode or `FILTER`) and `filter_json` |
+| `events` | Join-code sessions: time window, duration, `selection_mode` (legacy mode or `FILTER`), `filter_json`, `results_released_at` |
 | `event_questions` | Snapshot of each event's questions (v2 shape, answer keys included, server-only) |
-| `attempts` | A student's attempt: start/submit times, score, `token_hash`, `deadline_at` |
-| `answers` | Per-question record: `question_type`, `response_json`, `earned_points`, `score_status` (plus the v1 `chosen_index`/`correct_index`) |
+| `attempts` | A student's attempt: start/submit times, score, `token_hash`, `deadline_at`, `late`, `student_key` (normalised name + group), `reset_at`/`reset_by` |
+| `answers` | Per-question record: `question_type`, `response_json` (what the student chose, with its text), `earned_points`, `score_status`, `detail_json` (structured scoring detail such as AI feedback), plus the v1 `chosen_index`/`correct_index` |
 | `ontology_nodes`, `ontology_edges` | CT ontology nodes; `parent_of` and `requires` edges |
 | `learning_outcomes`, `outcome_nodes`, `outcome_levels`, `outcome_audiences` | LOs and their mappings |
 | `bank_questions`, `question_nodes`, `question_outcomes` | The question bank and its tags, for filtering |
+| `schema_migrations` | Which migrations have been applied |
 
 The content tables are rebuilt from `backend/content/` on every boot; the other tables hold data.
 
-**Migrations.** The schema version is SQLite's `PRAGMA user_version`. On start, `src/migrations` applies every migration newer than the database, each in its own transaction. Before upgrading a database that already has data, it saves a copy next to it (`app.pre-v3-from-v0-<time>.db`). A database created by the original code (version 0) upgrades in place without losing data. To change the schema, add `src/migrations/00N-name.js` and append it to the list. Never edit a migration that has shipped. Branches that each add the same number must renumber one at merge.
+**Migrations.** Files in `backend/src/migrations/` are named `YYYYMMDDHHMM-<slug>.js`, and the name is the migration's id. On start the runner applies, in sorted order, every file not yet recorded in `schema_migrations`, each in its own transaction. Before upgrading a database that already has data, it saves a copy next to it (`app.pre-<id>-from-<id>-<time>.db`). A database created by the original code (no `schema_migrations`, `user_version` 0) upgrades in place without losing data.
+
+To change the schema, add a new file with the current date and time in its name. Never edit a migration that has shipped. Because ids are timestamps, two branches can each add one; when merging, check only that their order makes sense.
 
 ### Authentication
 
 - **Teachers:** JWT. The backend issues a 7-day token on login; protected routes need `Authorization: Bearer <token>`. The secret comes from `JWT_SECRET`, which is required when `NODE_ENV=production`. Teachers only see events they created. Passwords created by the original code (one fixed salt) still work and are rehashed with a random salt on the next login.
-- **Students:** no account. Starting an attempt returns a one-off attempt token, which the page sends as `X-Attempt-Token` on submit. Only a hash is stored. A submission is accepted up to `SUBMIT_GRACE_SECONDS` after the deadline; the page counts down and auto-submits at zero.
+- **First account:** `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` create the first teacher in an empty database. In production the server refuses to start without `SEED_TEACHER_PASSWORD`, with the demo password `changeme123`, or while any stored account still accepts the demo password. Fix an account with `npm run set-password -- <email>`, described below.
+- **Students:** no account. Starting an attempt returns a one-off attempt token. The page keeps it in `sessionStorage` and sends it as `X-Attempt-Token` to resume (`GET /api/attempts/:id`) and to submit. Only a hash is stored.
+- **Deadlines:** an attempt's deadline is the earlier of start + duration and the event's `end_at`. A submission up to `SUBMIT_GRACE_SECONDS` after it counts as on time; a later one is stored and marked late. The page counts down, auto-submits at zero and retries if the network fails.
 
 ---
 
 ## Local development (no Docker)
 
-**Requirements:** Node.js 20+
+**Requirements:** Node.js 20.14+
 
 ```bash
 npm install       # installs all workspace deps (backend + web)
@@ -94,9 +107,9 @@ npm test          # runs the backend test suite
 | Teacher portal | http://localhost:5173/admin.html |
 | API | http://localhost:3000/api/ |
 
-The backend auto-restarts on file changes (nodemon). The frontend has hot reload (Vite).
+The backend auto-restarts on file changes (nodemon). The frontend has hot reload (Vite). Set `HOST=127.0.0.1` to keep the backend off the local network.
 
-### Default credentials
+### Default credentials (development only)
 
 | | |
 |---|---|
@@ -104,7 +117,17 @@ The backend auto-restarts on file changes (nodemon). The frontend has hot reload
 | Teacher password | `changeme123` |
 | Demo join code | `DEMO123` |
 
-These are seeded into a fresh database. The login form is not prefilled; type them in. Change them before deploying.
+These are seeded into a fresh database when `SEED_TEACHER_*` are not set. The login form is not prefilled. Production refuses to run while any account still has this password.
+
+### Setting a teacher's password
+
+```bash
+npm run set-password -- teacher@school.edu.sg          # prompts twice, input hidden
+NEW_PASSWORD='…' npm run set-password -- teacher@school.edu.sg
+echo '…' | npm run set-password -- teacher@school.edu.sg
+```
+
+The account is created if it does not exist. The password is never accepted as a command-line argument. It must be at least 10 characters and not the demo password.
 
 ---
 
@@ -119,17 +142,19 @@ The suite uses Node's built-in test runner (`node:test`) with `supertest` for HT
 
 | File | Covers |
 |---|---|
-| `demo-flow.test.js` | DEMO123 end to end: join, start, submit, score, the teacher's results |
+| `demo-flow.test.js` | DEMO123 end to end: join, start, submit (total only), the teacher's results, release, breakdown |
+| `attempt-policy.test.js` | One attempt per student (name variants), teacher reset, breakdown withheld until release or `end_at`, a four-attempt oracle replay |
+| `attempt-token.test.js` | Token required; the same 404 for a wrong token and a missing attempt; resume via GET; deadline capped by `end_at`; late submissions stored |
 | `answer-keys.test.js` | Every question's key against a computed answer (see below) |
-| `no-answer-leak.test.js` | No answer fields in any public file or student response; old `/questions.js` is 404; JSON 404 for unknown API routes |
-| `attempt-token.test.js` | Token required and checked, hash-only storage, grace window, 410 after it |
+| `no-answer-leak.test.js` | No answer fields or `details` in any public file or student response; the public file list comes from `web/`; JSON 404 for unknown API routes |
 | `teacher-scoping.test.js` | Teachers only see their own events and results |
-| `auth.test.js` | `JWT_SECRET` fail-fast, salted hashes, legacy hash rehash on login |
-| `migration.test.js` | Upgrading `fixtures/v1-app.sql` (a dump made by the original code), backup, idempotence, rollback on failure |
-| `filters.test.js` | Legacy modes, v2 filters, preview = event count, ontology/outcomes/catalog endpoints |
-| `scoring.test.js` | Scorer registry, reserved types, plugging in a new type |
-| `content.test.js` | Content validation catches bad tags, bands, keys and cycles |
-| `ai.test.js` | AI off by default; payload has no student identifiers; model output validation with a fake provider |
+| `auth.test.js` | `JWT_SECRET` and `SEED_TEACHER_PASSWORD` rules, refusal of the demo password in production, `set-password`, salted hashes and rehash |
+| `migration.test.js` | Upgrading `fixtures/v1-app.sql` (made by the original code), chosen-option text kept, events with submissions left as their students saw them, backup, idempotence, rollback |
+| `filters.test.js` | Pinned legacy modes, the core-audience default, v2 filters, preview = event count, ontology/outcomes/catalog endpoints |
+| `events.test.js` | Absolute times only, 24-hour duration cap |
+| `scoring.test.js` | Types loaded from files, public projection checked for every type, plugging in a new type |
+| `content.test.js` | Content validation catches bad tags, bands, keys, cycles and legacy modes |
+| `ai.test.js` | AI off by default; the guarded provider builds every request; adversarial tests for each way student data could leak; model output validation |
 
 **Computed answer keys.** `test/solvers/` has one solver per question. A solver reads the question's own text (the grid in `art`, the edge list in the prompt, the code) and computes the answer. The test requires exactly one option to match, and that option must be the key. Run against the original bank, the solvers flag four defects: P6-01, S2-02 and S1-01, plus P5-01 (two options always worked). A test keeps that true.
 
@@ -166,8 +191,10 @@ All content is JSON under `backend/content/`. Restart the server (nodemon does t
 - `id` is unique across all banks. `art` (monospaced figure) and `code` are optional.
 - `level` must be one of the audience's levels in `audiences.json`.
 - Every question needs at least one `ontology` node and one `outcomes` LO, and each LO must cover the question's level and audience.
-- `details` is shown to students as "Focus:", so do not give the answer away in it.
+- `details` is for teachers only and never reaches students.
 - `difficulty` is 1 to 5.
+- Spread correct answers across positions; the shipped banks have six keys at each of positions 0 to 3.
+- Adding a core question does not change the legacy `ALL` or single-level modes. They are pinned in `legacy-modes.json`, and only an edit there changes them.
 
 Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question id. It gets the question and returns either the answer value (matched against option text or its leading number) or `{ pick: optionText => boolean }`. Parse the numbers from the question's text where you can. For code, either parse what you need or pin the exact source and translate it to JavaScript. A question that genuinely cannot be computed goes in `NOT_COMPUTABLE` in `test/solvers/index.js` with a reason. `npm test` fails if a question has neither.
 
@@ -175,7 +202,7 @@ Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question 
 
 **Add a learning outcome** to `learning-outcomes.json` with `id`, `statement`, `nodes`, `levels` and optional `audiences` (empty means all).
 
-**Add a question type:** implement `validate`, `toPublic`, `normalizeResponse` and `score` in `backend/src/scoring/<type>.js`, register it in `scoring/index.js`, add a matcher to the answer-key test, and build its student UI. See the ADR, section 6.
+**Add a question type:** add `backend/src/scoring/types/<type>.js` (see `mcq.js` for the exports: `publicFields`, `sample`, `validate`, `normalizeResponse`, `recordResponse`, `score`), and `web/types/<type>.js` registering `renderInput`, `readResponse` and `describeResponse`. Then add a matcher to the answer-key test. No shared file needs editing. See the ADR, section 6.
 
 ---
 
@@ -189,7 +216,7 @@ Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question 
 cp .env.example .env
 ```
 
-Edit `.env` and set a strong `JWT_SECRET`. This is required — `docker compose` will refuse to start without it.
+Edit `.env` and set a strong `JWT_SECRET` and a `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` for the first teacher. `docker compose` refuses to start without `JWT_SECRET` or `SEED_TEACHER_PASSWORD`.
 
 ### 2. Build and start
 
@@ -199,6 +226,13 @@ docker compose up --build -d
 
 - Student app: http://localhost:3000/
 - Teacher portal: http://localhost:3000/admin.html
+
+If the volume holds a database from before this version, the teacher account there may still have the demo password. The server then refuses to start and names the account. Fix it and start again:
+
+```bash
+docker compose run --rm app node backend/scripts/set-password.js teacher@ctquest.local
+docker compose up -d
+```
 
 ### 3. View logs
 
@@ -217,19 +251,23 @@ docker compose down -v       # stops containers AND deletes the database
 
 SQLite is stored in a named Docker volume (`db_data`) mounted at `/app/backend/data`. The database survives container restarts and image rebuilds. Only `docker compose down -v` removes it.
 
-Upgrading the image migrates the database in the volume on first start and leaves an `app.pre-v<N>-from-v<M>-<time>.db` backup beside it. To roll back, stop the container and put the backup back as `app.db`. Attempts that were in progress during the upgrade cannot be submitted and must be restarted.
+Upgrading the image migrates the database in the volume on first start and leaves an `app.pre-…db` backup beside it. To roll back, stop the container and put the backup back as `app.db`. Attempts that were in progress during the upgrade cannot be submitted; those students start again. Events that existed before the upgrade keep showing students their breakdown immediately.
 
 ### Environment variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `JWT_SECRET` | Yes | — | Secret used to sign JWTs. Use a long random string. The server refuses to start without it when `NODE_ENV=production`. |
-| `PORT` | No | `3000` | Port the server listens on inside the container. |
+| `SEED_TEACHER_EMAIL` | No | `teacher@ctquest.local` | First teacher account, created only in an empty database. |
+| `SEED_TEACHER_PASSWORD` | Yes (production) | `changeme123` in development | Password for that account. Production refuses to start without it or with the demo password. |
+| `PORT` | No | `3000` | Port the server listens on. |
+| `HOST` | No | all interfaces | Address to bind, e.g. `127.0.0.1` for a local-only run. |
 | `DB_PATH` | No | `backend/data/app.db` | SQLite file location. |
-| `SUBMIT_GRACE_SECONDS` | No | `60` | How long after an attempt's deadline a submission is still accepted. |
-| `AI_PROVIDER` | No | `none` | AI inference provider. `none` keeps every AI feature off; no provider is implemented yet. |
+| `SUBMIT_GRACE_SECONDS` | No | `60` | How long after an attempt's deadline a submission still counts as on time. Later ones are stored and marked late. |
+| `AI_PROVIDER` | No | `none` | AI inference provider. `none` keeps every AI feature off; the OpenRouter adapter comes in Phase 2. |
 | `AI_API_KEY` | No | — | Key for `AI_PROVIDER`. Required if a provider is set. |
 | `AI_MODEL` | No | — | Model name for the provider. |
+| `TZ` | No | `Asia/Singapore` (compose) | Only affects log timestamps. Stored and exchanged times are UTC. |
 
 ---
 
@@ -237,7 +275,8 @@ Upgrading the image migrates the database in the volume on first start and leave
 
 ```bash
 npm install
-NODE_ENV=production JWT_SECRET=your-secret npm start
+npm run set-password -- teacher@school.edu.sg      # if the database already has the demo account
+NODE_ENV=production JWT_SECRET=your-secret SEED_TEACHER_PASSWORD='…' npm start
 ```
 
 The backend serves `web/` as static files on port 3000.
