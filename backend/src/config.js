@@ -28,6 +28,18 @@ function loadConfig(env = process.env) {
     throw new Error("SUBMIT_GRACE_SECONDS must be a non-negative number.");
   }
 
+  const aiConcurrency = env.AI_CONCURRENCY === undefined ? 2 : Number(env.AI_CONCURRENCY);
+
+  if (!Number.isInteger(aiConcurrency) || aiConcurrency < 1 || aiConcurrency > 10) {
+    throw new Error("AI_CONCURRENCY must be an integer from 1 to 10.");
+  }
+
+  const aiTimeoutSeconds = env.AI_TIMEOUT_SECONDS === undefined ? 20 : Number(env.AI_TIMEOUT_SECONDS);
+
+  if (!Number.isFinite(aiTimeoutSeconds) || aiTimeoutSeconds <= 0 || aiTimeoutSeconds > 120) {
+    throw new Error("AI_TIMEOUT_SECONDS must be a number of seconds from 1 to 120.");
+  }
+
   return {
     nodeEnv,
     isProduction,
@@ -46,7 +58,13 @@ function loadConfig(env = process.env) {
       // "none" keeps every AI feature off. See src/ai/index.js.
       provider: String(env.AI_PROVIDER || "none").trim().toLowerCase(),
       apiKey: env.AI_API_KEY || null,
-      model: env.AI_MODEL || null
+      // Null means the adapter's default (src/ai/providers/openrouter.js).
+      model: env.AI_MODEL || null,
+      // How many answers the background job scores at once.
+      concurrency: aiConcurrency,
+      timeoutMs: aiTimeoutSeconds * 1000,
+      // Sent as HTTP-Referer, which OpenRouter uses to name the app.
+      appUrl: env.AI_APP_URL || "http://localhost"
     }
   };
 }
