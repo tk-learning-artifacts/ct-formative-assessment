@@ -4,7 +4,7 @@ A web-based Computational Thinking (CT) formative-assessment platform. Teachers 
 
 Two audiences are supported: the original **core** P5 to S2 Bebras-style puzzles (the default), and **RGSynapse** (Raffles Girls' School Sec 1 and Sec 2, students who already write some Swift and Python and build with AI assistants). Questions are tagged against a CT ontology based on Brennan & Resnick (2012) and against learning outcomes, so events can be built from any mix of level, outcome, CT concept or practice, and question type.
 
-The design decisions are recorded in [docs/adr/0001-ct-platform-model.md](docs/adr/0001-ct-platform-model.md), and the look of the pages in [docs/adr/0002-adopt-slate-visual-conventions.md](docs/adr/0002-adopt-slate-visual-conventions.md). Explainers for the concepts it uses are in [docs/learn/](docs/learn/).
+The design decisions are recorded in [docs/adr/0001-ct-platform-model.md](docs/adr/0001-ct-platform-model.md), the per-event feedback and navigation settings and the quick setup presets in [docs/adr/0003-assessment-settings.md](docs/adr/0003-assessment-settings.md), and the look of the pages in [docs/adr/0002-adopt-slate-visual-conventions.md](docs/adr/0002-adopt-slate-visual-conventions.md). Explainers for the concepts it uses are in [docs/learn/](docs/learn/).
 
 ---
 
@@ -18,6 +18,7 @@ ct-formative-assessment/
 │   │   ├── ontology.json         CT ontology (Brennan & Resnick + CT Quest sub-nodes)
 │   │   ├── learning-outcomes.json  LOs mapped to ontology nodes
 │   │   ├── legacy-modes.json     Question ids behind the old ALL/P5/P6/S1/S2 modes
+│   │   ├── presets.json          Quick setup cards: named filters plus their knobs
 │   │   └── questions/            Question banks (core.json, rgsynapse.json, type-samples.json, ai-samples.json)
 │   ├── src/
 │   │   ├── server.js         Entry point: loads config, starts the app
@@ -25,8 +26,9 @@ ct-formative-assessment/
 │   │   ├── config.js         All environment settings, validated at startup
 │   │   ├── db.js             Opens SQLite, runs migrations, syncs content, all queries
 │   │   ├── content.js        Loads and validates backend/content/
-│   │   ├── selection.js      Event filters -> question lists
-│   │   ├── policy.js         One attempt per student; when students see their breakdown
+│   │   ├── selection.js      Event filters -> question lists (including the balanced question cap)
+│   │   ├── presets.js        Quick setup presets: knobs -> event filters
+│   │   ├── policy.js         One attempt per student; feedback and navigation modes; what a student may see
 │   │   ├── outcomes-summary.js  Per-outcome and per-CT-node results for one event
 │   │   ├── security.js       Password hashing, attempt tokens
 │   │   ├── scoring/          Scorer registry; one module per question type in scoring/types/
@@ -64,7 +66,9 @@ ct-formative-assessment/
 
 **Answer keys** stay on the server. Students receive each question through its type's public projection, which leaves out `answer`, the teacher-only `details` note and any other marking fields.
 
-**Results.** Each student gets one attempt per event (a teacher can reset it). On submit the student sees their total. The per-question breakdown appears once the event's deadline (`end_at`) passes or the teacher presses "Release results".
+**Results.** Each student gets one attempt per event (a teacher can reset it), whatever the settings. Each event chooses when students see which answers were right: after each question (the answer then locks), at the end of the test (straight after submit), or when the teacher releases them (the default: the breakdown appears once the deadline `end_at` passes or the teacher presses "Release results"). Each event also chooses free navigation (back, next, skip) or in order (forward only; each question is answered or skipped, and cannot be revisited). The server enforces both: answers are committed one at a time through a token-guarded endpoint when a setting needs it, and `policy.js` decides everything a student sees. See ADR 0003.
+
+**Choosing questions.** The teacher's form opens on quick setup cards (presets from `backend/content/presets.json`), each with a short description and a live question count, and up to three coarse knobs: who it is for, which Brennan & Resnick dimension to emphasise, and short (about 10 questions, balanced across levels and outcomes) or full. Choosing a card fills the advanced picker ("Customise") so the teacher can fine-tune from there.
 
 **AI-scored answers.** `open-response-ai` questions take a short written answer, scored against a server-only rubric by a model through OpenRouter. Submitting never waits for the model: the answer is stored as pending, a background job in the same process scores it, and the student's total rises when it finishes. The student's name, class and any identifiers they typed are removed before anything is sent. Replies that fail validation, and every answer when AI is off, become "needs review" for the teacher, who can set the score and feedback for any AI-scored answer. See "AI scoring" below and the ADR, section 10.
 
@@ -73,10 +77,10 @@ ct-formative-assessment/
 | Table | Purpose |
 |---|---|
 | `users` | Teacher accounts (email + per-user salted scrypt hash) |
-| `events` | Join-code sessions: time window, duration, `selection_mode` (legacy mode or `FILTER`), `filter_json`, `results_released_at` |
+| `events` | Join-code sessions: time window, duration, `selection_mode` (legacy mode or `FILTER`), `filter_json`, `results_released_at`, `feedback_mode` (each/end/release), `navigation_mode` (free/linear) |
 | `event_questions` | Snapshot of each event's questions (v2 shape, answer keys included, server-only) |
 | `attempts` | A student's attempt: start/submit times, score, `token_hash`, `deadline_at`, `late`, `student_key` (normalised name + group), `reset_at`/`reset_by` |
-| `answers` | Per-question record: `question_type`, `response_json` (what the student chose, with its text), `earned_points`, `score_status`, `detail_json` (structured scoring detail such as AI feedback), plus the v1 `chosen_index`/`correct_index` |
+| `answers` | Per-question record: `question_type`, `response_json` (what the student chose, with its text), `earned_points`, `score_status`, `detail_json` (structured scoring detail such as AI feedback), `committed_at` (set when the answer was committed on its own before submit), plus the v1 `chosen_index`/`correct_index` |
 | `ontology_nodes`, `ontology_edges` | CT ontology nodes; `parent_of` and `requires` edges |
 | `learning_outcomes`, `outcome_nodes`, `outcome_levels`, `outcome_audiences` | LOs and their mappings |
 | `bank_questions`, `question_nodes`, `question_outcomes` | The question bank and its tags, for filtering |
@@ -157,6 +161,8 @@ The suite uses Node's built-in test runner (`node:test`) with `supertest` for HT
 | `teacher-scoping.test.js` | Teachers only see their own events and results |
 | `auth.test.js` | `JWT_SECRET` and `SEED_TEACHER_PASSWORD` rules, refusal of the demo password in production, `set-password`, salted hashes and rehash |
 | `migration.test.js` | Upgrading `fixtures/v1-app.sql` (made by the original code), chosen-option text kept, events with submissions left as their students saw them, backup, idempotence, rollback |
+| `assessment-settings.test.js` | Every feedback and navigation mode: settings stored and validated, no key before the mode allows it, committed answers locked against commit and submit, in-order enforcement and skips, commit guards (token, deadline, submitted, reset), one attempt in every mode, AI answers "being marked" under after-each, pre-existing events unchanged |
+| `presets.test.js` | `GET /api/presets`, knobs compiling to filters, card = preview = event count, AI-scored questions only from `aiScored` presets, the balanced `limit`, boot-time validation of `presets.json` |
 | `filters.test.js` | Pinned legacy modes, the core-audience default, AI-scored questions opt-in and last, v2 filters, preview = event count, ontology/outcomes/catalog endpoints |
 | `events.test.js` | Absolute times only, 24-hour duration cap |
 | `scoring.test.js` | Types loaded from files, public projection checked for every type, plugging in a new type |
@@ -226,6 +232,8 @@ All content is JSON under `backend/content/`. Restart the server (nodemon does t
 - Adding a core question does not change the legacy `ALL` or single-level modes. They are pinned in `legacy-modes.json`, and only an edit there changes them.
 
 Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question id. It gets the question and returns either the answer value (matched against option text or its leading number) or `{ pick: optionText => boolean }`. Parse the numbers from the question's text where you can. For code, either parse what you need or pin the exact source and translate it to JavaScript. Code-trace solvers return the program's output; Parsons solvers get the program built from each accepted order and return what it prints, which must equal `expectedOutput`. When `python3` or `swift` is installed, the answer-key test also runs these programs for real. A question that genuinely cannot be computed goes in `NOT_COMPUTABLE` in `test/solvers/index.js` with a reason. `npm test` fails if a question has neither.
+
+**Add a quick setup preset** to `presets.json` with `id`, `label`, a one-line `description`, a `filter` (the event filter shape, without `questionIds`) and `knobs` (any of `who`, `emphasis`, `length`). A preset spanning several audiences must offer `who`; one that fixes `nodes` cannot offer `emphasis`; one that names an AI-scored type must say `"aiScored": true`. Every preset must match at least one question with its default settings, or the server will not start. See ADR 0003, section 5.
 
 **Add an ontology node** to `ontology.json` under an existing parent of the same kind. The top two levels are reserved for Brennan & Resnick; CT Quest nodes go below them and cite `{ "framework": "ctquest" }`.
 

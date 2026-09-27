@@ -181,6 +181,7 @@ Event times must be absolute ISO 8601 strings with `Z` or an offset. A bare `202
 - **Results release.** On submit the student sees only the total. The per-question breakdown is returned by `GET /api/attempts/:id` only once `end_at` has passed or the teacher calls `POST /api/events/:id/release` (sets `events.results_released_at`). The breakdown covers which questions were right, the chosen and correct options, and AI feedback in `detail_json`.
   - Before release the student page says the teacher will release the breakdown.
   - Events that existed before the migration are marked released, so their behaviour does not change.
+- ADR 0003 (2026-09-27) makes feedback timing and navigation per-event settings. The rule above is the `release` mode, which stays the default for new events and applies to every existing one.
 - Together these stop the repeated-attempt oracle: with one attempt and no per-question feedback, four submissions of all-0s, all-1s, all-2s and all-3s under one name get one total and three 409s. A test checks this.
 
 **Teachers and secrets**
@@ -313,7 +314,8 @@ Teacher endpoints (JWT required, scoped to the caller's own events):
 | `GET /api/catalog` | `framework`, `levels`, `audiences`, `questionTypes` (`type`, `label`, `status` active/reserved), `legacySelectionModes`, `ai` |
 | `GET /api/ontology` | `framework`, `nodes` (`id`, `kind`, `label`, `description`, `parent`, `prerequisites`, `sources`, `questionCount`), `edges` (`from`, `to`, `kind`) |
 | `GET /api/outcomes?level=S1&audience=rgsynapse` | `outcomes` (`id`, `statement`, `nodes`, `levels`, `audiences`, `questionCount`). Both parameters are optional; an unknown value returns 400 |
-| `POST /api/question-bank/preview` | Body `{ filter }` or `{ selectionMode }`. Returns `count`, `totalPoints`, `byLevel`, `byType`, `byAudience`, `questions` (summaries: `id`, `title`, `type`, `audience`, `level`, `difficulty`, `points`, `ontology`, `outcomes`; no prompts or keys), the canonical `filter`, and `aiRequired`, `aiEnabled` and `warning` (§10) |
+| `GET /api/presets` | Quick setup presets with their knobs, knob options, defaults and default question count (ADR 0003) |
+| `POST /api/question-bank/preview` | Body `{ filter }`, `{ preset }` (ADR 0003) or `{ selectionMode }`. Returns `count`, `totalPoints`, `byLevel`, `byType`, `byAudience`, `questions` (summaries: `id`, `title`, `type`, `audience`, `level`, `difficulty`, `points`, `ontology`, `outcomes`; no prompts or keys), the canonical `filter`, and `aiRequired`, `aiEnabled` and `warning` (§10) |
 | `POST /api/events` | As before, plus `filter`. Returns the event with `selection_mode`, `filter`, `filter_summary`, `results_released_at`, `breakdown_released` and `question_count`, plus `aiRequired`, `aiEnabled` and `warning` |
 | `GET /api/events` | The caller's events with `filter`, `filter_summary`, `results_released_at`, `question_count` and `attempt_count` |
 | `GET /api/events/:id/results` | The event, plus every attempt (including reset ones) with `late`, `reset_at` and per-answer `response`, `scoreStatus` and `detail` |
@@ -331,6 +333,7 @@ Student endpoints:
 | `POST /api/attempts` | 201 with `attempt` (`id`, `token`, `deadlineAt`), `serverNow`, `event`, `questions`; 409 with `code` for a second start |
 | `GET /api/attempts/:id` | Needs `X-Attempt-Token`. `attempt` (`status`: started/submitted/reset, `deadlineAt`, `late`), `serverNow`, `event`, `questions`, and `result` (`score`, `max`, `pending`, `breakdownReleased`, and `perQuestion` once released) |
 | `POST /api/attempts/:id/submit` | Needs `X-Attempt-Token`. Returns `attempt` and `result` with `score`, `max` and `breakdownReleased` only |
+| `POST /api/attempts/:id/answers/:questionId/commit` | Needs `X-Attempt-Token`. Commits one answer as final when the event's settings need it; returns `committed` and `progress` (ADR 0003) |
 
 ## Decided after review (2026-09-27)
 

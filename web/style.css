@@ -677,6 +677,24 @@ legend {
   box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent);
 }
 
+/* Skipped: a dashed ring, so it reads differently from answered without
+   relying on colour. */
+.progress__dot--skipped {
+  border-style: dashed;
+  border-color: var(--color-ink-soft);
+}
+
+/* Locked (committed, can't be changed): square corners. */
+.progress__dot--locked {
+  border-radius: 4px;
+}
+
+/* In order: not reached yet. */
+.progress__dot--ahead {
+  border-color: var(--color-line-strong);
+  color: var(--color-line-strong);
+}
+
 .timer {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -812,6 +830,35 @@ pre {
 
 .q-status {
   margin-top: 12px;
+}
+
+.q-hint {
+  margin-top: 10px;
+}
+
+.answer-locked {
+  opacity: 0.85;
+}
+
+.answer-locked .opt,
+.answer-locked .pa-handle {
+  cursor: default;
+}
+
+.q-feedback {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  background: var(--color-surface-2);
+}
+
+.q-feedback__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
 }
 
 /* ---------- Student: results ---------- */
@@ -1359,6 +1406,97 @@ textarea.open-response {
 
 .sort-btn:hover {
   color: var(--color-ink);
+}
+
+/* ---------- Teacher: quick setup cards and event settings ---------- */
+
+.quick {
+  display: grid;
+  gap: 8px;
+}
+
+.quick__list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preset {
+  border: 1px solid var(--color-line);
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  background: var(--color-bg);
+}
+
+.preset--chosen {
+  border-color: var(--color-line-strong);
+  border-left-color: var(--color-accent-deep);
+  background: var(--color-accent-soft);
+}
+
+.preset__pick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-items: start;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.preset__pick input {
+  margin: 3px 0 0;
+  accent-color: var(--color-accent-deep);
+}
+
+.preset__text {
+  display: grid;
+  min-width: 0;
+}
+
+.preset__label {
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.preset__desc {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.preset__count {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+}
+
+.quick__knobs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 8px;
+  padding: 0 8px 8px 30px;
+}
+
+.quick__who {
+  grid-column: 1 / -1;
+}
+
+.setting {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.setting__options {
+  display: grid;
+  gap: 4px;
+}
+
+.setting__options .check input {
+  accent-color: var(--color-accent-deep);
 }
 
 /* ---------- Teacher: advanced picker ---------- */

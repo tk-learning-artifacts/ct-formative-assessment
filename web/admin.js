@@ -18,7 +18,14 @@
     ontology: null,
     outcomes: null,
     catalogFailed: false,
-    // The advanced picker's own selections, kept across re-renders.
+    // Quick setup: the presets from GET /api/presets, and the teacher's
+    // choice of card and knobs ({ id, who?, emphasis?, length? }). If the
+    // presets cannot load, the form falls back to the legacy question set.
+    presets: null,
+    presetsFailed: false,
+    quick: null,
+    // The advanced picker's own selections, kept across re-renders. Choosing
+    // a preset fills them, so "Customise" starts from the preset.
     picker: {
       audience: "core",
       levels: [],
@@ -26,11 +33,35 @@
       nodes: [],
       types: [],
       difficultyMin: "",
-      difficultyMax: ""
+      difficultyMax: "",
+      limit: ""
+    },
+    // The event settings (ADR 0003), kept across re-renders.
+    settings: {
+      feedbackMode: "release",
+      navigationMode: "free"
     },
     preview: null,
     previewError: null,
     previewLoading: false
+  };
+
+  const FEEDBACK_LABELS = {
+    each: "Feedback after each question",
+    end: "Feedback at the end",
+    release: "Feedback when released"
+  };
+
+  const NAVIGATION_LABELS = {
+    free: "Free navigation",
+    linear: "In order, no going back"
+  };
+
+  // Shown under the feedback setting when it reveals the key to a student
+  // before everyone has finished.
+  const FEEDBACK_WARNINGS = {
+    each: "Each student sees the correct answer as soon as they check a question, and their answer then locks. In a live session, answers can spread to classmates who are still working.",
+    end: "Each student sees the correct answers as soon as they submit. In a live session, answers can spread to classmates who are still working."
   };
 
   let previewTimer = null;
@@ -207,6 +238,7 @@
 
     const min = state.picker.difficultyMin ? Number(state.picker.difficultyMin) : null;
     const max = state.picker.difficultyMax ? Number(state.picker.difficultyMax) : null;
+    const limit = state.picker.limit ? Number(state.picker.limit) : null;
 
     if (min || max) {
       filter.difficulty = {};
@@ -218,7 +250,26 @@
       }
     }
 
+    if (limit) {
+      filter.limit = limit;
+    }
+
     return filter;
+  }
+
+  // Sets the advanced picker to a filter, such as the one a preset compiles
+  // to. Presets always compile to one audience, which the picker needs.
+  function fillPickerFromFilter(filter) {
+    state.picker = {
+      audience: (filter.audiences && filter.audiences[0]) || "core",
+      levels: (filter.levels || []).slice(),
+      outcomes: (filter.outcomes || []).slice(),
+      nodes: (filter.nodes || []).slice(),
+      types: (filter.types || []).slice(),
+      difficultyMin: filter.difficulty && filter.difficulty.min ? String(filter.difficulty.min) : "",
+      difficultyMax: filter.difficulty && filter.difficulty.max ? String(filter.difficulty.max) : "",
+      limit: filter.limit ? String(filter.limit) : ""
+    };
   }
 
   function schedulePreview() {
@@ -230,14 +281,18 @@
     previewTimer = setTimeout(runPreview, PREVIEW_DEBOUNCE_MS);
   }
 
+  // Previews what the event would contain: the advanced picker's filter while
+  // it is open, otherwise the quick setup choice. A preset preview returns
+  // the filter it compiles to, which fills the advanced picker.
   async function runPreview() {
     const requestId = (previewRequestId += 1);
-    const filter = pickerFilter();
+    const fromPreset = !advancedIsOpen() && Boolean(state.quick);
+    const body = fromPreset ? { preset: state.quick } : { filter: pickerFilter() };
 
     try {
       const payload = await api("/api/question-bank/preview", {
         method: "POST",
-        body: JSON.stringify({ filter })
+        body: JSON.stringify(body)
       });
 
       if (requestId !== previewRequestId) {
@@ -246,6 +301,11 @@
 
       state.preview = payload;
       state.previewError = null;
+
+      if (fromPreset) {
+        fillPickerFromFilter(payload.filter);
+        refreshAdvancedPicker();
+      }
     } catch (error) {
       if (requestId !== previewRequestId) {
         return;
@@ -257,6 +317,7 @@
 
     state.previewLoading = false;
     renderPreviewPanel();
+    renderQuickSummary();
     updateCreateButtonState();
   }
 
@@ -319,14 +380,256 @@
     return advancedIsOpen() && !state.catalogFailed && Boolean(state.catalog);
   }
 
+  // Whether the quick setup cards decide the questions: presets loaded and
+  // the advanced picker closed.
+  function quickActive() {
+    return !advancedActive() && Boolean(state.presets && state.quick);
+  }
+
   function updateCreateButtonState() {
     const btn = document.getElementById("createEventBtn");
     if (!btn) {
       return;
     }
 
-    const blocked = advancedActive() && (!state.preview || state.preview.count === 0 || state.previewError);
-    btn.disabled = blocked;
+    const blocked = (advancedActive() || quickActive()) && (!state.preview || state.preview.count === 0 || state.previewError);
+    btn.disabled = Boolean(blocked);
+  }
+
+  // ---------- Quick setup cards ----------
+
+  function presetById(id) {
+    return (state.presets && state.presets.presets.find(preset => preset.id === id)) || null;
+  }
+
+  // The knobs for the chosen card: who it is for, which Brennan & Resnick
+  // dimension to emphasise, and how long. Only the knobs the preset offers.
+  function renderQuickKnobs(preset) {
+    const knobs = [];
+
+    if (preset.knobs.includes("who")) {
+      const groups = [];
+      preset.whoOptions.forEach(option => {
+        let group = groups.find(item => item.label === option.group);
+        if (!group) {
+          group = { label: option.group, options: [] };
+          groups.push(group);
+        }
+        group.options.push(option);
+      });
+
+      const optionHtml = option => `<option value="${escapeHtml(option.value)}" ${state.quick.who === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`;
+
+      knobs.push(`
+        <div class="field quick__who">
+          <label for="quickWho">For</label>
+          <select id="quickWho" data-quick-knob="who">
+            ${groups.length > 1
+              ? groups.map(group => `<optgroup label="${escapeHtml(group.label)}">${group.options.map(optionHtml).join("")}</optgroup>`).join("")
+              : preset.whoOptions.map(optionHtml).join("")}
+          </select>
+        </div>
+      `);
+    }
+
+    if (preset.knobs.includes("emphasis")) {
+      knobs.push(`
+        <div class="field">
+          <label for="quickEmphasis">Emphasis</label>
+          <select id="quickEmphasis" data-quick-knob="emphasis">
+            ${state.presets.emphasis.map(item => `<option value="${escapeHtml(item.id)}" ${state.quick.emphasis === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+          </select>
+        </div>
+      `);
+    }
+
+    if (preset.knobs.includes("length")) {
+      knobs.push(`
+        <div class="field">
+          <label for="quickLength">Length</label>
+          <select id="quickLength" data-quick-knob="length">
+            <option value="full" ${state.quick.length === "full" ? "selected" : ""}>Full set</option>
+            <option value="short" ${state.quick.length === "short" ? "selected" : ""}>Short (${state.presets.shortLength})</option>
+          </select>
+        </div>
+      `);
+    }
+
+    return knobs.length ? `<div class="quick__knobs">${knobs.join("")}</div>` : "";
+  }
+
+  // The count on a card: live from the preview for the chosen card, the
+  // default count for the others.
+  function presetCount(preset) {
+    const chosen = state.quick && state.quick.id === preset.id;
+    const count = chosen && state.preview && !advancedIsOpen() ? state.preview.count : preset.count;
+    return `${count} question${count === 1 ? "" : "s"}`;
+  }
+
+  function renderQuickSetup() {
+    if (!state.presets) {
+      return "";
+    }
+
+    return `
+      <fieldset class="quick field--full" id="quickSetup">
+        <legend class="legend">Questions</legend>
+        <ul class="quick__list">
+          ${state.presets.presets.map(preset => {
+            const chosen = state.quick && state.quick.id === preset.id;
+            return `
+              <li class="preset ${chosen ? "preset--chosen" : ""}">
+                <label class="preset__pick">
+                  <input type="radio" name="quickPreset" value="${escapeHtml(preset.id)}" ${chosen ? "checked" : ""} />
+                  <span class="preset__text">
+                    <span class="preset__label">${escapeHtml(preset.label)}</span>
+                    <span class="preset__desc">${escapeHtml(preset.description)}</span>
+                  </span>
+                  <span class="preset__count" data-preset-count="${escapeHtml(preset.id)}">${presetCount(preset)}</span>
+                </label>
+                ${chosen ? renderQuickKnobs(preset) : ""}
+              </li>
+            `;
+          }).join("")}
+        </ul>
+        <div id="quickSummary" aria-live="polite"></div>
+      </fieldset>
+    `;
+  }
+
+  // One line under the cards: points, AI scoring, and the AI-off warning.
+  function renderQuickSummary() {
+    const el = document.getElementById("quickSummary");
+
+    if (!el) {
+      return;
+    }
+
+    document.querySelectorAll("[data-preset-count]").forEach(span => {
+      const preset = presetById(span.getAttribute("data-preset-count"));
+      if (preset) {
+        span.textContent = presetCount(preset);
+      }
+    });
+
+    if (advancedIsOpen()) {
+      el.innerHTML = `<p class="muted small">Customise is open, so it decides the questions.</p>`;
+      return;
+    }
+
+    if (state.previewError) {
+      el.innerHTML = `<p class="notice notice--critical">${escapeHtml(state.previewError)}</p>`;
+      return;
+    }
+
+    if (!state.preview) {
+      el.innerHTML = `<p class="muted small">Checking what matches&hellip;</p>`;
+      return;
+    }
+
+    const preview = state.preview;
+    el.innerHTML = `
+      <div class="row small">
+        <span>${preview.count} question${preview.count === 1 ? "" : "s"}, ${preview.totalPoints} point${preview.totalPoints === 1 ? "" : "s"}</span>
+        <span class="tag ${preview.aiRequired ? "tag--accent" : ""}">${preview.aiRequired ? "Uses AI scoring" : "No AI scoring"}</span>
+      </div>
+      ${preview.count === 0 ? `<p class="notice notice--critical mt-s">No questions match. Pick another setting before you create the event.</p>` : ""}
+      ${preview.warning ? `<p class="notice notice--warning mt-s">${escapeHtml(preview.warning)}</p>` : ""}
+    `;
+  }
+
+  function bindQuickSetupEvents() {
+    const container = document.getElementById("quickSetup");
+
+    if (!container) {
+      return;
+    }
+
+    container.querySelectorAll('input[name="quickPreset"]').forEach(input => {
+      input.addEventListener("change", () => {
+        const preset = presetById(input.value);
+        state.quick = { ...preset.defaults };
+        state.preview = null;
+        refreshQuickSetup();
+        schedulePreview();
+        updateCreateButtonState();
+      });
+    });
+
+    container.querySelectorAll("[data-quick-knob]").forEach(select => {
+      select.addEventListener("change", () => {
+        state.quick = { ...state.quick, [select.getAttribute("data-quick-knob")]: select.value };
+        schedulePreview();
+        renderQuickSummary();
+        updateCreateButtonState();
+      });
+    });
+  }
+
+  function refreshQuickSetup() {
+    const container = document.getElementById("quickSetup");
+
+    if (!container) {
+      return;
+    }
+
+    container.outerHTML = renderQuickSetup();
+    bindQuickSetupEvents();
+    renderQuickSummary();
+  }
+
+  // ---------- Event settings ----------
+
+  function renderSettingRadios(name, legend, labels, hints) {
+    return `
+      <fieldset class="setting field--full" id="${name}Setting">
+        <legend class="legend">${escapeHtml(legend)}</legend>
+        <div class="setting__options">
+          ${Object.keys(labels).map(value => `
+            <label class="check">
+              <input type="radio" name="${name}" value="${value}" ${state.settings[name] === value ? "checked" : ""} />
+              ${escapeHtml(labels[value])}
+            </label>
+          `).join("")}
+        </div>
+        ${hints}
+      </fieldset>
+    `;
+  }
+
+  function feedbackWarningHtml() {
+    const warning = FEEDBACK_WARNINGS[state.settings.feedbackMode];
+    return warning ? `<p class="notice notice--warning" id="feedbackWarning">${escapeHtml(warning)}</p>` : `<span id="feedbackWarning" hidden></span>`;
+  }
+
+  function navigationHintHtml() {
+    return state.settings.navigationMode === "linear"
+      ? `<p class="picker__hint" id="navigationHint">Students must answer or skip each question to move on, and cannot go back to it.</p>`
+      : `<span id="navigationHint" hidden></span>`;
+  }
+
+  function renderSettings() {
+    return `
+      ${renderSettingRadios("feedbackMode", "Students see which answers were right", {
+        each: "After each question",
+        end: "At the end of the test",
+        release: "When I release them"
+      }, feedbackWarningHtml())}
+      ${renderSettingRadios("navigationMode", "Moving between questions", {
+        free: "Free: back, next and skip",
+        linear: "In order: forward only"
+      }, navigationHintHtml())}
+    `;
+  }
+
+  function bindSettingsEvents() {
+    document.querySelectorAll('input[name="feedbackMode"], input[name="navigationMode"]').forEach(input => {
+      input.addEventListener("change", () => {
+        state.settings[input.name] = input.value;
+        document.getElementById("feedbackWarning").outerHTML = feedbackWarningHtml();
+        document.getElementById("navigationHint").outerHTML = navigationHintHtml();
+      });
+    });
   }
 
   // ---------- Advanced picker: markup ----------
@@ -481,7 +784,7 @@
     return `
       <div class="picker">
         <div class="picker__filters">
-          <p class="notice">While this is open, it replaces the question set above.</p>
+          <p class="notice">While this is open, it replaces the ${state.presets ? "quick setup" : "question set"} above.</p>
 
           <div class="picker__row">
             <fieldset>
@@ -510,8 +813,16 @@
                 <input id="difficultyMax" type="number" min="1" max="5" placeholder="To" value="${escapeHtml(state.picker.difficultyMax)}" />
               </div>
             </fieldset>
+
+            <fieldset>
+              <legend class="legend">Most questions</legend>
+              <div class="picker__difficulty">
+                <label class="visually-hidden" for="pickerLimit">Most questions</label>
+                <input id="pickerLimit" type="number" min="1" max="100" placeholder="All" value="${escapeHtml(state.picker.limit)}" />
+              </div>
+            </fieldset>
           </div>
-          <p class="picker__hint">No levels ticked means every level this audience offers.</p>
+          <p class="picker__hint">No levels ticked means every level this audience offers. A most-questions cap keeps a spread across levels and outcomes.</p>
 
           <fieldset>
             <legend class="legend">Question types</legend>
@@ -535,8 +846,21 @@
     `;
   }
 
+  // Re-renders the picker's body after a preset fills it. Expanded tree
+  // branches close; the picker is usually collapsed when this runs.
+  function refreshAdvancedPicker() {
+    const body = document.getElementById("advancedPickerBody");
+
+    if (!body) {
+      return;
+    }
+
+    body.innerHTML = renderAdvancedPicker();
+    bindAdvancedPickerEvents();
+  }
+
   function bindAdvancedPickerEvents() {
-    const container = document.getElementById("advancedPicker");
+    const container = document.getElementById("advancedPickerBody");
     if (!container || state.catalogFailed || !state.catalog) {
       return;
     }
@@ -643,14 +967,33 @@
       });
     }
 
-    container.addEventListener("toggle", () => {
-      updateCreateButtonState();
-      if (advancedIsOpen() && !state.preview && !state.previewLoading) {
-        schedulePreview();
-      }
-    });
+    const limit = document.getElementById("pickerLimit");
+
+    if (limit) {
+      limit.addEventListener("input", () => {
+        state.picker.limit = limit.value;
+        onPickerChange();
+      });
+    }
 
     renderPreviewPanel();
+  }
+
+  // Opening or closing Customise changes what decides the questions, so the
+  // preview reruns for whichever now applies.
+  function bindAdvancedToggle() {
+    const details = document.getElementById("advancedPicker");
+
+    if (!details) {
+      return;
+    }
+
+    details.addEventListener("toggle", () => {
+      schedulePreview();
+      renderPreviewPanel();
+      renderQuickSummary();
+      updateCreateButtonState();
+    });
   }
 
   // ---------- Per-outcome results ----------
@@ -773,6 +1116,8 @@
             <span>${escapeHtml(event.filter_summary || event.selection_mode)}</span>
             <span>${event.duration_minutes ? `${event.duration_minutes} min` : "No time limit"}</span>
             <span>${event.attempt_count} attempt${event.attempt_count === 1 ? "" : "s"}</span>
+            <span>${escapeHtml(FEEDBACK_LABELS[event.feedback_mode] || FEEDBACK_LABELS.release)}</span>
+            <span>${escapeHtml(NAVIGATION_LABELS[event.navigation_mode] || NAVIGATION_LABELS.free)}</span>
           </span>
         </button>
       </li>
@@ -796,10 +1141,16 @@
               <span class="tag tag--code">${escapeHtml(resultsEvent.join_code)}</span>
             </div>
             <div class="row">
-              ${resultsEvent.breakdown_released
-                ? `<span class="tag status status--positive">Students can see their breakdown</span>`
-                : `<span class="tag status status--neutral">Breakdown hidden from students</span>`}
-              ${resultsEvent.results_released_at ? "" : `<button id="releaseBtn" class="btn btn--accent btn--sm">Release results</button>`}
+              <span class="tag">${escapeHtml(FEEDBACK_LABELS[resultsEvent.feedback_mode] || FEEDBACK_LABELS.release)}</span>
+              <span class="tag">${escapeHtml(NAVIGATION_LABELS[resultsEvent.navigation_mode] || NAVIGATION_LABELS.free)}</span>
+              ${resultsEvent.feedback_mode === "each"
+                ? `<span class="tag status status--positive">Students see each result as they answer</span>`
+                : resultsEvent.feedback_mode === "end"
+                  ? `<span class="tag status status--positive">Students see their breakdown on submit</span>`
+                  : resultsEvent.breakdown_released
+                    ? `<span class="tag status status--positive">Students can see their breakdown</span>`
+                    : `<span class="tag status status--neutral">Breakdown hidden from students</span>`}
+              ${resultsEvent.results_released_at || (resultsEvent.feedback_mode && resultsEvent.feedback_mode !== "release") ? "" : `<button id="releaseBtn" class="btn btn--accent btn--sm">Release results</button>`}
             </div>
           </div>
           ${state.results.attempts.length
@@ -850,23 +1201,24 @@
                 <label for="title">Title</label>
                 <input id="title" type="text" placeholder="P6 Mock Round 1" />
               </div>
-              <div class="field field--full">
-                <label for="selectionMode">Question set</label>
-                <select id="selectionMode">
-                  <optgroup label="CT Quest core">
+              ${state.presets ? renderQuickSetup() : `
+                <div class="field field--full">
+                  <label for="selectionMode">Question set</label>
+                  <select id="selectionMode">
                     <option value="ALL">All levels</option>
                     <option value="P5">P5 only</option>
                     <option value="P6">P6 only</option>
                     <option value="S1">S1 only</option>
                     <option value="S2">S2 only</option>
-                  </optgroup>
-                  <optgroup label="RGSynapse (sample questions)">
-                    <option value="RGS:S1,S2">RGSynapse Sec 1 and Sec 2</option>
-                    <option value="RGS:S1">RGSynapse Sec 1</option>
-                    <option value="RGS:S2">RGSynapse Sec 2</option>
-                  </optgroup>
-                </select>
-              </div>
+                  </select>
+                </div>
+              `}
+
+              <details id="advancedPicker">
+                <summary>${state.presets ? "Customise" : "Choose what to test"}</summary>
+                <div id="advancedPickerBody">${renderAdvancedPicker()}</div>
+              </details>
+
               <div class="field">
                 <label for="joinCode">Join code <span class="field__hint">optional</span></label>
                 <input id="joinCode" type="text" placeholder="Made for you" autocapitalize="characters" spellcheck="false" />
@@ -884,10 +1236,7 @@
                 <input id="endAt" type="datetime-local" />
               </div>
 
-              <details id="advancedPicker">
-                <summary>Choose what to test</summary>
-                <div id="advancedPickerBody">${renderAdvancedPicker()}</div>
-              </details>
+              ${renderSettings()}
             </div>
 
             <div class="form-actions">
@@ -922,17 +1271,18 @@
 
     document.getElementById("createEventBtn").addEventListener("click", async () => {
       const title = document.getElementById("title").value.trim();
-      const selectionMode = document.getElementById("selectionMode").value;
       const joinCode = document.getElementById("joinCode").value.trim();
       const durationMinutes = document.getElementById("durationMinutes").value;
       const startAt = document.getElementById("startAt").value;
       const endAt = document.getElementById("endAt").value;
 
-      // The advanced section only takes over when the teacher has it open;
-      // collapsed (the default) always keeps today's simple selectionMode path.
+      // Customise only takes over while it is open. Otherwise the quick setup
+      // choice decides, or the legacy question set if presets did not load.
       const selection = advancedActive()
         ? { filter: pickerFilter() }
-        : { selectionMode };
+        : quickActive()
+          ? { preset: state.quick }
+          : { selectionMode: document.getElementById("selectionMode").value };
 
       try {
         const created = await api("/api/events", {
@@ -945,7 +1295,9 @@
             // datetime-local has no time zone; converting here uses the
             // teacher's browser zone and sends an absolute UTC time.
             startAt: startAt ? new Date(startAt).toISOString() : null,
-            endAt: endAt ? new Date(endAt).toISOString() : null
+            endAt: endAt ? new Date(endAt).toISOString() : null,
+            feedbackMode: state.settings.feedbackMode,
+            navigationMode: state.settings.navigationMode
           })
         });
 
@@ -959,7 +1311,11 @@
       }
     });
 
+    bindQuickSetupEvents();
+    renderQuickSummary();
     bindAdvancedPickerEvents();
+    bindAdvancedToggle();
+    bindSettingsEvents();
     updateCreateButtonState();
 
     const releaseBtn = document.getElementById("releaseBtn");
@@ -1056,6 +1412,21 @@
       state.catalogFailed = false;
     } catch (_error) {
       state.catalogFailed = true;
+    }
+
+    // Presets load on their own, so the cards still work if the picker data
+    // fails, and the legacy question set still works if the presets fail.
+    try {
+      state.presets = await api("/api/presets");
+      state.presetsFailed = false;
+
+      if (!state.quick && state.presets.presets.length) {
+        state.quick = { ...state.presets.presets[0].defaults };
+        schedulePreview();
+      }
+    } catch (_error) {
+      state.presets = null;
+      state.presetsFailed = true;
     }
   }
 

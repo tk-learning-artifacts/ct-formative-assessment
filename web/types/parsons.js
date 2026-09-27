@@ -174,7 +174,8 @@
     const handle = event.target.closest && event.target.closest(".pa-handle");
     const widget = handle && handle.closest("[data-parsons]");
 
-    if (!widget || drag || (event.pointerType === "mouse" && event.button !== 0)) {
+    // A locked (committed) answer cannot be rearranged.
+    if (!widget || drag || widget.closest("[data-locked]") || (event.pointerType === "mouse" && event.button !== 0)) {
       return;
     }
 

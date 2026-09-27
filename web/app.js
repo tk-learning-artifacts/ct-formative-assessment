@@ -24,14 +24,53 @@
     deadlineMs: null,
     timerId: null,
     markingTimerId: null,
+    progressTimerId: null,
     submitting: false,
+    committing: false,
     i: 0,
     answers: {},
-    startedAt: null
+    startedAt: null,
+    // The event's settings (ADR 0003) and the answers committed so far,
+    // keyed by question id, as policy.js lets this student see them:
+    // { questionId, skipped, result? }, with result only under "each".
+    feedbackMode: "release",
+    navigationMode: "free",
+    committed: {}
   };
 
+  function isLinear() {
+    return state.navigationMode === "linear";
+  }
+
+  function feedbackEach() {
+    return state.feedbackMode === "each";
+  }
+
+  function isAnswered(q) {
+    const committed = state.committed[q.id];
+    return committed ? !committed.skipped : state.answers[q.id] !== undefined;
+  }
+
   function answeredCount() {
-    return ACTIVE_BANK.filter(q => state.answers[q.id] !== undefined).length;
+    return ACTIVE_BANK.filter(isAnswered).length;
+  }
+
+  function skippedCount() {
+    return ACTIVE_BANK.filter(q => state.committed[q.id] && state.committed[q.id].skipped).length;
+  }
+
+  // The first question not yet committed; under in-order navigation, the
+  // furthest the student may be.
+  function firstOpenIndex() {
+    const index = ACTIVE_BANK.findIndex(q => !state.committed[q.id]);
+    return index === -1 ? ACTIVE_BANK.length : index;
+  }
+
+  function setCommitted(progress) {
+    state.committed = {};
+    ((progress && progress.committed) || []).forEach(item => {
+      state.committed[item.questionId] = item;
+    });
   }
 
   function clamp(n, a, b) {
@@ -182,7 +221,8 @@
     const q = ACTIVE_BANK[state.i];
     const container = document.getElementById("answerArea");
 
-    if (!q || !container) {
+    // A committed answer is locked; nothing on the page can change it.
+    if (!q || !container || state.committed[q.id]) {
       return;
     }
 
@@ -195,6 +235,20 @@
     }
 
     saveAttempt();
+    updateNavButtons();
+  }
+
+  // "Check answer", and "Next" under in-order navigation, need an answer.
+  function updateNavButtons() {
+    const q = ACTIVE_BANK[state.i];
+    const answered = Boolean(q) && state.answers[q.id] !== undefined;
+
+    ["checkBtn", "nextBtn"].forEach(id => {
+      const button = document.getElementById(id);
+      if (button && button.hasAttribute("data-needs-answer")) {
+        button.disabled = !answered || state.committing;
+      }
+    });
   }
 
   function showStatus(message) {
@@ -214,6 +268,7 @@
     }
 
     captureCurrentAnswer();
+    stopProgressPoll();
     state.submitting = true;
 
     for (let attempt = 0; ; attempt += 1) {
@@ -251,6 +306,211 @@
         await sleep(wait * 1000);
       }
     }
+  }
+
+  // ---------- Committing one answer ----------
+
+  // Sends the current question's answer (or a skip) as final. On success the
+  // answer is locked, and under "each" its result comes back. Returns
+  // whether it was committed.
+  async function commitCurrent({ skip = false } = {}) {
+    const q = ACTIVE_BANK[state.i];
+
+    if (!q || state.committing || state.committed[q.id]) {
+      return Boolean(q && state.committed[q.id]);
+    }
+
+    captureCurrentAnswer();
+    state.committing = true;
+    updateNavButtons();
+
+    try {
+      const payload = await api(`/api/attempts/${state.attemptId}/answers/${encodeURIComponent(q.id)}/commit`, {
+        method: "POST",
+        headers: attemptHeaders(),
+        body: JSON.stringify({ response: skip || state.answers[q.id] === undefined ? null : state.answers[q.id] })
+      });
+
+      if (skip) {
+        delete state.answers[q.id];
+      }
+
+      setCommitted(payload.progress);
+      saveAttempt();
+      return true;
+    } catch (error) {
+      const code = error.payload && error.payload.code;
+
+      if (code === "time-up") {
+        await submitAttempt({ auto: true });
+        return false;
+      }
+
+      if (code === "already-submitted" || code === "attempt-reset") {
+        await resumeAttempt(readSavedAttempt() || { attemptId: state.attemptId, token: state.attemptToken });
+        return false;
+      }
+
+      if (code === "answer-locked" || code === "out-of-order") {
+        // Another tab moved on: take the server's record and carry on from it.
+        await refreshProgress();
+        return false;
+      }
+
+      showStatus(error.status ? error.message : "Could not reach the server. Your answer is saved here; try again.");
+      return false;
+    } finally {
+      state.committing = false;
+      updateNavButtons();
+    }
+  }
+
+  // Re-reads the committed answers from the server and redraws the question.
+  async function refreshProgress() {
+    try {
+      const payload = await api(`/api/attempts/${state.attemptId}`, { method: "GET", headers: attemptHeaders() });
+
+      if (payload.attempt.status !== "started") {
+        await resumeAttempt(readSavedAttempt() || { attemptId: state.attemptId, token: state.attemptToken });
+        return;
+      }
+
+      setCommitted(payload.progress);
+
+      if (isLinear()) {
+        state.i = clamp(firstOpenIndex(), 0, ACTIVE_BANK.length - 1);
+      }
+
+      saveAttempt();
+      renderQuestion();
+    } catch (_error) {
+      showStatus("Could not reach the server. Try again in a moment.");
+    }
+  }
+
+  function stopProgressPoll() {
+    if (state.progressTimerId) {
+      clearTimeout(state.progressTimerId);
+      state.progressTimerId = null;
+    }
+  }
+
+  // Under "each", a checked AI-scored answer is marked in the background.
+  // While any is still being marked, check back, and redraw the question if
+  // it is the one on screen.
+  function pollWhilePending(polls = 0) {
+    stopProgressPoll();
+
+    const pending = Object.values(state.committed).some(item => item.result && item.result.status === "pending");
+
+    if (!pending || polls >= MARKING_POLLS) {
+      return;
+    }
+
+    const attemptId = state.attemptId;
+
+    state.progressTimerId = setTimeout(async () => {
+      state.progressTimerId = null;
+
+      try {
+        const payload = await api(`/api/attempts/${attemptId}`, { method: "GET", headers: attemptHeaders() });
+
+        if (state.attemptId !== attemptId || state.submitting || payload.attempt.status !== "started") {
+          return;
+        }
+
+        setCommitted(payload.progress);
+        const q = ACTIVE_BANK[state.i];
+
+        if (q && state.committed[q.id]) {
+          captureCurrentAnswer();
+          renderQuestion({ polls: polls + 1 });
+          return;
+        }
+      } catch (_error) {
+        // Try again next time.
+      }
+
+      pollWhilePending(polls + 1);
+    }, MARKING_POLL_SECONDS * 1000);
+  }
+
+  // ---------- Results, shared by the per-question feedback and the breakdown ----------
+
+  function rendererFor(type) {
+    try {
+      return Types.get(type);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  // item is one perQuestion entry from policy.js. Colour is never the only
+  // signal: each status has a word beside it.
+  function resultStatus(item) {
+    return item.status === "pending"
+      ? { tone: "pending", label: "Being marked" }
+      : item.status === "needs-review" ? { tone: "warning", label: "Waiting for teacher" }
+        : item.correct ? { tone: "positive", label: "Correct" }
+          : item.earned > 0 ? { tone: "warning", label: "Part marks" }
+            : { tone: "critical", label: "Incorrect" };
+  }
+
+  // The lines under a result: the student's answer, the correct one when
+  // they missed it, feedback, and a note while it is being marked.
+  function resultLines(item) {
+    const renderer = rendererFor(item.type);
+    const chosen = renderer ? renderer.describeResponse(item.response, h) : "";
+    const correct = item.correctResponse && renderer ? renderer.describeResponse(item.correctResponse, h) : "";
+    // detail is the student view from policy.js: who marked it and the
+    // validated feedback text. It is escaped like everything else.
+    const feedback = item.detail && item.detail.feedback ? item.detail.feedback : "";
+    const feedbackLabel = item.detail && item.detail.source === "teacher" ? "Teacher's feedback" : "Feedback";
+    const statusNote = item.status === "pending"
+      ? "Being marked. Check back soon."
+      : item.status === "needs-review" ? "Waiting for your teacher to mark this." : "";
+    // Typed output and ordered lines are code, so they keep a code font.
+    const isCode = item.type === "code-trace" || item.type === "parsons";
+    const asCode = text => isCode ? `<code>${escapeHtml(text)}</code>` : escapeHtml(text);
+
+    return `
+      <div class="result-meta result-answer">Your answer: ${asCode(chosen)}</div>
+      ${correct && !item.correct ? `<div class="result-meta result-answer">Correct answer: ${asCode(correct)}</div>` : ""}
+      ${feedback ? `<div class="result-meta">${feedbackLabel}: ${escapeHtml(feedback)}</div>` : ""}
+      ${statusNote ? `<div class="result-meta">${statusNote}</div>` : ""}
+    `;
+  }
+
+  function resultScore(item) {
+    const status = resultStatus(item);
+    return `
+      <span class="result-row__score tone-${status.tone === "pending" ? "neutral" : status.tone}">${item.earned}/${item.max}</span>
+      <span class="tag status status--${status.tone}">${status.label}</span>
+    `;
+  }
+
+  // The panel under a checked answer ("each"), or a plain note that a
+  // committed answer is recorded.
+  function committedPanel(q) {
+    const committed = state.committed[q.id];
+
+    if (!committed) {
+      return "";
+    }
+
+    if (!committed.result) {
+      return `<p class="notice q-feedback">${committed.skipped ? "Skipped. This question scores zero." : "Your answer is recorded."}</p>`;
+    }
+
+    return `
+      <div class="q-feedback" role="status">
+        <div class="q-feedback__head">
+          ${resultScore(committed.result)}
+          ${committed.skipped ? `<span class="muted small">Skipped</span>` : ""}
+        </div>
+        ${resultLines(committed.result)}
+      </div>
+    `;
   }
 
   // ---------- Screens ----------
@@ -345,7 +605,22 @@
     state.answers = answers || {};
     state.startedAt = payload.attempt.startedAt ? Date.parse(payload.attempt.startedAt) : Date.now();
     ACTIVE_BANK = payload.questions;
-    state.i = clamp(index || 0, 0, Math.max(0, ACTIVE_BANK.length - 1));
+
+    const progress = payload.progress || {};
+    state.feedbackMode = progress.feedbackMode || payload.event.feedbackMode || "release";
+    state.navigationMode = progress.navigationMode || payload.event.navigationMode || "free";
+    setCommitted(progress);
+
+    // In order: the question after the last committed one, or the last
+    // committed one itself while its feedback is showing.
+    let target = index || 0;
+
+    if (isLinear()) {
+      const open = firstOpenIndex();
+      target = clamp(target, feedbackEach() ? open - 1 : open, open);
+    }
+
+    state.i = clamp(target, 0, Math.max(0, ACTIVE_BANK.length - 1));
 
     saveAttempt();
     startTimer(payload.attempt.deadlineAt, payload.serverNow);
@@ -399,21 +674,91 @@
     enterAttempt(payload, saved.answers || {}, saved.i || 0);
   }
 
-  function renderQuestion() {
+  // The buttons under the answer. Free navigation keeps Back and Next;
+  // in order drops Back, and moving on means answering (Next commits) or
+  // skipping. Under "each", Check answer commits and shows the result first.
+  function navButtons(q, isLast) {
+    const locked = Boolean(state.committed[q.id]);
+    const answered = state.answers[q.id] !== undefined;
+    const needsAnswer = `data-needs-answer ${answered ? "" : "disabled"}`;
+    const buttons = [];
+
+    if (!locked && isLinear()) {
+      buttons.push(`<button class="btn btn--secondary" id="skipBtn">Skip</button>`);
+    }
+
+    if (!locked && feedbackEach()) {
+      buttons.push(`<button class="btn btn--primary" id="checkBtn" ${needsAnswer}>Check answer</button>`);
+    }
+
+    if (!isLast) {
+      const commitsOnNext = isLinear() && !locked && !feedbackEach();
+      const hidden = isLinear() && !locked && feedbackEach();
+
+      if (!hidden) {
+        buttons.push(`<button class="btn ${feedbackEach() && !locked ? "btn--secondary" : "btn--primary"}" id="nextBtn" ${commitsOnNext ? needsAnswer : ""}>Next</button>`);
+      }
+    }
+
+    buttons.push(`<button class="btn ${isLast ? "btn--accent" : "btn--secondary"}" id="submitBtn">Submit test</button>`);
+
+    return `
+      ${isLinear() ? "<span></span>" : `<button id="backBtn" class="btn btn--secondary" ${state.i === 0 ? "disabled" : ""}>Back</button>`}
+      <div class="row">${buttons.join("")}</div>
+    `;
+  }
+
+  // One line on how this test works, so the buttons make sense.
+  function modeHint() {
+    const parts = [];
+
+    if (isLinear()) {
+      parts.push("Questions come in order: answer or skip to move on. You can't go back.");
+    }
+
+    if (feedbackEach()) {
+      parts.push(isLinear() ? "Check each answer to see if it's right." : "Check an answer to see if it's right. Checked answers are locked.");
+    } else if (state.feedbackMode === "end") {
+      parts.push("You'll see which answers were right when you submit.");
+    }
+
+    return parts.length ? `<p class="muted small q-hint">${parts.join(" ")}</p>` : "";
+  }
+
+  function goTo(index) {
+    state.i = clamp(index, 0, ACTIVE_BANK.length - 1);
+    saveAttempt();
+    renderQuestion();
+  }
+
+  function renderQuestion({ polls = 0 } = {}) {
     const q = ACTIVE_BANK[state.i];
     const renderer = Types.get(q.type);
     const currentNumber = state.i + 1;
     const isLast = state.i === ACTIVE_BANK.length - 1;
     const answered = answeredCount();
+    const skipped = skippedCount();
+    const locked = Boolean(state.committed[q.id]);
 
     const meta = [q.level, q.topic, q.qType].filter(Boolean)
       .map(label => `<span class="concept-tag">${escapeHtml(label)}</span>`).join("");
 
-    // One dot per question: filled once answered, ringed for this one.
+    // One dot per question: filled once answered, dashed when skipped,
+    // square once locked, ringed for this one. In order, the ones not
+    // reached yet are faded. The strip's text says the same in words.
     const dots = ACTIVE_BANK.map((item, idx) => {
       const classes = ["progress__dot"];
-      if (state.answers[item.id] !== undefined) {
+      const committed = state.committed[item.id];
+      if (committed && committed.skipped) {
+        classes.push("progress__dot--skipped");
+      } else if (isAnswered(item)) {
         classes.push("progress__dot--done");
+      }
+      if (committed) {
+        classes.push("progress__dot--locked");
+      }
+      if (isLinear() && idx > state.i) {
+        classes.push("progress__dot--ahead");
       }
       if (idx === state.i) {
         classes.push("progress__dot--current");
@@ -430,7 +775,7 @@
       <div class="q-strip">
         <span class="q-strip__count">Question ${currentNumber} of ${ACTIVE_BANK.length}</span>
         <ol class="progress" aria-hidden="true">${dots}</ol>
-        <span class="muted small">${answered} answered</span>
+        <span class="muted small">${answered} answered${skipped ? `, ${skipped} skipped` : ""}</span>
         ${state.deadlineMs !== null ? `<span class="timer" id="timerPill" role="timer" aria-live="off"></span>` : ""}
         <span class="q-strip__event">${escapeHtml(state.eventTitle)} <span class="mono">${escapeHtml(state.joinCode)}</span></span>
       </div>
@@ -450,46 +795,94 @@
         </section>
 
         <section class="card" aria-label="Your answer">
-          <div id="answerArea">${renderer.renderInput(q, state.answers[q.id], h)}</div>
+          <div id="answerArea">${locked
+            ? `<fieldset class="answer-locked" disabled data-locked>${renderer.renderInput(q, state.answers[q.id], h)}</fieldset>`
+            : renderer.renderInput(q, state.answers[q.id], h)}</div>
+
+          ${committedPanel(q)}
+          ${modeHint()}
 
           <p class="notice q-status" id="submitStatus" role="status" hidden></p>
 
-          <div class="q-nav">
-            <button id="backBtn" class="btn btn--secondary" ${state.i === 0 ? "disabled" : ""}>Back</button>
-            <div class="row">
-              ${isLast ? "" : `<button class="btn btn--primary" id="nextBtn">Next</button>`}
-              <button class="btn ${isLast ? "btn--accent" : "btn--secondary"}" id="submitBtn">Submit test</button>
-            </div>
-          </div>
+          <div class="q-nav">${navButtons(q, isLast)}</div>
         </section>
       </div>
     `;
 
     updateTimerPill();
+    pollWhilePending(polls);
 
-    document.getElementById("answerArea").addEventListener("change", captureCurrentAnswer);
+    const answerArea = document.getElementById("answerArea");
+    answerArea.addEventListener("change", captureCurrentAnswer);
+    answerArea.addEventListener("input", captureCurrentAnswer);
 
-    document.getElementById("backBtn").addEventListener("click", () => {
-      captureCurrentAnswer();
-      state.i = clamp(state.i - 1, 0, ACTIVE_BANK.length - 1);
-      saveAttempt();
-      renderQuestion();
-    });
+    const backBtn = document.getElementById("backBtn");
 
-    if (!isLast) {
-      document.getElementById("nextBtn").addEventListener("click", () => {
+    if (backBtn) {
+      backBtn.addEventListener("click", () => {
         captureCurrentAnswer();
-        state.i = clamp(state.i + 1, 0, ACTIVE_BANK.length - 1);
-        saveAttempt();
-        renderQuestion();
+        goTo(state.i - 1);
+      });
+    }
+
+    const nextBtn = document.getElementById("nextBtn");
+
+    if (nextBtn) {
+      nextBtn.addEventListener("click", async () => {
+        captureCurrentAnswer();
+
+        // In order without per-question feedback, leaving a question is what
+        // records it.
+        if (isLinear() && !state.committed[q.id] && !(await commitCurrent())) {
+          return;
+        }
+
+        goTo(state.i + 1);
+      });
+    }
+
+    const checkBtn = document.getElementById("checkBtn");
+
+    if (checkBtn) {
+      checkBtn.addEventListener("click", async () => {
+        if (await commitCurrent()) {
+          renderQuestion();
+        }
+      });
+    }
+
+    const skipBtn = document.getElementById("skipBtn");
+
+    if (skipBtn) {
+      skipBtn.addEventListener("click", async () => {
+        const message = feedbackEach()
+          ? "Skip this question? You'll see the answer, but you can't come back to it. It scores zero."
+          : "Skip this question? You can't come back to it. It scores zero.";
+
+        if (!confirm(message)) {
+          return;
+        }
+
+        if (!(await commitCurrent({ skip: true }))) {
+          return;
+        }
+
+        if (feedbackEach() || isLast) {
+          renderQuestion();
+        } else {
+          goTo(state.i + 1);
+        }
       });
     }
 
     document.getElementById("submitBtn").addEventListener("click", async () => {
       captureCurrentAnswer();
-      const missing = ACTIVE_BANK.length - answeredCount();
+      const missing = ACTIVE_BANK.filter(item => !state.committed[item.id] && state.answers[item.id] === undefined).length;
+      const message = isLinear()
+        ? `${missing} question${missing === 1 ? " has" : "s have"} no answer yet, including any you haven't reached. Submit anyway? They score zero.`
+        : `You have ${missing} unanswered question${missing === 1 ? "" : "s"}. Submit anyway? Unanswered questions score zero.`;
 
-      if (missing > 0 && !confirm(`You have ${missing} unanswered question${missing === 1 ? "" : "s"}. Submit anyway? Unanswered questions score zero.`)) {
+      if (missing > 0 && !confirm(message)) {
         return;
       }
 
@@ -549,6 +942,7 @@
 
   function renderResults(payload, { auto = false, polls = 0 } = {}) {
     stopTimer();
+    stopProgressPoll();
 
     const result = payload.result || { score: 0, max: 0, breakdownReleased: false };
     const pendingCount = result.pending || 0;
@@ -571,48 +965,16 @@
     }));
 
     const rows = perQ ? perQ.map(item => {
-      const renderer = (() => {
-        try {
-          return Types.get(item.type);
-        } catch (_error) {
-          return null;
-        }
-      })();
-      const chosen = renderer ? renderer.describeResponse(item.response, h) : "";
-      const correct = item.correctResponse && renderer ? renderer.describeResponse(item.correctResponse, h) : "";
-      // detail is the student view from policy.js: who marked it and the
-      // validated feedback text. It is escaped like everything else.
-      const feedback = item.detail && item.detail.feedback ? item.detail.feedback : "";
-      const feedbackLabel = item.detail && item.detail.source === "teacher" ? "Teacher's feedback" : "Feedback";
-      const statusNote = item.status === "pending"
-        ? "Being marked. Check back soon."
-        : item.status === "needs-review" ? "Waiting for your teacher to mark this." : "";
       const meta = [item.level, item.topic, item.qType].filter(Boolean).join(" · ");
-      // Typed output and ordered lines are code, so they keep a code font.
-      const isCode = item.type === "code-trace" || item.type === "parsons";
-      const asCode = text => isCode ? `<code>${escapeHtml(text)}</code>` : escapeHtml(text);
-      // Colour is never the only signal: each score has a word beside it.
-      const status = item.status === "pending"
-        ? { tone: "pending", label: "Being marked" }
-        : item.status === "needs-review" ? { tone: "warning", label: "Waiting for teacher" }
-          : item.correct ? { tone: "positive", label: "Correct" }
-            : item.earned > 0 ? { tone: "warning", label: "Part marks" }
-              : { tone: "critical", label: "Incorrect" };
 
       return `
         <li class="result-row">
           <div>
             <strong>${escapeHtml(item.title || item.id)}</strong>
             ${meta ? `<div class="result-meta">${escapeHtml(meta)}</div>` : ""}
-            <div class="result-meta result-answer">Your answer: ${asCode(chosen)}</div>
-            ${correct && !item.correct ? `<div class="result-meta result-answer">Correct answer: ${asCode(correct)}</div>` : ""}
-            ${feedback ? `<div class="result-meta">${feedbackLabel}: ${escapeHtml(feedback)}</div>` : ""}
-            ${statusNote ? `<div class="result-meta">${statusNote}</div>` : ""}
+            ${resultLines(item)}
           </div>
-          <div class="result-row__side">
-            <span class="result-row__score tone-${status.tone === "pending" ? "neutral" : status.tone}">${item.earned}/${item.max}</span>
-            <span class="tag status status--${status.tone}">${status.label}</span>
-          </div>
+          <div class="result-row__side">${resultScore(item)}</div>
         </li>
       `;
     }).join("") : "";
@@ -690,6 +1052,9 @@
       state.i = 0;
       state.answers = {};
       state.startedAt = null;
+      state.feedbackMode = "release";
+      state.navigationMode = "free";
+      state.committed = {};
       clearSavedAttempt();
       renderStart();
     });
