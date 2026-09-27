@@ -15,6 +15,12 @@
 //   }
 // Keys combine with AND; values inside one key combine with OR.
 //
+// AI-scored types are opt-in: a filter with no types and no questionIds
+// leaves them out, so a level or outcome filter never sends a class
+// questions that need AI_PROVIDER (or the teacher's hand-marking) unless the
+// teacher names the type or the question. Questions are ordered by bank
+// position, with AI-scored ones after all the others.
+//
 // The legacy selectionMode values map onto explicit question ids listed in
 // backend/content/legacy-modes.json, so "ALL" still means the original 20
 // questions even as the core bank grows.
@@ -170,9 +176,23 @@ function expandNodes(db, nodeIds) {
   `).all(JSON.stringify(nodeIds)).map(row => row.id);
 }
 
+// Active types scored by the AI provider (their module sets requiresAi).
+function aiScoredTypes() {
+  return scoring.listTypes()
+    .filter(entry => entry.status === "active" && scoring.getType(entry.type).requiresAi)
+    .map(entry => entry.type);
+}
+
 function selectQuestions(db, filter) {
   const where = [];
   const params = [];
+  const aiTypes = aiScoredTypes();
+  const named = key => Boolean(filter[key] && filter[key].length);
+
+  if (aiTypes.length && !named("types") && !named("questionIds")) {
+    where.push("q.type NOT IN (SELECT value FROM json_each(?))");
+    params.push(JSON.stringify(aiTypes));
+  }
 
   [["audiences", "q.audience"], ["questionIds", "q.id"], ["levels", "q.level"], ["types", "q.type"]].forEach(([key, column]) => {
     if (filter[key] && filter[key].length) {
@@ -211,10 +231,10 @@ function selectQuestions(db, filter) {
     SELECT q.question_json
     FROM bank_questions q
     ${where.length ? `WHERE ${where.join("\n      AND ")}` : ""}
-    ORDER BY q.position ASC
+    ORDER BY CASE WHEN q.type IN (SELECT value FROM json_each(?)) THEN 1 ELSE 0 END, q.position ASC
   `;
 
-  return db.prepare(sql).all(...params).map(row => JSON.parse(row.question_json));
+  return db.prepare(sql).all(...params, JSON.stringify(aiTypes)).map(row => JSON.parse(row.question_json));
 }
 
 function summarizeFilter(filter) {
@@ -246,5 +266,6 @@ module.exports = {
   resolveSelection,
   selectQuestions,
   expandNodes,
+  aiScoredTypes,
   summarizeFilter
 };

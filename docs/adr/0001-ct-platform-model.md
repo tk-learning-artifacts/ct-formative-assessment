@@ -31,7 +31,7 @@ Everything that describes *what* is assessed lives in JSON under `backend/conten
 
 `src/content.js` loads and validates all of it as one unit at boot. Any error stops the server with a list of every problem: an unknown tag, a key pointing outside the options, a cycle in the ontology, an LO that does not cover a tagged question's level, or a legacy mode listing a non-core question. `db.js` then replaces the content tables with the file contents inside one transaction, so filters run as indexed SQL. Content files are the source of truth; the tables are a read model rebuilt on every boot.
 
-Question order is stable: files load in name order, and questions keep their order within a file. That order is `bank_questions.position`, and every selection is sorted by it.
+Question order is stable: files load in name order, and questions keep their order within a file. That order is `bank_questions.position`, and every selection is sorted by it, except that AI-scored questions come after all the others (§7).
 
 ### 2. The CT ontology
 
@@ -140,7 +140,7 @@ To add a type: add `backend/src/scoring/types/<type>.js`, `web/types/<type>.js`,
 }
 ```
 
-Every key is optional, and a missing or empty `audiences` becomes `["core"]`. Keys combine with AND; values within a key combine with OR. `nodes` includes descendants. The following return 400 with every reason:
+Every key is optional, and a missing or empty `audiences` becomes `["core"]`. Keys combine with AND; values within a key combine with OR. `nodes` includes descendants. AI-scored types (`open-response-ai`) are opt-in: a filter with neither `types` nor `questionIds` leaves them out, so a level or outcome filter never hands a class questions that need `AI_PROVIDER` or hand-marking. Naming the type in `types`, or a question in `questionIds`, includes them, and they are ordered after every other question, so students do the instantly marked questions first (decided in the Phase 2 review, 2026-09-27; before it, a level filter on RGSynapse returned the AI questions first, because `ai-samples.json` sorts first by file name). The following return 400 with every reason:
 
 - unknown keys, ids, levels or audiences
 - reserved types

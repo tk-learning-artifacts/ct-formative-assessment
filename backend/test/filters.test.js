@@ -102,6 +102,43 @@ test("event filters and picker endpoints", async t => {
     assert.deepEqual(started.questions.map(q => q.id), previewed.body.questions.map(q => q.id));
   });
 
+  await t.test("AI-scored questions are opt-in and come last", async () => {
+    // A core event never gets RGSynapse or AI questions by default. It does
+    // get the core code-trace and Parsons samples.
+    const coreS1 = await preview({ filter: { levels: ["S1"] } });
+    assert.deepEqual(coreS1.body.byAudience, { core: 7 });
+    assert.deepEqual(coreS1.body.byType, { mcq: 5, "code-trace": 1, parsons: 1 });
+    assert.equal(coreS1.body.aiRequired, false);
+
+    // A level filter on RGSynapse leaves the AI questions out...
+    const rgsS2 = await preview({ filter: { audiences: ["rgsynapse"], levels: ["S2"] } });
+    assert.equal(rgsS2.body.byType["open-response-ai"], undefined);
+    assert.equal(rgsS2.body.aiRequired, false);
+    assert.equal(rgsS2.body.warning, undefined);
+
+    // ...until the teacher names the type, and then they come after the rest.
+    const optIn = await preview({ filter: { audiences: ["rgsynapse"], levels: ["S2"], types: ["mcq", "open-response-ai"] } });
+    assert.equal(optIn.body.byType["open-response-ai"], 2);
+    assert.equal(optIn.body.byType.mcq, rgsS2.body.byType.mcq);
+    assert.deepEqual(optIn.body.questions.slice(-2).map(q => q.id), ["AIS-S2-01", "AIS-S2-02"]);
+    assert.ok(optIn.body.questions.slice(0, -2).every(q => q.type === "mcq"));
+    assert.equal(optIn.body.aiRequired, true);
+    assert.match(optIn.body.warning, /AI is off/);
+
+    // Naming an AI question by id also opts in.
+    const byId = await preview({ filter: { audiences: ["rgsynapse"], questionIds: ["AIS-S1-01", "RGS-S1-01"] } });
+    assert.deepEqual(byId.body.questions.map(q => q.id), ["RGS-S1-01", "AIS-S1-01"]);
+
+    // An AI-only outcome filter without the type matches nothing and says so.
+    const none = await preview({ filter: { audiences: ["rgsynapse"], questionIds: [], types: [], nodes: ["perspective.questioning.ai-output"], levels: ["S2"] } });
+    assert.ok(none.body.questions.every(q => q.type !== "open-response-ai"));
+
+    // Preview and creation agree.
+    const created = await createEvent({ filter: { audiences: ["rgsynapse"], levels: ["S2"], types: ["mcq", "open-response-ai"] } });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.event.question_count, optIn.body.count);
+  });
+
   await t.test("invalid filters are rejected with a reason", async () => {
     const cases = [
       [{ outcomes: ["LO-NOPE"] }, /unknown outcomes: LO-NOPE/],

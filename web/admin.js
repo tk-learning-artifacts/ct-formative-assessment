@@ -322,9 +322,9 @@
     const byLevel = Object.entries(preview.byLevel || {}).map(([level, count]) => `${escapeHtml(level)}: ${count}`).join(", ") || "&mdash;";
     const byType = Object.entries(preview.byType || {}).map(([type, count]) => `${escapeHtml(type)}: ${count}`).join(", ") || "&mdash;";
     const byAudience = Object.entries(preview.byAudience || {}).map(([audience, count]) => `${escapeHtml(audience)}: ${count}`).join(", ") || "&mdash;";
-    // Another branch may add an AI-related flag to the preview response; show
-    // it when present, but do not assume it exists.
-    const aiFlag = preview.aiRequired || preview.aiEnabled;
+    // aiRequired: some matched question is AI-scored. warning: AI is off, so
+    // those answers will wait for the teacher to mark them.
+    const aiFlag = preview.aiRequired;
 
     el.innerHTML = `
       ${preview.count === 0 ? `<p class="notice notice--danger" style="margin-top:0">No questions match this selection. Widen it before creating the event.</p>` : ""}
@@ -333,6 +333,7 @@
         <span class="pill">${preview.totalPoints} point${preview.totalPoints === 1 ? "" : "s"}</span>
         ${aiFlag !== undefined ? `<span class="pill">${aiFlag ? "Uses AI scoring" : "No AI scoring"}</span>` : ""}
       </div>
+      ${preview.warning ? `<p class="notice">${escapeHtml(preview.warning)}</p>` : ""}
       <p class="muted">By level: ${byLevel}</p>
       <p class="muted">By type: ${byType}</p>
       <p class="muted">By audience: ${byAudience}</p>
@@ -547,6 +548,7 @@
         <div>
           <p class="panel-label" style="margin-bottom:6px">Question types</p>
           <div class="row" id="pickerTypes">${renderTypeCheckboxes()}</div>
+          <p class="muted" style="margin-top:6px">No types checked means every type except AI-scored ones, which are only included when checked.</p>
         </div>
 
         <div class="row">

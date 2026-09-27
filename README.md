@@ -168,7 +168,7 @@ The suite uses Node's built-in test runner (`node:test`) with `supertest` for HT
 
 ## AI scoring (optional)
 
-AI is off unless you set `AI_PROVIDER`. With it off, everything else works as before; `open-response-ai` answers are labelled "needs review" and the teacher marks them on the results page. Creating an event that contains AI questions while AI is off returns a warning, which the teacher page shows.
+AI is off unless you set `AI_PROVIDER`. With it off, everything else works as before; `open-response-ai` answers are labelled "needs review" and the teacher marks them on the results page. AI questions are opt-in: an event filter includes them only when the teacher ticks "Open response (AI scored)" under question types (`types` in the API) or picks the questions by id, and they then come after every other question. Previewing or creating an event that contains AI questions while AI is off returns a warning, which the teacher page shows.
 
 **To enable it:** set `AI_PROVIDER=openrouter` and `AI_API_KEY` to an OpenRouter key (in `.env` for Docker, or the environment). Optionally set `AI_MODEL`; the default is `anthropic/claude-sonnet-5`. Any model you choose must list `structured_outputs` in OpenRouter's model list. Keep prompt logging off in your OpenRouter privacy settings; the app already asks OpenRouter to route only to endpoints that neither collect nor retain data.
 
