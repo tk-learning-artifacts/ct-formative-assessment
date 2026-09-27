@@ -4,7 +4,7 @@ A web-based Computational Thinking (CT) formative-assessment platform. Teachers 
 
 Two audiences are supported: the original **core** P5 to S2 Bebras-style puzzles (the default), and **RGSynapse** (Raffles Girls' School Sec 1 and Sec 2, students who already write some Swift and Python and build with AI assistants). Questions are tagged against a CT ontology based on Brennan & Resnick (2012) and against learning outcomes, so events can be built from any mix of level, outcome, CT concept or practice, and question type.
 
-The design decisions are recorded in [docs/adr/0001-ct-platform-model.md](docs/adr/0001-ct-platform-model.md). Explainers for the concepts it uses are in [docs/learn/](docs/learn/).
+The design decisions are recorded in [docs/adr/0001-ct-platform-model.md](docs/adr/0001-ct-platform-model.md), and the look of the pages in [docs/adr/0002-adopt-slate-visual-conventions.md](docs/adr/0002-adopt-slate-visual-conventions.md). Explainers for the concepts it uses are in [docs/learn/](docs/learn/).
 
 ---
 
@@ -43,7 +43,7 @@ ct-formative-assessment/
 │   ├── type-registry.js      Loads the question-type renderers
 │   ├── types/                One renderer per question type (mcq, code-trace, parsons, open-response-ai)
 │   ├── admin.html / admin.js Teacher portal: event picker with live preview, results, per-outcome summary, AI marking
-│   ├── style.css             Shared styles (dark/light mode)
+│   ├── style.css             Shared styles on Slate's theme contract (light only)
 │   └── vite.config.js        Dev server config (proxy + multi-page build)
 ├── docs/adr/                 Architecture decision records
 ├── docs/learn/               Explainers
@@ -59,6 +59,8 @@ ct-formative-assessment/
 **Development:** Vite runs a dev server on port 5173 with hot reload and proxies all `/api/*` requests to the Express backend on port 3000. The two processes run concurrently via `npm run dev`.
 
 **Content:** On boot the backend validates everything in `backend/content/` (a bad tag or answer key stops the server with a list of problems) and copies it into indexed SQLite tables, so event filters run as SQL. When an event is created its questions are snapshotted into `event_questions`, so editing content never changes a running event.
+
+**Look.** The pages follow Slate's visual conventions: every colour and font in `web/style.css` is a named token in one `:root` block, so a retint is one edit there. There is no dark mode. Status colours (correct, late, needs marking, released) use four fixed tones, and each is paired with a word.
 
 **Answer keys** stay on the server. Students receive each question through its type's public projection, which leaves out `answer`, the teacher-only `details` note and any other marking fields.
 
