@@ -217,7 +217,9 @@
 
     const response = Types.get(q.type).readResponse(container, q);
 
-    if (response !== undefined) {
+    if (response === null) {
+      delete state.answers[q.id];
+    } else if (response !== undefined) {
       state.answers[q.id] = response;
     }
 
@@ -451,9 +453,9 @@
     `;
 
     const art = q.art ? `<pre>${escapeHtml(q.art)}</pre>` : "";
-    const code = q.code
-      ? `<p class="code-label">${escapeHtml(q.code.language)}</p><pre><code>${escapeHtml(q.code.source)}</code></pre>`
-      : "";
+    const code = !q.code ? "" : renderer.renderCode
+      ? renderer.renderCode(q.code, h)
+      : `<p class="code-label">${escapeHtml(q.code.language)}</p><pre><code>${escapeHtml(q.code.source)}</code></pre>`;
 
     screen.innerHTML = `
       <section class="card question-card">
@@ -602,7 +604,8 @@
           <div>
             <strong>${escapeHtml(item.id)}</strong> ${escapeHtml(item.title || "")}
             ${meta ? `<div class="result-meta">${escapeHtml(meta)}</div>` : ""}
-            <div class="result-meta">Your answer: ${escapeHtml(chosen)}${correct && !item.correct ? ` / Correct: ${escapeHtml(correct)}` : ""}</div>
+            <div class="result-meta result-answer">Your answer: ${escapeHtml(chosen)}</div>
+            ${correct && !item.correct ? `<div class="result-meta result-answer">Correct: ${escapeHtml(correct)}</div>` : ""}
             ${feedback ? `<div class="result-meta">Feedback: ${escapeHtml(feedback)}</div>` : ""}
             ${pending ? `<div class="result-meta">Waiting for your teacher to mark this.</div>` : ""}
           </div>
