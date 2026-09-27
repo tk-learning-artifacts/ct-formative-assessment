@@ -63,6 +63,15 @@
     linear: "In order, no going back"
   };
 
+  // Loosest to strictest: "each" shows a result immediately, "release" holds
+  // it back until the teacher acts. Used to warn a teacher editing a live
+  // event only when their change tightens the mode, never when it loosens it.
+  const FEEDBACK_STRICTNESS = { each: 0, end: 1, release: 2 };
+
+  function tightensFeedback(from, to) {
+    return FEEDBACK_STRICTNESS[to] > FEEDBACK_STRICTNESS[from];
+  }
+
   // Shown under the feedback setting when it reveals the key to a student
   // before everyone has finished.
   const FEEDBACK_WARNINGS = {
@@ -1204,6 +1213,15 @@
     };
   }
 
+  // Shown when the feedback radio the teacher has selected is stricter than
+  // the event's current setting. Tightening cannot take back a key a student
+  // has already seen, only stop showing it from now on.
+  function editFeedbackWarningHtml(originalMode, selectedMode) {
+    return tightensFeedback(originalMode, selectedMode)
+      ? `<p class="notice notice--warning" id="editFeedbackWarning">Students who already saw answers keep what they saw; this only stops showing them from now on.</p>`
+      : `<span id="editFeedbackWarning" hidden></span>`;
+  }
+
   function renderEditSettings(event) {
     const values = editFormValues(event);
     const radios = (name, labels) => Object.keys(labels).map(value => `
@@ -1239,6 +1257,7 @@
           <fieldset class="setting field--full">
             <legend class="legend">Students see which answers were right</legend>
             <div class="setting__options">${radios("feedbackMode", { each: "After each question", end: "At the end of the test", release: "When I release them" })}</div>
+            ${editFeedbackWarningHtml(values.feedbackMode, values.feedbackMode)}
           </fieldset>
           <fieldset class="setting field--full">
             <legend class="legend">Moving between questions</legend>
@@ -1260,6 +1279,14 @@
     if (!form) {
       return;
     }
+
+    const originalFeedbackMode = editFormValues(event).feedbackMode;
+
+    form.querySelectorAll('input[name="edit-feedbackMode"]').forEach(input => {
+      input.addEventListener("change", () => {
+        document.getElementById("editFeedbackWarning").outerHTML = editFeedbackWarningHtml(originalFeedbackMode, input.value);
+      });
+    });
 
     document.getElementById("cancelEditBtn").addEventListener("click", () => {
       state.editingSettings = false;

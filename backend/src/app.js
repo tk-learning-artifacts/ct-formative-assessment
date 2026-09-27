@@ -138,8 +138,11 @@ function canonicalFilter(filter) {
 // { preset } alone, or { filter, basedOnPreset } when the teacher opened
 // Customise after choosing a card. The event counts as customised only if
 // the filter differs from what the preset gives, so opening Customise and
-// changing nothing still reads as the preset. Returns { preset } (null for
-// no preset) or { error }.
+// changing nothing still reads as the preset. The label is presets.json's
+// current label and knob wording, captured now: db.js stores it as
+// preset_label, so a later rename or removal in presets.json does not change
+// what this event's card says. Returns { preset } (null for no preset) or
+// { error }.
 function presetProvenance(body, filter, content) {
   const fromCard = body.filter === undefined || body.filter === null;
   const choice = fromCard ? body.preset : body.basedOnPreset;
@@ -149,9 +152,10 @@ function presetProvenance(body, filter, content) {
   }
 
   const options = presets.choiceOptions(choice, content);
+  const label = presets.describeChoice(content, choice.id, options);
 
   if (fromCard) {
-    return { preset: { id: choice.id, options, customised: false } };
+    return { preset: { id: choice.id, options, customised: false, label } };
   }
 
   const compiled = selection.resolveSelection({ preset: choice }, content);
@@ -161,7 +165,7 @@ function presetProvenance(body, filter, content) {
   }
 
   const customised = JSON.stringify(canonicalFilter(compiled.filter)) !== JSON.stringify(canonicalFilter(filter));
-  return { preset: { id: choice.id, options, customised } };
+  return { preset: { id: choice.id, options, customised, label } };
 }
 
 // What PATCH /api/events/:id accepts, by body key, with the column each one
@@ -184,6 +188,10 @@ function parseSettingsEdit(body, event) {
 
   if (keys.some(key => QUESTION_SET_KEYS.includes(key))) {
     return { error: "The questions cannot be changed after an event is created, because students' answers refer to them. Create a new event instead." };
+  }
+
+  if (keys.includes("joinCode")) {
+    return { error: "The join code cannot be changed after an event is created, because students who already have it would be stranded." };
   }
 
   const unknown = keys.filter(key => !Object.prototype.hasOwnProperty.call(EDITABLE_SETTINGS, key));

@@ -233,9 +233,9 @@ function createStore(db, content) {
 
     const insertEvent = db.prepare(`
       INSERT INTO events (title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at,
-                          feedback_mode, navigation_mode, preset_id, preset_options_json, preset_customised, created_by, created_at)
+                          feedback_mode, navigation_mode, preset_id, preset_options_json, preset_customised, preset_label, created_by, created_at)
       VALUES (@title, @join_code, 'active', @selection_mode, @filter_json, @duration_minutes, @start_at, @end_at,
-              @feedback_mode, @navigation_mode, @preset_id, @preset_options_json, @preset_customised, @created_by, @created_at)
+              @feedback_mode, @navigation_mode, @preset_id, @preset_options_json, @preset_customised, @preset_label, @created_by, @created_at)
     `);
 
     const insertQuestion = db.prepare(`
@@ -257,6 +257,7 @@ function createStore(db, content) {
         preset_id: preset ? preset.id : null,
         preset_options_json: preset ? JSON.stringify(preset.options) : null,
         preset_customised: preset && preset.customised ? 1 : 0,
+        preset_label: preset ? preset.label : null,
         created_by: createdBy,
         created_at: nowIso()
       });
@@ -276,19 +277,19 @@ function createStore(db, content) {
 
   // Where an event's questions came from: { id, options, customised,
   // summary } for a preset, or null (the advanced picker alone, the legacy
-  // question set, or an event from before presets were recorded).
+  // question set, or an event from before presets were recorded). summary is
+  // preset_label, captured when the event was created, so a later rename or
+  // removal of the preset in presets.json never changes an older event's card.
   function presetProvenance(row) {
     if (!row.preset_id) {
       return null;
     }
 
-    const options = row.preset_options_json ? JSON.parse(row.preset_options_json) : {};
-
     return {
       id: row.preset_id,
-      options,
+      options: row.preset_options_json ? JSON.parse(row.preset_options_json) : {},
       customised: Boolean(row.preset_customised),
-      summary: presets.describeChoice(content, row.preset_id, options)
+      summary: row.preset_label
     };
   }
 
@@ -297,12 +298,19 @@ function createStore(db, content) {
       return null;
     }
 
-    const { filter_json: filterJson, preset_id: _presetId, preset_options_json: _presetOptions, preset_customised: _customised, ...rest } = row;
+    const {
+      filter_json: filterJson,
+      preset_id: _presetId,
+      preset_options_json: _presetOptions,
+      preset_customised: _customised,
+      preset_label: _presetLabel,
+      ...rest
+    } = row;
     const filter = filterJson ? JSON.parse(filterJson) : selection.legacyModeToFilter(row.selection_mode, content);
     return { ...rest, filter, filter_summary: selection.summarizeFilter(filter), preset: presetProvenance(row) };
   }
 
-  const EVENT_COLUMNS = "id, title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at, results_released_at, feedback_mode, navigation_mode, preset_id, preset_options_json, preset_customised, created_by, created_at";
+  const EVENT_COLUMNS = "id, title, join_code, status, selection_mode, filter_json, duration_minutes, start_at, end_at, results_released_at, feedback_mode, navigation_mode, preset_id, preset_options_json, preset_customised, preset_label, created_by, created_at";
 
   function getEventById(eventId) {
     return eventRow(db.prepare(`SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`).get(eventId));
@@ -316,7 +324,7 @@ function createStore(db, content) {
   function listEventsForTeacher(userId) {
     return db.prepare(`
       SELECT e.id, e.title, e.join_code, e.status, e.selection_mode, e.filter_json, e.duration_minutes, e.start_at, e.end_at,
-             e.results_released_at, e.feedback_mode, e.navigation_mode, e.preset_id, e.preset_options_json, e.preset_customised, e.created_at,
+             e.results_released_at, e.feedback_mode, e.navigation_mode, e.preset_id, e.preset_options_json, e.preset_customised, e.preset_label, e.created_at,
              (SELECT COUNT(*) FROM attempts a WHERE a.event_id = e.id) AS attempt_count,
              (SELECT COUNT(*) FROM event_questions q WHERE q.event_id = e.id) AS question_count
       FROM events e

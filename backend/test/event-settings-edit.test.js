@@ -82,7 +82,7 @@ test("PATCH /api/events/:id is owner only and validated", async t => {
     [{ filter: { audiences: ["core"] } }, /questions cannot be changed/],
     [{ preset: { id: "core-ct-check" } }, /questions cannot be changed/],
     [{ selectionMode: "ALL" }, /questions cannot be changed/],
-    [{ joinCode: "NEWCODE" }, /cannot be changed: joinCode/],
+    [{ joinCode: "NEWCODE" }, /join code cannot be changed.*stranded/],
     [{}, /Nothing to change/],
     [{ title: "   " }, /title is required/],
     [{ feedbackMode: "sometimes" }, /feedbackMode must be one of: each, end, release/],
@@ -567,4 +567,28 @@ test("events record the preset and knob values they came from, and whether Custo
   // Students never see it.
   const joined = await request(app).post("/api/events/join").send({ joinCode: fromCard.joinCode });
   assert.equal(joined.body.event.preset, undefined);
+});
+
+test("a preset's card wording is captured at creation, so renaming it in presets.json does not change older cards", async t => {
+  const { app, auth, event, store } = await setup(t);
+
+  const before = await event({}, { preset: { id: "loops-conditionals", who: "core" } });
+  assert.equal(before.event.preset.summary, "Loops and conditionals (Core, all levels)");
+
+  // presets.json is renamed (the same change a content edit and restart would make).
+  const preset = store.content.presets.find(item => item.id === "loops-conditionals");
+  const originalLabel = preset.label;
+  preset.label = "Repetition and branching";
+
+  // The event made before the rename keeps its original wording, everywhere it is shown.
+  const listed = (await request(app).get("/api/events").set(auth)).body.events.find(item => item.id === before.id);
+  assert.equal(listed.preset.summary, "Loops and conditionals (Core, all levels)");
+  const results = (await request(app).get(`/api/events/${before.id}/results`).set(auth)).body.event;
+  assert.equal(results.preset.summary, "Loops and conditionals (Core, all levels)");
+
+  // An event made after the rename picks up the new wording.
+  const after = await event({}, { preset: { id: "loops-conditionals", who: "core" } });
+  assert.equal(after.event.preset.summary, "Repetition and branching (Core, all levels)");
+
+  preset.label = originalLabel;
 });

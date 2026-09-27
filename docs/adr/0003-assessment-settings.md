@@ -1,6 +1,6 @@
 # ADR 0003: Assessment settings and quick setup
 
-- **Status:** Accepted, 2026-09-27 (branch `feat/assessment-settings`). Akmal asked for all three parts; the choices below that he did not specify are marked as decided here, and are open to his review. His answers to the three open questions of the first version are in "Decisions on the open questions" and sections 10 and 11.
+- **Status:** Accepted, 2026-09-27 (branch `feat/assessment-settings`; a follow-up round on `feat/settings-tweaks` the same day). Akmal asked for all three parts; the choices below that he did not specify are marked as decided here, and are open to his review. His answers to the three open questions of the first version, and the four from the follow-up round, are in "Decisions on the open questions" and sections 10 and 11.
 - **Scope:** Two per-event settings (feedback timing and navigation), a per-question commit endpoint, quick setup presets for choosing questions, a question-count cap on filters, editing an event's settings after creation, and recording which preset an event came from. Builds on ADR 0001 §7 (selection) and §8 (answer-key protection).
 
 ## Context
@@ -108,10 +108,12 @@ A teacher may edit at any time, including once students have started. What happe
 - **Navigation, in order to free:** the student moves freely among the questions they have not committed. Committed ones stay locked.
 - **No change ever unlocks a committed answer.** A second commit is always `answer-locked`, and submit always keeps committed rows.
 - **Time limit and deadline:** every attempt still in progress (not submitted, not reset) gets `deadline_at` recomputed as the earlier of its start plus the time limit and the event's deadline, the same rule as at start, or null when neither is set. A deadline that has already passed is not enforced at the moment of the edit: the next commit gets `time-up`, and the page submits; the submit is stored and flagged late under the usual `SUBMIT_GRACE_SECONDS` rule. Nothing is lost. Changing the opening time does not affect attempts that have started.
-- **The student page** reads the current settings and deadline from `GET /api/attempts/:id` (`progress.feedbackMode`, `progress.navigationMode`, `attempt.deadlineAt`) after every move between questions and every 30 seconds (every 15 while an answer is being marked), restarts the timer when the deadline changes, and shows a one-line note on what the teacher changed. It redraws the question only when something it shows has changed, so a student typing is not interrupted by a result arriving for another question.
+- **The student page** reads the current settings and deadline from `GET /api/attempts/:id` (`progress.feedbackMode`, `progress.navigationMode`, `attempt.deadlineAt`) after every move between questions and every 30 seconds (every 15 while an answer is being marked), restarts the timer when the deadline changes, and shows a one-line note on what the teacher changed. It redraws the question only when something it shows has changed, so a student typing is not interrupted by a result arriving for another question. The 30-second interval (decided here, not a placeholder) is fixed and not configurable.
 - **Audit trail:** migration `202609271500-event-setting-changes` adds `event_setting_changes` (event, teacher, field, old value, new value, time), one row per field that actually changed; an edit that repeats the stored value writes nothing. `GET /api/events/:id/results` returns them newest first as `settingChanges`, and the results view lists them under "Settings history."
 
-The teacher's "Edit settings" form sits in the results view, with a note on what changes for students in progress and a line saying the questions cannot change. It sends only the fields the teacher touched.
+The teacher's "Edit settings" form sits in the results view, with a note on what changes for students in progress and a line saying the questions cannot change. It sends only the fields the teacher touched. Choosing a feedback timing stricter than the event's current one (`each` to `end` to `release`, in that strictness order) shows a one-line warning under the setting: "Students who already saw answers keep what they saw; this only stops showing them from now on." Loosening or leaving it alone shows nothing.
+
+The join code is not in `EDITABLE_SETTINGS`: `PATCH /api/events/:id` refuses a `joinCode` key with its own 400 message, because a student who already has the code would be stranded if it moved.
 
 **Marking before submit (decided here).** Under `each` with AI off, a committed AI-scored answer becomes "Waiting for your teacher" at once. The teacher can now mark a committed answer of an attempt still in progress, so the student sees the mark on their next request. The attempt's total still appears only after submit, which sums every row, marks included. Answers on a reset attempt cannot be marked, and the scoring job no longer sends them to the AI provider.
 
@@ -119,7 +121,9 @@ The teacher's "Edit settings" form sits in the results view, with a note on what
 
 Migration `202609271501-event-preset-provenance` adds `events.preset_id`, `events.preset_options_json` (the knob values, with defaults filled in for any left out) and `events.preset_customised`. An event created from a card (`{ preset }`) records the preset with `customised` 0. The form sends `{ filter, basedOnPreset }` when Customise is open; the server compiles `basedOnPreset` and sets `customised` only if the filter differs from it (lists compared in any order), so opening Customise and changing nothing still reads as the preset. An event from the advanced picker alone, the legacy question set, or before this migration has no preset.
 
-The teacher event APIs return `preset: { id, options, customised, summary }` or null. `summary` is built from the current `presets.json` (for example "Loops and conditionals (RGSynapse Secondary 1, short)"), leaving out an audience note that says nothing beyond the label, and falling back to the preset id if the preset has since been removed. The event card and results view say "From preset: …", with ", then customised" when that applies, or "Custom selection." Students never see it.
+The teacher event APIs return `preset: { id, options, customised, summary }` or null. `summary` (for example "Loops and conditionals (RGSynapse Secondary 1, short)") leaves out an audience note that says nothing beyond the label, and falls back to the preset id if the preset has since been removed. The event card and results view say "From preset: …", with ", then customised" when that applies, or "Custom selection." Students never see it.
+
+**The label is captured at creation, not looked up (decided by Akmal, 2026-09-27).** Migration `202609271700-preset-label-snapshot` adds `events.preset_label`: the `summary` text as it read the moment the event was made, computed once from `presets.json` at creation time and stored alongside `preset_id`. `summary` above is now this stored value, not a fresh lookup, so renaming or removing a preset in `presets.json` never changes an older event's card. The migration backfills `preset_label` for every event that already has a `preset_id`, from the `presets.json` in place when the migration runs, since that file is the closest available record of what the teacher saw.
 
 ## Consequences
 
@@ -130,7 +134,8 @@ The teacher event APIs return `preset: { id, options, customised, summary }` or 
 - Presets are content: adding or changing one is a JSON edit and a restart, and a bad one stops the server with a list of problems.
 - A teacher's mid-event change reaches students within about 30 seconds, or on their next move. Tightening feedback cannot take back a key a student has already seen; it only stops showing it.
 - Each running student page makes one small GET every 30 seconds. For a class of 40 that is under 2 requests a second.
-- A preset renamed in `presets.json` renames the "From preset" line of older events too, because the summary is built from the current file; the stored id and knob values do not change.
+- A preset renamed or removed in `presets.json` leaves the "From preset" line of older events exactly as it read when they were made; only an event created after the change picks up the new wording.
+- A join code cannot be reassigned once an event exists. A teacher who wants a different code creates a new event.
 
 ## Decisions on the open questions
 
@@ -139,3 +144,10 @@ The first version of this ADR left three questions open. Akmal answered them on 
 1. **Can the teacher change an event's settings after creating it?** Yes, even after students have started. See section 10. The question set stays fixed.
 2. **Should `each` show the correct answer after a wrong one?** Yes, as built. `event-settings-edit.test.js` covers it for a committed wrong answer.
 3. **Should the event record which preset it came from?** Yes, with the knob values and whether it was customised. See section 11.
+
+A follow-up round on 2026-09-27 raised four more:
+
+4. **Should tightening feedback timing on a live event warn the teacher?** Yes. The Edit settings form warns when the chosen mode is stricter than the event's current one; see section 10.
+5. **Should a preset's card wording follow renames in `presets.json`, or freeze at creation?** Freeze. See "The label is captured at creation, not looked up" in section 11.
+6. **Should the student page's poll interval change?** No. 30 seconds stays fixed; see section 10.
+7. **Can a teacher change an event's join code after creating it?** No. `PATCH /api/events/:id` refuses it with 400, because a student who already has the code would be stranded if it moved. See section 10.
