@@ -5,8 +5,9 @@
 
 const core = require("./core");
 const rgsynapse = require("./rgsynapse");
+const typeSamples = require("./type-samples");
 
-const SOLVERS = { ...core, ...rgsynapse };
+const SOLVERS = { ...core, ...rgsynapse, ...typeSamples };
 
 const NOT_COMPUTABLE = {
   // "QUESTION-ID": "why no solver is possible, and who checked the key by hand"
