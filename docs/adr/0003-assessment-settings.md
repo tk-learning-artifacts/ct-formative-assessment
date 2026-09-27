@@ -53,6 +53,7 @@ The combination `each` + `free` locks answers on commit, but the student may sti
 - `studentMaySeeBreakdown(event)`: true under `each` and `end` (only submitted attempts have a result, so this means "after submit"), and under `release` once released.
 - `committedAnswerView(event, item)`: the result only under `each`.
 - `studentProgressView(event, items)`: the settings and committed answers, sent on start (`progress`) and on resume of an attempt in progress (`progress`, otherwise null).
+- `studentTotal(event, result)` (added 2026-09-27): the total in the submit response and in `result` of `GET /api/attempts/:id`. Once the breakdown is visible it is the full total. Before that, which happens only under `release`, it is the score of the questions marked the moment they were answered (every type without `requiresAi`), with `markedSoFar: true` and `pending` set to the number of non-blank AI-scored answers; the page shows "Marked so far: X / max (N answers still being marked)". Both numbers are fixed at submit, whatever the AI or the teacher does afterwards, because a total that rose when a mark arrived would tell the student whether their written answer earned credit, and so give away part of the breakdown. Hiding the total until release was the alternative; it was rejected (decided here) because an event with no AI-scored questions would lose the total its students see today, and the instant part reveals nothing. Teachers always see the full total.
 
 Each function is given the event as it is now, never as it was when the attempt started, so a teacher's change to the settings (section 10) applies from a student's next request.
 
@@ -115,7 +116,7 @@ The teacher's "Edit settings" form sits in the results view, with a note on what
 
 The join code is not in `EDITABLE_SETTINGS`: `PATCH /api/events/:id` refuses a `joinCode` key with its own 400 message, because a student who already has the code would be stranded if it moved.
 
-**Marking before submit (decided here).** Under `each` with AI off, a committed AI-scored answer becomes "Waiting for your teacher" at once. The teacher can now mark a committed answer of an attempt still in progress, so the student sees the mark on their next request. The attempt's total still appears only after submit, which sums every row, marks included. Answers on a reset attempt cannot be marked, and the scoring job no longer sends them to the AI provider.
+**Marking before submit (decided here).** Under `each` with AI off, a committed AI-scored answer becomes "Waiting for your teacher" at once. The teacher can now mark a committed answer of an attempt still in progress, so the student sees the mark on their next request. The attempt's total still appears only after submit, which sums every row, marks included; under `release` the student sees only its instantly marked part until release (section 4). Answers on a reset attempt cannot be marked, and the scoring job no longer sends them to the AI provider.
 
 ### 11. Preset provenance (decided by Akmal, 2026-09-27)
 

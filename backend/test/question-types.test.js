@@ -351,12 +351,12 @@ test("code-trace and Parsons attempts over HTTP, from start to the released brea
   await t.test("submitting returns only the totals", async () => {
     const right = await submit(app, good.attempt, correctAnswers);
     assert.equal(right.status, 200);
-    assert.deepEqual(right.body.result, { score: 26, max: 26, breakdownReleased: false });
+    assert.deepEqual(right.body.result, { score: 26, max: 26, pending: 0, markedSoFar: false, breakdownReleased: false });
 
     const wrong = await submit(app, bad.attempt, wrongAnswers);
     assert.equal(wrong.status, 200);
     // CT-01: 2 of 4 lines; CT-02: 1 of 3; PA-02: longest run "list zero loop" 3 of 6 -> 2 of 5.
-    assert.deepEqual(wrong.body.result, { score: 5, max: 26, breakdownReleased: false });
+    assert.deepEqual(wrong.body.result, { score: 5, max: 26, pending: 0, markedSoFar: false, breakdownReleased: false });
 
     const before = await getAttempt(app, bad.attempt);
     assert.equal(before.body.result.perQuestion, undefined);

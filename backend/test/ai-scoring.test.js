@@ -124,15 +124,23 @@ test("with AI on, submit stores pending and the job scores in the background", a
   });
   assert.equal(answerRow(store, attempt.id, "AIS-S2-01").earned_points, 2);
 
+  // Before release the student's total stays the instantly marked part,
+  // with both written answers counted as still being marked, so the total
+  // cannot tell them whether the AI gave credit (policy.studentTotal).
   const done = await getAttempt(app, attempt);
-  assert.equal(done.body.result.pending, 0);
-  assert.equal(done.body.result.score, mcqCorrect + 4, "the total includes the AI scores");
+  assert.deepEqual(done.body.result, { score: mcqCorrect, max: p501.points + 5, pending: 2, markedSoFar: true, breakdownReleased: false });
 
   const results = await request(app).get(`/api/events/${created.event.id}/results`).set(auth);
   const row = results.body.attempts[0].answers.find(answer => answer.questionId === "AIS-S1-01");
   assert.equal(row.scoreStatus, "scored");
   assert.equal(row.detail.feedback, "You spotted the unindented line.");
   assert.equal(results.body.attempts[0].score, mcqCorrect + 4);
+
+  await request(app).post(`/api/events/${created.event.id}/release`).set(auth);
+  const released = await getAttempt(app, attempt);
+  assert.equal(released.body.result.pending, 0);
+  assert.equal(released.body.result.markedSoFar, false);
+  assert.equal(released.body.result.score, mcqCorrect + 4, "after release the total includes the AI scores");
 });
 
 test("the job respects the concurrency cap, and a bad reply becomes needs-review", async t => {
@@ -192,9 +200,9 @@ test("pending answers are picked up after a restart", async t => {
 
   assert.equal(fetch.calls.length, 2);
   AI_QUESTIONS.forEach(id => assert.equal(answerRow(second.store, attempt.id, id).score_status, "scored"));
-  const view = await getAttempt(second.app, attempt);
-  assert.equal(view.body.result.pending, 0);
-  assert.ok(view.body.result.score >= 4);
+  const auth2 = { Authorization: `Bearer ${await login(second.app)}` };
+  const results = await request(second.app).get(`/api/events/${attempt.eventId}/results`).set(auth2);
+  assert.ok(results.body.attempts[0].score >= 4);
 });
 
 test("an empty open response is scored 0 at once and never sent", async t => {
@@ -335,7 +343,7 @@ test("students see AI feedback only after release, as validated text with no int
   const before = await getAttempt(app, attempt);
   assert.equal(before.body.result.breakdownReleased, false);
   assert.equal(before.body.result.perQuestion, undefined);
-  assert.equal(before.body.result.pending, 0);
+  assert.equal(before.body.result.pending, 2, "both written answers still count as being marked before release");
   assert.doesNotMatch(JSON.stringify(before.body), /never changes|should return|criterionId|feedbackCode|incomplete/);
 
   const teacherBefore = await request(app).get(`/api/events/${created.event.id}/results`).set(auth);

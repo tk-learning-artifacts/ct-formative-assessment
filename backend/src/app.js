@@ -945,10 +945,8 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     // the teacher, rather than thrown away.
     const deadlineMs = attempt.deadline_at ? Date.parse(attempt.deadline_at) : null;
     const late = deadlineMs !== null && Date.now() > deadlineMs + config.submitGraceMs;
-    let totals;
-
     try {
-      totals = db.submitAttempt(attempt, req.body.answers, { late });
+      db.submitAttempt(attempt, req.body.answers, { late });
     } catch (error) {
       res.status(error.status || 500).json({ error: error.status ? error.message : "Could not save this submission." });
       return;
@@ -959,8 +957,10 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     const saved = db.getAttempt(attempt.id);
     const event = db.attemptEvent(saved);
 
-    // The submit response carries the total only; the breakdown, when
-    // released, comes from GET /api/attempts/:id through policy.js.
+    // The submit response carries the total only, as policy.js allows it;
+    // the breakdown, when released, comes from GET /api/attempts/:id.
+    const total = policy.studentTotal(event, db.getAttemptResult(saved));
+
     res.json({
       attempt: attemptSummary(saved),
       event: {
@@ -968,11 +968,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
         joinCode: saved.join_code,
         durationMinutes: saved.duration_minutes
       },
-      result: {
-        score: totals.score,
-        max: totals.max,
-        breakdownReleased: policy.studentMaySeeBreakdown(event)
-      }
+      result: total
     });
   });
 

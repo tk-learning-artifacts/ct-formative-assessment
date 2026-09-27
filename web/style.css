@@ -901,6 +901,15 @@ pre {
   color: var(--color-ink);
 }
 
+/* "(2 answers still being marked)" under a total marked so far. */
+.stat__note {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-muted);
+}
+
 .breakdown {
   margin: 0;
   padding: 0;

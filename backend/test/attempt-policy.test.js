@@ -94,7 +94,7 @@ test("one attempt per student, teacher reset and results release", async t => {
     const { attempt } = await startAttempt(app, { joinCode: "POLICY", studentName: "Dara" });
     const submitted = await submit(app, attempt, { "P5-01": 1, "P5-02": 1 });
     assert.equal(submitted.status, 200);
-    assert.deepEqual(Object.keys(submitted.body.result).sort(), ["breakdownReleased", "max", "score"]);
+    assert.deepEqual(Object.keys(submitted.body.result).sort(), ["breakdownReleased", "markedSoFar", "max", "pending", "score"]);
 
     // Simulate an answer scored later by AI, with feedback in detail_json.
     store.db.prepare("UPDATE answers SET detail_json = ? WHERE attempt_id = ? AND question_id = 'P5-01'")

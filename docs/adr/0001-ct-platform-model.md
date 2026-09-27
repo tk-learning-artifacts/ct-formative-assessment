@@ -178,7 +178,7 @@ Event times must be absolute ISO 8601 strings with `Z` or an offset. A bare `202
   - For `attempt-in-progress` the response includes the attempt id, so a tab that holds that attempt's token resumes it. Without the token the student must ask the teacher.
   - The check and the insert share one synchronous transaction, so two simultaneous starts cannot both succeed.
 - **Teacher reset.** `POST /api/events/:id/attempts/:attemptId/reset` (owner only) sets `reset_at` and `reset_by`. The attempt is kept for the record and can no longer be submitted, and the student may start again.
-- **Results release.** On submit the student sees only the total. The per-question breakdown is returned by `GET /api/attempts/:id` only once `end_at` has passed or the teacher calls `POST /api/events/:id/release` (sets `events.results_released_at`). The breakdown covers which questions were right, the chosen and correct options, and AI feedback in `detail_json`.
+- **Results release.** On submit the student sees only the total. Before release that total leaves out every AI-scored question (added 2026-09-27, see ADR 0003 §4): it is labelled "Marked so far", with the number of written answers marked separately, and neither number moves when the AI or the teacher marks them, since a rise would say whether the answer earned credit. The per-question breakdown is returned by `GET /api/attempts/:id` only once `end_at` has passed or the teacher calls `POST /api/events/:id/release` (sets `events.results_released_at`). The breakdown covers which questions were right, the chosen and correct options, and AI feedback in `detail_json`.
   - Before release the student page says the teacher will release the breakdown.
   - Events that existed before the migration are marked released, so their behaviour does not change.
 - ADR 0003 (2026-09-27) makes feedback timing and navigation per-event settings. The rule above is the `release` mode, which stays the default for new events and applies to every existing one.
@@ -297,7 +297,7 @@ Phase 1 shipped the interface and guardrails. Phase 2 adds the OpenRouter adapte
   - It sets `scored`, keeps the AI's detail for the record under a new `review: { score, feedback?, reviewedBy, reviewedAt }`, and recomputes the total.
   - The teacher page shows each AI answer with its status, reason, the AI's feedback, and a small score-and-feedback form.
 - **What the student sees** (`policy.studentResultView`).
-  - `result.pending` counts answers still being marked; the total rises as they are scored. The student page says "being marked" and checks back every 15 s while any are pending.
+  - `result.pending` counts answers still being marked; once the breakdown is visible (`end`, `each`, or `release` after release) the total rises as they are scored. Before release the student's total is the instantly marked part and `pending` counts every non-blank AI-scored answer, with `markedSoFar: true` (ADR 0003 §4). The student page says "being marked" and checks back every 15 s while any are pending.
   - Per-question detail appears only after release, and only as `{ source: "ai", feedbackCode, feedback? }` or `{ source: "teacher", feedback? }`. Criterion ids, failure reasons, model names and reviewer ids stay with the teacher.
   - Feedback text is escaped like everything else on the page. Needs-review answers say "Waiting for your teacher to mark this."
 - **Tests** use a fake transport and never touch the network:

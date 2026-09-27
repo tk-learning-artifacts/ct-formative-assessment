@@ -1154,6 +1154,10 @@
 
     const result = payload.result || { score: 0, max: 0, breakdownReleased: false };
     const pendingCount = result.pending || 0;
+    // Before release the server sends only the instantly marked part of the
+    // total (policy.studentTotal), so it is labelled as such.
+    const markedSoFar = Boolean(result.markedSoFar);
+    const pendingWords = `${pendingCount} answer${pendingCount === 1 ? "" : "s"} still being marked`;
     const perQ = result.perQuestion || null;
     const late = payload.attempt && payload.attempt.late;
     const mins = state.startedAt
@@ -1196,7 +1200,7 @@
           </div>
 
           <dl class="stats">
-            <div class="stat"><dt>Score</dt><dd>${result.score} / ${result.max}</dd></div>
+            <div class="stat"><dt>${markedSoFar ? "Marked so far" : "Score"}</dt><dd>${result.score} / ${result.max}${markedSoFar ? ` <span class="stat__note">(${pendingWords})</span>` : ""}</dd></div>
             <div class="stat"><dt>Time</dt><dd>${mins ? `${mins} min` : "Not known"}</dd></div>
             <div class="stat"><dt>Answered</dt><dd>${Object.keys(state.answers).length}</dd></div>
           </dl>
@@ -1204,7 +1208,9 @@
           <div class="stack stack--tight mt-m">
             ${auto ? `<p class="notice notice--warning">Time ran out, so your answers were sent automatically.</p>` : ""}
             ${late ? `<p class="notice notice--warning">This came in after the time limit, so your teacher will see it marked late.</p>` : ""}
-            ${pendingCount ? `<p class="notice">${pendingCount} written answer${pendingCount === 1 ? " is" : "s are"} still being marked, so your score may go up. This page checks again every ${MARKING_POLL_SECONDS} seconds.</p>` : ""}
+            ${markedSoFar
+              ? `<p class="notice">Your written answers are marked separately. Your full score appears when your teacher releases the results.</p>`
+              : pendingCount ? `<p class="notice">${pendingCount} written answer${pendingCount === 1 ? " is" : "s are"} still being marked, so your score may go up. This page checks again every ${MARKING_POLL_SECONDS} seconds.</p>` : ""}
             <p class="muted small">Your teacher can see your answers now.</p>
           </div>
         </section>
