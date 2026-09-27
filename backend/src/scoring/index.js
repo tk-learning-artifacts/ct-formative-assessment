@@ -1,56 +1,54 @@
-// Scorer registry. Each question type registers one implementation with:
+// Scorer registry. Every file in ./types is one question type, loaded here in
+// name order; adding a type means adding a file, not editing this one.
 //
+// An active type module exports:
+//   type, status: "active", label
+//   publicFields                     fields a student sees beyond BASE_PUBLIC_FIELDS
+//   sample                           a valid example question (used by tests)
 //   validate(question)             -> array of error strings (empty when valid)
-//   toPublic(question)             -> the copy a student may see (no answer key)
-//   normalizeResponse(raw, q)      -> the stored response, or null if unusable
-//   score(question, response)      -> { status, earned, max, correct }
+//   normalizeResponse(raw, q)      -> the value to score, or null if unusable
+//   recordResponse(q, response)    -> the JSON stored in answers.response_json;
+//                                     it should say what the student saw
+//   score(question, response)      -> { status, earned, max, correct, detail }
 //   legacyColumns(question, resp)  -> optional { chosenIndex, correctIndex }
 //
-// status is "scored" for types marked synchronously. A future AI-scored type
-// returns { status: "pending", earned: 0, max } and is finalised later by a
-// background job (src/ai scoreWithAi) to "scored", or to "needs-review" when
-// AI is off or its output fails validation, so the submit route never waits
-// on a model. The status is stored in answers.score_status.
+// A reserved type module exports only type, status: "reserved", label and
+// description. Content using a reserved type is rejected at boot.
 //
-// Reserved types are named here so content and teachers can refer to them,
-// but the loader rejects questions of a reserved type until a scorer ships.
+// status is "scored" for types marked synchronously. An AI-scored type
+// returns { status: "pending", earned: 0, max } and a background job
+// (src/ai scoreWithAi) later sets "scored" or "needs-review" and fills
+// answers.detail_json, so the submit route never waits on a model.
 
-const mcq = require("./mcq");
+const fs = require("fs");
+const path = require("path");
+
+const TYPES_DIR = path.join(__dirname, "types");
+
+// Shown to students for every type. Answer keys, rubrics, solutions and the
+// teacher-only "details" note are never in this list.
+const BASE_PUBLIC_FIELDS = ["id", "type", "audience", "level", "title", "prompt", "art", "code", "points", "topic", "qType"];
+
+const ACTIVE_KEYS = ["type", "label", "publicFields", "sample", "validate", "normalizeResponse", "recordResponse", "score"];
 
 const registry = new Map();
 
-const RESERVED_TYPES = [
-  {
-    type: "multi-select",
-    label: "Multiple select",
-    description: "Pick every correct option; partial credit rules to be decided."
-  },
-  {
-    type: "code-trace",
-    label: "Code trace",
-    description: "Student types the output of a program; compared after whitespace normalisation."
-  },
-  {
-    type: "parsons",
-    label: "Parsons problem",
-    description: "Student drags shuffled code lines into the right order (and indentation)."
-  },
-  {
-    type: "short-answer",
-    label: "Short answer",
-    description: "A typed word or number matched against a list of accepted answers."
-  },
-  {
-    type: "open-response-ai",
-    label: "Open response (AI scored)",
-    description: "Free text scored against a rubric by the AI provider. Needs the AI extension point enabled."
-  }
-];
-
 function registerType(impl) {
-  ["type", "validate", "toPublic", "normalizeResponse", "score"].forEach(key => {
-    if (!impl[key]) {
-      throw new Error(`Question type implementation is missing "${key}"`);
+  if (!impl || !impl.type) {
+    throw new Error("Question type implementation is missing \"type\"");
+  }
+
+  if (impl.status === "reserved") {
+    if (registry.has(impl.type)) {
+      throw new Error(`Question type "${impl.type}" is already registered`);
+    }
+    registry.set(impl.type, { ...impl });
+    return;
+  }
+
+  ACTIVE_KEYS.forEach(key => {
+    if (impl[key] === undefined) {
+      throw new Error(`Question type "${impl.type}" is missing "${key}"`);
     }
   });
 
@@ -58,14 +56,13 @@ function registerType(impl) {
     throw new Error(`Question type "${impl.type}" is already registered`);
   }
 
-  registry.set(impl.type, { status: "active", ...impl });
+  registry.set(impl.type, { ...impl, status: "active" });
 }
 
-RESERVED_TYPES.forEach(entry => {
-  registry.set(entry.type, { ...entry, status: "reserved" });
-});
-
-registerType(mcq);
+fs.readdirSync(TYPES_DIR)
+  .filter(name => name.endsWith(".js"))
+  .sort()
+  .forEach(name => registerType(require(path.join(TYPES_DIR, name))));
 
 function getType(type) {
   return registry.get(type) || null;
@@ -91,7 +88,16 @@ function listTypes() {
 }
 
 function toPublicQuestion(question) {
-  return getActiveType(question.type).toPublic(question);
+  const impl = getActiveType(question.type);
+  const safe = {};
+
+  BASE_PUBLIC_FIELDS.concat(impl.publicFields).forEach(field => {
+    if (question[field] !== undefined) {
+      safe[field] = question[field];
+    }
+  });
+
+  return safe;
 }
 
 function scoreResponse(question, rawResponse) {
@@ -100,10 +106,11 @@ function scoreResponse(question, rawResponse) {
   const result = impl.score(question, response);
   const legacy = impl.legacyColumns ? impl.legacyColumns(question, response) : { chosenIndex: null, correctIndex: null };
 
-  return { response, result, legacy };
+  return { response, recorded: impl.recordResponse(question, response), result, legacy };
 }
 
 module.exports = {
+  BASE_PUBLIC_FIELDS,
   registerType,
   getType,
   getActiveType,
