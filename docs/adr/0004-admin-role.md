@@ -41,6 +41,8 @@ The routes that changed from `ownEvent` to `eventForRequest`: results and outcom
 
 A teacher gets 404 on an admin's own events too: being an admin does not make one's events public.
 
+The student routes (join, start, resume, the `?fields=status` poll, commit, submit) take an attempt token, not a teacher's JWT, and access.js plays no part in them. The in-order delivery, status poll and pre-release total merged alongside this role (ADR 0003) changed only those routes, so no teacher route was added or changed by them.
+
 ### 4. The role is read from the database on every request (decided here)
 
 The JWT still carries `role`, but `requireAuth` now loads the account by id on every request and takes the role from the database. So promoting or demoting an account takes effect on its next request, not when its 7-day token expires, and a deleted account's token stops working at once (401). The cost is one primary-key lookup per teacher request.

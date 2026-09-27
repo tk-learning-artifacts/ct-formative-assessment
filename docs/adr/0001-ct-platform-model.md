@@ -185,7 +185,7 @@ Event times must be absolute ISO 8601 strings with `Z` or an offset. A bare `202
 - Together these stop the repeated-attempt oracle: with one attempt and no per-question feedback, four submissions of all-0s, all-1s, all-2s and all-3s under one name get one total and three 409s. A test checks this.
 
 **Teachers and secrets**
-- Teachers see and act on only events whose `created_by` is their user id. Another teacher's event returns 404, the same as a missing one.
+- Teachers see and act on only events whose `created_by` is their user id. Another teacher's event returns 404, the same as a missing one. An admin (ADR 0004, 2026-09-27) can also read every teacher's events, but changing one it did not create returns 403.
 - Passwords are stored as `scrypt$<salt>$<hash>` with a random 16-byte salt per user and compared with `crypto.timingSafeEqual`. Legacy fixed-salt hashes still verify and are rewritten on the next successful login.
 - `SEED_TEACHER_EMAIL` and `SEED_TEACHER_PASSWORD` create the first account in an empty database.
 - With `NODE_ENV=production` the server refuses to start in any of these cases:
