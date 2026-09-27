@@ -113,7 +113,7 @@
         const detail = answer.detail || {};
         const aiFeedback = detail.ai === "scored" && detail.feedback ? detail.feedback : "";
         const reviewFeedback = detail.review && detail.review.feedback ? detail.review.feedback : "";
-        const key = `${attempt.id}-${answer.questionId}`;
+        const key = escapeHtml(`${attempt.id}-${answer.questionId}`);
 
         return `
           <div class="ai-review">
@@ -130,7 +130,7 @@
               <label for="feedback-${key}">Feedback for the student (optional)</label>
               <textarea id="feedback-${key}" maxlength="500">${escapeHtml(reviewFeedback)}</textarea>
               <div class="nav">
-                <button class="secondary" data-review-attempt="${attempt.id}" data-review-question="${escapeHtml(answer.questionId)}" data-review-key="${escapeHtml(key)}">Save mark</button>
+                <button class="secondary" data-review-attempt="${attempt.id}" data-review-question="${escapeHtml(answer.questionId)}" data-review-key="${key}">Save mark</button>
               </div>
             ` : ""}
           </div>
