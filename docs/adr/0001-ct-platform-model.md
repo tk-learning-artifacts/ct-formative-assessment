@@ -307,7 +307,7 @@ Phase 1 shipped the interface and guardrails. Phase 2 adds the OpenRouter adapte
 
 ### 11. API for Phase 2
 
-Teacher endpoints (JWT required, scoped to the caller's own events):
+Teacher endpoints (JWT required, scoped to the caller's own events; an admin can also read every teacher's events, ADR 0004):
 
 | Endpoint | Returns |
 |---|---|
@@ -346,7 +346,7 @@ Student endpoints:
 ## Still open
 
 1. **MOE syllabus crosswalk:** add one if schools want LOs reported in syllabus terms.
-2. **Admin role:** today every account is scoped to its own events. A head of department who sees all of them needs a role check.
+2. ~~**Admin role:** today every account is scoped to its own events. A head of department who sees all of them needs a role check.~~ Decided 2026-09-27: see ADR 0004 (admins read every event; other teachers' events are read-only to them).
 
 ## Consequences
 
