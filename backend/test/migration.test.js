@@ -273,3 +273,35 @@ test("migration files must follow the YYYYMMDDHHMM-slug naming", () => {
   MIGRATIONS.forEach(migration => assert.match(migration.id, /^\d{12}-[a-z0-9-]+$/));
   assert.deepEqual(MIGRATIONS.map(m => m.id), MIGRATIONS.map(m => m.id).slice().sort());
 });
+
+// A database deployed from main before the admin role has every migration up
+// to 202609271700 but not 202609270811-user-roles, whose id sorts earlier.
+// The runner must apply it last, fix any stray role, add the triggers, and
+// then have nothing left to do (ADR 0004, Consequences).
+test("user-roles applies to a database that already has the later migrations", async t => {
+  const dir = makeTempDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const dbPath = path.join(dir, "app.db");
+  const { loadContent } = require("../src/content");
+  const content = loadContent();
+  const USER_ROLES = "202609270811-user-roles";
+  const earlier = MIGRATIONS.filter(migration => migration.id !== USER_ROLES);
+  assert.ok(MIGRATIONS.some(migration => migration.id > USER_ROLES), "a later migration exists");
+
+  const raw = new Database(dbPath);
+  migrate(raw, { dbPath, ctx: { content }, migrations: earlier });
+  raw.prepare("INSERT INTO users (email, password_hash, role, created_at) VALUES (?, ?, ?, ?)")
+    .run("stray@school.test", "scrypt$x$y", "owner", new Date().toISOString());
+
+  const upgraded = migrate(raw, { dbPath, ctx: { content } });
+  assert.deepEqual(upgraded.applied, [USER_ROLES]);
+  assert.ok(upgraded.backupPath, "backed up first");
+  assert.equal(raw.prepare("SELECT role FROM users WHERE email = 'stray@school.test'").get().role, "teacher");
+  assert.deepEqual(
+    raw.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all().map(row => row.name),
+    ["users_role_check_insert", "users_role_check_update"]
+  );
+  assert.throws(() => raw.prepare("UPDATE users SET role = 'root'").run(), /teacher or admin/);
+  assert.deepEqual(migrate(raw, { dbPath, ctx: { content } }).applied, [], "idempotent");
+  raw.close();
+});
