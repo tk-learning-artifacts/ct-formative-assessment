@@ -9,7 +9,8 @@
     events: [],
     selectedEventId: null,
     // What the main area shows: "event" (the chosen event), "create" (the
-    // new-event form) or null (a prompt to pick one). On a phone the event
+    // new-event form), "bank" (the whole question bank) or null (a prompt to
+    // pick one). On a phone the event
     // list is hidden while a view is open, with a link back to it.
     view: null,
     results: null,
@@ -71,7 +72,13 @@
     previewIncludesQuestions: false,
     // The chosen event's frozen question snapshot (full teacher views), or
     // null until GET /api/events/:id/questions has loaded.
-    eventQuestions: null
+    eventQuestions: null,
+    // The whole question bank as full teacher views (view "bank"), loaded
+    // once on first open, and the teacher's filters over it. Filtering runs
+    // in the page, since the bank is small.
+    bank: null,
+    bankError: null,
+    bankFilter: { audience: "", level: "", type: "", outcome: "", q: "" }
   };
 
   const FEEDBACK_LABELS = {
@@ -628,13 +635,14 @@
     return parts.join("");
   }
 
-  function qpRow(question, number) {
+  function qpRow(question, number, options = {}) {
     return `
       <li>
         <details class="qp-row">
           <summary>
             <span class="qp-row__num">${number}.</span>
             <span class="qp-row__title">${escapeHtml(question.title)}</span>
+            ${options.showId ? `<span class="muted small mono">${escapeHtml(question.id)}</span>` : ""}
             <span class="tag">${escapeHtml(QP_TYPE_LABELS[question.type] || question.type)}</span>
             <span class="concept-tag">${escapeHtml(question.level)}</span>
             <span class="muted small">${question.points} pt${question.points === 1 ? "" : "s"}</span>
@@ -647,7 +655,7 @@
   }
 
   // questions: full teacher views, in the order they should be numbered.
-  function renderQuestionPreview(questions) {
+  function renderQuestionPreview(questions, options = {}) {
     if (!questions || !questions.length) {
       return `<p class="muted small">No questions to show.</p>`;
     }
@@ -658,7 +666,7 @@
           <button type="button" class="btn btn--ghost btn--sm" data-qp-expand-all>Expand all</button>
           <button type="button" class="btn btn--ghost btn--sm" data-qp-collapse-all>Collapse all</button>
         </div>
-        <ol class="qp-list">${questions.map((question, i) => qpRow(question, i + 1)).join("")}</ol>
+        <ol class="qp-list">${questions.map((question, i) => qpRow(question, i + 1, options)).join("")}</ol>
       </div>
     `;
   }
@@ -2036,6 +2044,150 @@
     }
   }
 
+  // ---------- Question bank ----------
+
+  // Every audience and active question type, so the preview returns the
+  // whole bank (AI-scored questions only come back when named).
+  function bankRequestFilter() {
+    const audiences = state.catalog ? state.catalog.audiences.map(audience => audience.id) : Object.keys(AUDIENCE_SHORT);
+    const types = state.catalog
+      ? state.catalog.questionTypes.filter(type => type.status === "active").map(type => type.type)
+      : Object.keys(QP_TYPE_LABELS);
+
+    return { audiences, types };
+  }
+
+  async function loadBank() {
+    try {
+      const payload = await api("/api/question-bank/preview", {
+        method: "POST",
+        body: JSON.stringify({ filter: bankRequestFilter(), include: "questions" })
+      });
+      state.bank = payload.questions;
+      state.bankError = null;
+    } catch (error) {
+      state.bank = null;
+      state.bankError = error.message;
+    }
+  }
+
+  function bankMatches(question) {
+    const f = state.bankFilter;
+    const text = f.q.trim().toLowerCase();
+
+    return (!f.audience || question.audience === f.audience)
+      && (!f.level || question.level === f.level)
+      && (!f.type || question.type === f.type)
+      && (!f.outcome || (question.outcomes || []).includes(f.outcome))
+      && (!text || [question.id, question.title, question.prompt, question.topic]
+        .some(value => value && String(value).toLowerCase().includes(text)));
+  }
+
+  function bankSelect(id, label, current, choices) {
+    return `
+      <div class="field">
+        <label for="${id}">${escapeHtml(label)}</label>
+        <select id="${id}">
+          <option value="">All</option>
+          ${choices.map(([value, text]) => `<option value="${escapeHtml(value)}" ${current === value ? "selected" : ""}>${escapeHtml(text)}</option>`).join("")}
+        </select>
+      </div>
+    `;
+  }
+
+  function renderBankList() {
+    if (state.bankError) {
+      return `<p class="notice notice--critical">${escapeHtml(state.bankError)}</p>`;
+    }
+
+    if (!state.bank) {
+      return `<p class="muted small">Loading the question bank&hellip;</p>`;
+    }
+
+    const shown = state.bank.filter(bankMatches);
+
+    return `
+      <p class="muted small bank__count" aria-live="polite">Showing ${shown.length} of ${state.bank.length} question${state.bank.length === 1 ? "" : "s"}</p>
+      ${shown.length ? renderQuestionPreview(shown, { showId: true }) : `<p class="muted small">No questions match these filters.</p>`}
+    `;
+  }
+
+  function renderBank() {
+    const f = state.bankFilter;
+    const bank = state.bank || [];
+    const distinct = key => Array.from(new Set(bank.map(question => question[key]).filter(Boolean)));
+    const levelOrder = state.catalog ? state.catalog.levels.map(level => level.id) : [];
+    const levels = distinct("level").sort((a, b) => levelOrder.indexOf(a) - levelOrder.indexOf(b));
+    const usedOutcomes = new Set(bank.flatMap(question => question.outcomes || []));
+    const outcomes = (state.outcomes || []).filter(outcome => usedOutcomes.has(outcome.id));
+
+    return `
+      <section class="card" aria-labelledby="bankHeading">
+        <div class="section-heading">
+          <h2 id="bankHeading">Question bank</h2>
+          <p>Every question students can be given, with its answer key and teacher notes. Expand a row to see it as students do.</p>
+        </div>
+        <div class="bank__filters">
+          ${bankSelect("bankAudience", "Audience", f.audience, distinct("audience").map(id => [id, AUDIENCE_SHORT[id] || id]))}
+          ${bankSelect("bankLevel", "Level", f.level, levels.map(id => [id, id]))}
+          ${bankSelect("bankType", "Type", f.type, distinct("type").map(id => [id, QP_TYPE_LABELS[id] || id]))}
+          ${bankSelect("bankOutcome", "Learning outcome", f.outcome, outcomes.map(outcome => [outcome.id, truncate(outcome.statement, 70)]))}
+          <div class="field">
+            <label for="bankSearch">Search</label>
+            <input id="bankSearch" type="search" placeholder="Id, title or prompt" value="${escapeHtml(f.q)}" />
+          </div>
+        </div>
+        <div id="bankList">${renderBankList()}</div>
+      </section>
+    `;
+  }
+
+  function refreshBankList() {
+    const el = document.getElementById("bankList");
+
+    if (el) {
+      el.innerHTML = renderBankList();
+      bindQuestionPreviewEvents(el);
+    }
+  }
+
+  function bindBankEvents() {
+    [["bankAudience", "audience"], ["bankLevel", "level"], ["bankType", "type"], ["bankOutcome", "outcome"]].forEach(([id, key]) => {
+      const select = document.getElementById(id);
+      if (select) {
+        select.addEventListener("change", () => {
+          state.bankFilter = { ...state.bankFilter, [key]: select.value };
+          refreshBankList();
+        });
+      }
+    });
+
+    const search = document.getElementById("bankSearch");
+
+    if (search) {
+      search.addEventListener("input", () => {
+        state.bankFilter = { ...state.bankFilter, q: search.value };
+        refreshBankList();
+      });
+    }
+
+    bindQuestionPreviewEvents(document.getElementById("bankList"));
+  }
+
+  async function openBank() {
+    state.view = "bank";
+    state.editingSettings = false;
+    renderDashboard();
+    window.scrollTo({ top: 0 });
+
+    if (!state.bank) {
+      await loadBank();
+      if (state.view === "bank") {
+        renderDashboard();
+      }
+    }
+  }
+
   // ---------- Dashboard ----------
 
   function renderDashboard() {
@@ -2174,10 +2326,12 @@
 
     const mainBlock = state.view === "create"
       ? createBlock
-      : state.view === "event" && state.results
+      : state.view === "bank"
+        ? renderBank()
+        : state.view === "event" && state.results
         ? resultsBlock
         : emptyBlock;
-    const viewOpen = state.view === "create" || (state.view === "event" && Boolean(state.results));
+    const viewOpen = state.view === "create" || state.view === "bank" || (state.view === "event" && Boolean(state.results));
 
     screen.innerHTML = `
       <div class="toolbar">
@@ -2194,6 +2348,10 @@
             </div>
             <div id="eventListBody">${renderEventFilter()}${renderEventList()}</div>
           </section>
+          <button type="button" class="side-link ${state.view === "bank" ? "side-link--active" : ""}" data-open-bank ${state.view === "bank" ? `aria-current="true"` : ""}>
+            <span>Question bank</span>
+            <span class="muted small">${state.bank ? `${state.bank.length} questions` : "Browse every question"}</span>
+          </button>
         </nav>
 
         <div class="dash__main">
@@ -2209,6 +2367,7 @@
       state.events = [];
       state.selectedEventId = null;
       state.view = null;
+      state.bank = null;
       state.results = null;
       state.outcomesSummary = null;
       state.eventQuestions = null;
@@ -2272,6 +2431,16 @@
     Array.from(screen.querySelectorAll("[data-new-event]")).forEach(button => {
       button.addEventListener("click", openCreate);
     });
+
+    const bankBtn = screen.querySelector("[data-open-bank]");
+
+    if (bankBtn) {
+      bankBtn.addEventListener("click", openBank);
+    }
+
+    if (state.view === "bank") {
+      bindBankEvents();
+    }
 
     const backBtn = screen.querySelector("[data-back]");
 

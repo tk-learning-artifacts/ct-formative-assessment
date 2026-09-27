@@ -401,6 +401,7 @@ input[type="text"],
 input[type="email"],
 input[type="password"],
 input[type="number"],
+input[type="search"],
 input[type="datetime-local"],
 select,
 textarea {
@@ -1265,6 +1266,45 @@ textarea.open-response {
 
 .dash__back {
   justify-self: start;
+}
+
+/* A sidebar link to a page that is not an event, such as the question bank. */
+.side-link {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line);
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.side-link:hover {
+  background: var(--color-surface-2);
+}
+
+.side-link--active {
+  border-left-color: var(--color-accent-deep);
+  background: var(--color-accent-soft);
+}
+
+.bank__filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.bank__count {
+  margin-bottom: 6px;
 }
 
 .form-actions--start {
