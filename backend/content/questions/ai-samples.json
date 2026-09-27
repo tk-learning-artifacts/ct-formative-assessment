@@ -1,0 +1,152 @@
+{
+  "bank": "ai-samples",
+  "description": "Sample open-response questions for RGSynapse, scored by the AI provider against a rubric. With AI_PROVIDER=none they wait for the teacher to mark them.",
+  "questions": [
+    {
+      "id": "AIS-S1-01",
+      "type": "open-response-ai",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "The countdown that never stops",
+      "prompt": "A classmate wanted this Python program to count down from 10 to 1 and then stop. Instead it prints 10 forever.\n\nExplain why the loop never ends, and say how to fix it.",
+      "code": {
+        "language": "python",
+        "source": "count = 10\nwhile count > 0:\n    print(count)\ncount -= 1"
+      },
+      "points": 2,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Loops",
+      "qType": "Explain the bug",
+      "responseMaxChars": 600,
+      "rubric": [
+        {
+          "id": "full",
+          "description": "Explains that count -= 1 is not indented, so it is outside the loop and count stays 10, which keeps count > 0 true forever; and says to indent count -= 1 into the loop body.",
+          "points": 2
+        },
+        {
+          "id": "partial",
+          "description": "Gives only one of the two: why count never changes (the line is outside the loop), or the fix (indent count -= 1), without the other.",
+          "points": 1
+        },
+        {
+          "id": "none",
+          "description": "Does not explain why the loop repeats and gives no working fix, or is off topic.",
+          "points": 0
+        }
+      ],
+      "details": "The decrement is outside the while body because of indentation, so the condition never becomes false."
+    },
+    {
+      "id": "AIS-S2-01",
+      "type": "open-response-ai",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Ask the AI for a fix",
+      "prompt": "You asked an AI assistant for a Python function that returns the average of a list of test scores. It wrote the code below.\n\nWrite the message you would send back to the AI asking it to fix a problem. Name an input that breaks the function, what goes wrong, and what the function should do instead.",
+      "code": {
+        "language": "python",
+        "source": "def average(scores):\n    total = 0\n    for s in scores:\n        total += s\n    return total / len(scores)"
+      },
+      "points": 3,
+      "difficulty": 3,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "practice.testing-debugging.edge-cases",
+        "perspective.questioning.ai-output"
+      ],
+      "outcomes": [
+        "LO-AI-REVIEW-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reviewing AI code",
+      "qType": "Write the fix request",
+      "responseMaxChars": 600,
+      "rubric": [
+        {
+          "id": "full",
+          "description": "Names the empty list as the input that breaks it, says it divides by zero (len(scores) is 0, so it crashes), and says what it should do instead, such as return 0 or None or give a clear error.",
+          "points": 3
+        },
+        {
+          "id": "partial",
+          "description": "Names the empty list and the crash or division by zero, but does not say what the function should do instead.",
+          "points": 2
+        },
+        {
+          "id": "vague",
+          "description": "Asks the AI to fix or check the code without naming a specific input that breaks it.",
+          "points": 1
+        },
+        {
+          "id": "none",
+          "description": "Names no problem with the function, claims it is correct, or is off topic.",
+          "points": 0
+        }
+      ],
+      "details": "average([]) raises ZeroDivisionError. A good request names the empty list and asks for a defined result."
+    },
+    {
+      "id": "AIS-S2-02",
+      "type": "open-response-ai",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Before you trust it",
+      "prompt": "An AI assistant says this function checks whether a word is a palindrome (it reads the same backwards). Before you trust it, which test inputs would you try, and what should each one return? Give at least two, and say whether the function passes them.",
+      "code": {
+        "language": "python",
+        "source": "def is_palindrome(word):\n    return word == word[::-1]"
+      },
+      "points": 3,
+      "difficulty": 3,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "practice.testing-debugging.edge-cases"
+      ],
+      "outcomes": [
+        "LO-AI-REVIEW-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reviewing AI code",
+      "qType": "Design the tests",
+      "responseMaxChars": 600,
+      "rubric": [
+        {
+          "id": "full",
+          "description": "Gives at least two concrete inputs with the expected result, including one the function gets wrong, such as mixed case (\"Racecar\" should be True but returns False).",
+          "points": 3
+        },
+        {
+          "id": "partial",
+          "description": "Gives at least two concrete inputs with expected results, but none that the function gets wrong.",
+          "points": 2
+        },
+        {
+          "id": "vague",
+          "description": "Says to test the function but gives no concrete inputs, or gives inputs without expected results.",
+          "points": 1
+        },
+        {
+          "id": "none",
+          "description": "Proposes no tests, or is off topic.",
+          "points": 0
+        }
+      ],
+      "details": "The comparison is case-sensitive, so \"Racecar\" returns False. Spaces and punctuation are another edge case."
+    }
+  ]
+}

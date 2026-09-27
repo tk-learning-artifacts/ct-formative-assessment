@@ -9,9 +9,11 @@ const scoring = require("./scoring");
 const selection = require("./selection");
 const policy = require("./policy");
 const { createAiProvider } = require("./ai");
+const { createScoringQueue } = require("./ai/jobs");
 
 const webDir = path.resolve(__dirname, "../../web");
 const MAX_DURATION_MINUTES = 24 * 60;
+const REVIEW_FEEDBACK_MAX_CHARS = 500;
 
 // The files served from web/: its .html, .css and .js files (not build
 // config such as vite.config.js) and the question-type renderers in
@@ -120,6 +122,20 @@ function teacherEvent(event) {
   return { ...rest, breakdown_released: policy.breakdownReleased(event) };
 }
 
+// Whether a question list needs the AI provider to be scored, and whether it
+// is on. Teachers see this before and after creating an event, because with
+// AI_PROVIDER=none those answers wait for the teacher to mark them.
+function aiStatus(questions, ai) {
+  const aiRequired = questions.some(question => Boolean(scoring.getActiveType(question.type).requiresAi));
+  const status = { aiRequired, aiEnabled: ai.enabled };
+
+  if (aiRequired && !ai.enabled) {
+    status.warning = "Some questions are AI-scored, but AI is off (AI_PROVIDER=none). Those answers will wait for you to mark them by hand.";
+  }
+
+  return status;
+}
+
 function createApp({ config = loadConfig(), store = null, log = console.log } = {}) {
   const db = store || openDatabase({
     dbPath: config.dbPath,
@@ -128,11 +144,14 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     log
   });
   const ai = createAiProvider(config.ai);
+  const scoringQueue = createScoringQueue({ store: db, provider: ai, concurrency: config.ai.concurrency, log });
   const app = express();
 
   app.locals.store = db;
   app.locals.config = config;
   app.locals.ai = ai;
+  app.locals.scoringQueue = scoringQueue;
+  scoringQueue.start();
 
   app.use(express.json({ limit: "1mb" }));
 
@@ -281,7 +300,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       audiences: db.content.audiences,
       questionTypes: scoring.listTypes(),
       legacySelectionModes: selection.LEGACY_MODES,
-      ai: { enabled: ai.enabled, provider: ai.name }
+      ai: { enabled: ai.enabled, provider: ai.name, model: ai.model }
     });
   });
 
@@ -328,6 +347,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       byLevel: countBy(questions, "level"),
       byType: countBy(questions, "type"),
       byAudience: countBy(questions, "audience"),
+      ...aiStatus(questions, ai),
       questions: questions.map(question => ({
         id: question.id,
         title: question.title,
@@ -391,9 +411,10 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       });
 
       const event = teacherEvent(db.getEventById(eventId));
-      event.question_count = db.getEventQuestions(eventId).length;
+      const questions = db.getEventQuestions(eventId);
+      event.question_count = questions.length;
 
-      res.status(201).json({ event });
+      res.status(201).json({ event, ...aiStatus(questions, ai) });
     } catch (error) {
       if (String(error.message).includes("UNIQUE")) {
         res.status(409).json({ error: "That join code is already in use." });
@@ -443,6 +464,53 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     }
 
     res.json({ ok: true, attemptId });
+  });
+
+  // A teacher marks an AI-scored answer by hand: one still waiting, one the
+  // AI could not score (needs-review), or one whose AI score they disagree
+  // with. Owner only; the attempt total is recomputed.
+  app.post("/api/events/:id/attempts/:attemptId/answers/:questionId/review", requireAuth, (req, res) => {
+    const event = ownEvent(req, res);
+
+    if (!event) {
+      return;
+    }
+
+    const attemptId = Number(req.params.attemptId);
+    const answer = Number.isInteger(attemptId) ? db.getSubmittedAnswer(event.id, attemptId, String(req.params.questionId)) : null;
+
+    if (!answer) {
+      res.status(404).json({ error: "No submitted answer to that question in this event." });
+      return;
+    }
+
+    const impl = scoring.getType(answer.question_type);
+
+    if (!impl || !impl.requiresAi) {
+      res.status(400).json({ error: "Only AI-scored answers can be marked by hand." });
+      return;
+    }
+
+    const score = req.body.score;
+    const feedback = req.body.feedback === undefined || req.body.feedback === null ? "" : req.body.feedback;
+
+    if (!Number.isInteger(score) || score < 0 || score > answer.max_points) {
+      res.status(400).json({ error: `Score must be a whole number from 0 to ${answer.max_points}.` });
+      return;
+    }
+
+    if (typeof feedback !== "string" || feedback.length > REVIEW_FEEDBACK_MAX_CHARS || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(feedback.replace(/\n/g, " "))) {
+      res.status(400).json({ error: `Feedback must be plain text of at most ${REVIEW_FEEDBACK_MAX_CHARS} characters.` });
+      return;
+    }
+
+    const detail = db.reviewAnswer(answer.id, { score, feedback: feedback.trim(), reviewedBy: req.user.sub });
+    const attempt = db.getAttempt(attemptId);
+
+    res.json({
+      answer: { questionId: answer.question_id, scoreStatus: "scored", earnedPoints: score, maxPoints: answer.max_points, detail },
+      attempt: { id: attemptId, score: attempt.score, maxScore: attempt.max_score }
+    });
   });
 
   // ---------- Students ----------
@@ -574,6 +642,8 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       res.status(error.status || 500).json({ error: error.status ? error.message : "Could not save this submission." });
       return;
     }
+
+    scoringQueue.kick();
 
     const saved = db.getAttempt(attempt.id);
     const event = db.attemptEvent(saved);

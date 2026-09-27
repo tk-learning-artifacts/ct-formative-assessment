@@ -65,7 +65,8 @@ test("every active type's public projection leaves out every secret field", () =
 test("reserved types are listed but cannot score", () => {
   const types = Object.fromEntries(scoring.listTypes().map(entry => [entry.type, entry.status]));
   assert.equal(types.mcq, "active");
-  ["code-trace", "parsons", "short-answer", "open-response-ai", "multi-select"].forEach(type => {
+  assert.equal(types["open-response-ai"], "active");
+  ["code-trace", "parsons", "short-answer", "multi-select"].forEach(type => {
     assert.equal(types[type], "reserved", type);
   });
   assert.throws(() => scoring.scoreResponse({ ...mcqQuestion, type: "parsons" }, 1), /no active scorer/);

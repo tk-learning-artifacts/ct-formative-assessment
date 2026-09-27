@@ -433,7 +433,12 @@ function createStore(db, content) {
       };
     });
 
-    return { score: attempt.score, max: attempt.max_score, perQuestion };
+    return {
+      score: attempt.score,
+      max: attempt.max_score,
+      pending: perQuestion.filter(item => item.status === "pending").length,
+      perQuestion
+    };
   }
 
   function getResults(eventId) {
@@ -474,6 +479,80 @@ function createStore(db, content) {
       late: Boolean(attempt.late),
       answers: answersByAttempt[attempt.id] || []
     }));
+  }
+
+  // ---------- AI-scored answers (src/ai/jobs.js and the teacher review) ----------
+
+  // An attempt's total is always the sum of its answers, so a late AI score
+  // or a teacher's override changes the total the student sees.
+  function recomputeAttemptScore(attemptId) {
+    db.prepare(`
+      UPDATE attempts
+      SET score = (SELECT COALESCE(SUM(earned_points), 0) FROM answers WHERE attempt_id = ?)
+      WHERE id = ?
+    `).run(attemptId, attemptId);
+  }
+
+  // The oldest pending answers not already being scored. Pending rows are the
+  // queue, so after a restart they are simply found again.
+  function listPendingAnswers(limit, skipIds = []) {
+    const skip = new Set(skipIds);
+
+    return db.prepare(`
+      SELECT an.id, an.attempt_id, an.question_id, an.response_json,
+             a.event_id, a.student_name, a.student_group
+      FROM answers an
+      JOIN attempts a ON a.id = an.attempt_id
+      WHERE an.score_status = 'pending'
+      ORDER BY an.id ASC
+      LIMIT ?
+    `).all(limit + skip.size).filter(row => !skip.has(row.id)).slice(0, limit);
+  }
+
+  // Stores the job's result for one answer, only if it is still pending (a
+  // teacher may have marked it meanwhile), and updates the attempt total.
+  function completePendingAnswer(answerId, { status, earned, detail }) {
+    return db.transaction(() => {
+      const row = db.prepare("SELECT attempt_id FROM answers WHERE id = ? AND score_status = 'pending'").get(answerId);
+
+      if (!row) {
+        return false;
+      }
+
+      db.prepare("UPDATE answers SET score_status = ?, earned_points = ?, detail_json = ? WHERE id = ?")
+        .run(status, earned, detail ? JSON.stringify(detail) : null, answerId);
+      recomputeAttemptScore(row.attempt_id);
+      return true;
+    })();
+  }
+
+  function getSubmittedAnswer(eventId, attemptId, questionId) {
+    return db.prepare(`
+      SELECT an.id, an.attempt_id, an.question_id, an.question_type, an.max_points, an.score_status, an.detail_json
+      FROM answers an
+      JOIN attempts a ON a.id = an.attempt_id
+      WHERE a.event_id = ? AND a.id = ? AND a.status = 'submitted' AND an.question_id = ?
+    `).get(eventId, attemptId, questionId) || null;
+  }
+
+  // A teacher's mark. The AI's record (if any) is kept under the review, so
+  // the teacher's view still shows what the model said.
+  function reviewAnswer(answerId, { score, feedback, reviewedBy }) {
+    return db.transaction(() => {
+      const row = db.prepare("SELECT attempt_id, detail_json FROM answers WHERE id = ?").get(answerId);
+      const previous = row.detail_json ? JSON.parse(row.detail_json) : {};
+      const { review: _oldReview, ...kept } = previous;
+      const detail = { ...kept, review: { score, reviewedBy, reviewedAt: nowIso() } };
+
+      if (feedback) {
+        detail.review.feedback = feedback;
+      }
+
+      db.prepare("UPDATE answers SET score_status = 'scored', earned_points = ?, detail_json = ? WHERE id = ?")
+        .run(score, JSON.stringify(detail), answerId);
+      recomputeAttemptScore(row.attempt_id);
+      return detail;
+    })();
   }
 
   function resetAttempt(eventId, attemptId, userId) {
@@ -639,6 +718,11 @@ function createStore(db, content) {
     submitAttempt,
     getAttemptResult,
     getResults,
+    recomputeAttemptScore,
+    listPendingAnswers,
+    completePendingAnswer,
+    getSubmittedAnswer,
+    reviewAnswer,
     resetAttempt,
     releaseResults,
     findUserByEmail,

@@ -47,10 +47,10 @@ test("event filters and picker endpoints", async t => {
     assert.deepEqual(s1Default.body.filter.audiences, ["core"]);
     assert.deepEqual((await preview({ filter: { audiences: [], levels: ["P5"] } })).body.byAudience, { core: 5 });
 
-    const s1Everyone = await preview({ filter: { levels: ["S1"], audiences: ["core", "rgsynapse"] } });
+    const s1Everyone = await preview({ filter: { levels: ["S1"], audiences: ["core", "rgsynapse"], types: ["mcq"] } });
     assert.deepEqual(s1Everyone.body.byAudience, { core: 5, rgsynapse: 2 });
 
-    const rgs = await preview({ filter: { audiences: ["rgsynapse"] } });
+    const rgs = await preview({ filter: { audiences: ["rgsynapse"], types: ["mcq"] } });
     assert.deepEqual(rgs.body.questions.map(q => q.id), ["RGS-S1-01", "RGS-S1-02", "RGS-S2-01", "RGS-S2-02"]);
 
     const byOutcome = await preview({ filter: { outcomes: ["LO-DEBUG-1"], audiences: ["core", "rgsynapse"] } });
@@ -78,7 +78,7 @@ test("event filters and picker endpoints", async t => {
     assert.ok(child.body.questions.every(q => parent.body.questions.some(p => p.id === q.id)));
     assert.ok(parent.body.count > child.body.count);
 
-    const practiceRoot = await preview({ filter: { nodes: ["practice"], audiences: ["rgsynapse"] } });
+    const practiceRoot = await preview({ filter: { nodes: ["practice"], audiences: ["rgsynapse"], types: ["mcq"] } });
     assert.equal(practiceRoot.body.count, 4);
   });
 
@@ -169,11 +169,11 @@ test("event filters and picker endpoints", async t => {
     assert.deepEqual(res.body.levels.map(level => level.id), ["P5", "P6", "S1", "S2"]);
     assert.deepEqual(res.body.audiences.map(audience => audience.id), ["core", "rgsynapse"]);
     assert.ok(res.body.questionTypes.some(type => type.type === "mcq" && type.status === "active"));
-    assert.deepEqual(res.body.ai, { enabled: false, provider: "none" });
+    assert.deepEqual(res.body.ai, { enabled: false, provider: "none", model: null });
   });
 
   await t.test("RGSynapse questions reach students with their code and without keys", async () => {
-    const created = await createEvent({ filter: { audiences: ["rgsynapse"], levels: ["S1"] } });
+    const created = await createEvent({ filter: { audiences: ["rgsynapse"], levels: ["S1"], types: ["mcq"] } });
     const started = await startAttempt(app, { joinCode: created.body.event.join_code });
     assert.equal(started.questions.length, 2);
     assert.equal(started.questions[0].code.language, "python");
