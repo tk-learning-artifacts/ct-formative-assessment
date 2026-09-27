@@ -1157,6 +1157,74 @@ textarea.open-response {
   white-space: nowrap;
 }
 
+/* Code reading: dotted glossary words in the code, the note they open,
+   and the two parts of the answer. The code block itself is the code-trace
+   one (.ct-code, .ct-line). */
+.cr-term {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dotted var(--color-accent-deep);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: help;
+}
+
+.cr-term:hover,
+.cr-term[aria-expanded="true"] {
+  background: var(--color-accent-soft);
+}
+
+.cr-hint {
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.cr-note {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--color-line-strong);
+  border-left: 3px solid var(--color-accent-deep);
+  border-radius: 6px;
+  background: var(--color-surface-2);
+  color: var(--color-ink);
+  font-size: 0.875rem;
+}
+
+.cr-part + .cr-part {
+  margin-top: 14px;
+}
+
+.cr-part__points {
+  margin-left: 4px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.cr-line-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+
+.cr-line-pick__no {
+  flex: none;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.cr-line-pick code {
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 /* ---------- Teacher: dashboard ---------- */
 
 .toolbar {
