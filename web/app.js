@@ -441,7 +441,7 @@
             <h2 id="questionTitle">${escapeHtml(q.title)}</h2>
             <span class="q-points">${q.points} point${q.points === 1 ? "" : "s"}</span>
           </div>
-          <div class="concept-tags q-meta">${meta}<span class="muted small mono">${escapeHtml(q.id)}</span></div>
+          <div class="concept-tags q-meta">${meta}</div>
 
           <p class="prompt-text">${escapeHtml(q.prompt)}</p>
           ${art}
@@ -601,7 +601,7 @@
       return `
         <li class="result-row">
           <div>
-            <strong>${escapeHtml(item.title || item.id)}</strong> <span class="muted small mono">${escapeHtml(item.id)}</span>
+            <strong>${escapeHtml(item.title || item.id)}</strong>
             ${meta ? `<div class="result-meta">${escapeHtml(meta)}</div>` : ""}
             <div class="result-meta result-answer">Your answer: ${asCode(chosen)}</div>
             ${correct && !item.correct ? `<div class="result-meta result-answer">Correct answer: ${asCode(correct)}</div>` : ""}
