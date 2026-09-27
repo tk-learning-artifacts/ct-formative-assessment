@@ -38,6 +38,14 @@ Accounts or single sign-on (SSO) through the school would identify students prop
 
 Holding back the breakdown costs something in learning value, because feedback is most useful soon after the attempt. Tying it to the deadline, with a release button for teachers who want it sooner, keeps most of that value.
 
+## A later fix: the total as a side channel
+
+Holding back the breakdown turned out not to be enough on its own, because the total leaked part of it. Written answers are marked by the AI in the background, or by the teacher when the AI is off, so a student who submitted and then refreshed the results page would watch their total go from 3 to 5. That rise answers exactly the question the withheld breakdown was meant to keep private: did my written answer earn credit, and how much? A leak like this, where the protected information escapes through something that looks harmless, is called a side channel.
+
+Two fixes were possible. The first was to hide the total until release, which is the simplest rule to explain. It was not chosen, because an event with only multiple-choice questions would lose the total its students see today, and that total gives nothing away. The fix we used keeps a total but freezes it. Before release, the student sees only the score of the questions marked the moment they were answered, labelled "Marked so far", with the number of written answers still to come, such as "3 of 8, 1 answer still being marked." Both numbers are fixed at submit. The count does not tick down as the AI finishes, because a count that dropped to zero while the total stayed put would read like a final score. A blank written answer is scored zero on the spot and never sent anywhere, so it is not counted as waiting.
+
+The rule lives in one function in policy.js, studentTotal, and the submit response now goes through it too. Before this change the submit route added up the total itself. Under in-order navigation an answer can be committed, and marked, before the student submits, so even the first total they saw could already include a mark. Teachers always see the full total. After release, or under the two feedback timings that show the breakdown straight away, the student's total is the full one and rises as marks arrive, because by then the breakdown shows the same information anyway.
+
 ## Glossary
 
 Answer-key oracle: any feature that lets repeated tries reveal the correct answers.
@@ -46,3 +54,5 @@ NFKC: a Unicode normalization that folds look-alike character forms into one sta
 Reset: a teacher action that retires an attempt, keeping its record, so the student can start again.
 Release: the moment the per-question breakdown becomes visible to students.
 SSO (single sign-on): logging in with an existing account, such as a school one, instead of a new password.
+Side channel: a route by which protected information escapes through something that looks harmless, such as a total that changes.
+Marked so far: the student's pre-release total, counting only questions scored the moment they were answered.

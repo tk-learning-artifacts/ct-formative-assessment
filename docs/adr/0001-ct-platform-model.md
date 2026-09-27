@@ -330,10 +330,10 @@ Student endpoints:
 |---|---|
 | `GET /api/web-types` | Renderer files the student page loads |
 | `POST /api/events/join` | Event summary and question count |
-| `POST /api/attempts` | 201 with `attempt` (`id`, `token`, `deadlineAt`), `serverNow`, `event`, `questions`; 409 with `code` for a second start |
-| `GET /api/attempts/:id` | Needs `X-Attempt-Token`. `attempt` (`status`: started/submitted/reset, `deadlineAt`, `late`), `serverNow`, `event`, `questions`, and `result` (`score`, `max`, `pending`, `breakdownReleased`, and `perQuestion` once released) |
-| `POST /api/attempts/:id/submit` | Needs `X-Attempt-Token`. Returns `attempt` and `result` with `score`, `max` and `breakdownReleased` only |
-| `POST /api/attempts/:id/answers/:questionId/commit` | Needs `X-Attempt-Token`. Commits one answer as final when the event's settings need it; returns `committed` and `progress` (ADR 0003) |
+| `POST /api/attempts` | 201 with `attempt` (`id`, `token`, `deadlineAt`), `serverNow`, `event`, `questions` (only the first under in-order navigation, ADR 0003 §3), `questionCount`; 409 with `code` for a second start |
+| `GET /api/attempts/:id` | Needs `X-Attempt-Token`. `attempt` (`status`: started/submitted/reset, `deadlineAt`, `late`), `serverNow`, `event`, `questions` (those reached so far under in-order navigation), `questionCount`, and `result` (`score`, `max`, `pending`, `markedSoFar`, `breakdownReleased`, and `perQuestion` once released). With `?fields=status`, only `attempt` (`id`, `status`, `deadlineAt`, `late`), `serverNow`, `progress` (settings and committed answers, no results) and `result` without `perQuestion` (ADR 0003 §10) |
+| `POST /api/attempts/:id/submit` | Needs `X-Attempt-Token`. Returns `attempt` and `result` with `score`, `max`, `pending`, `markedSoFar` and `breakdownReleased` only |
+| `POST /api/attempts/:id/answers/:questionId/commit` | Needs `X-Attempt-Token`. Commits one answer as final when the event's settings need it; returns `committed`, `progress` and, under in-order navigation, `next` (ADR 0003) |
 
 ## Decided after review (2026-09-27)
 
