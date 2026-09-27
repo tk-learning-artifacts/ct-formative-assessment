@@ -195,6 +195,154 @@
       "audiences": [
         "rgsynapse"
       ]
+    },
+    {
+      "id": "LO-EVENTS-1",
+      "statement": "Trace how events and their handlers determine what code runs, and in what order.",
+      "nodes": [
+        "concept.events"
+      ],
+      "levels": [
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-PARALLEL-1",
+      "statement": "Reason about whether the order of steps that run at the same time changes the final result.",
+      "nodes": [
+        "concept.parallelism"
+      ],
+      "levels": [
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-SORT-RGS-1",
+      "statement": "Trace a pass of a simple sorting algorithm over a short list.",
+      "nodes": [
+        "concept.data.structures.search-sort"
+      ],
+      "levels": [
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-ITERATE-1",
+      "statement": "Use a cycle of trying, testing against a known example, and refining to build or fix a program.",
+      "nodes": [
+        "practice.experimenting-iterating"
+      ],
+      "levels": [
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-REMIX-1",
+      "statement": "Adapt or reuse an existing function to solve a new but related problem.",
+      "nodes": [
+        "practice.reusing-remixing"
+      ],
+      "levels": [
+        "S1"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-DECOMPOSE-1",
+      "statement": "Break a task into smaller steps, in an order that respects what each step depends on, before writing or prompting code for it.",
+      "nodes": [
+        "practice.abstracting-modularizing.decomposition"
+      ],
+      "levels": [
+        "S1"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-GENERALISE-1",
+      "statement": "Spot a pattern across examples and use it to predict an unseen case.",
+      "nodes": [
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "levels": [
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-SPEC-1",
+      "statement": "Decide whether code, including AI-generated code, actually does what was asked, rather than trusting it because it runs or sounds confident.",
+      "nodes": [
+        "practice.reusing-remixing.ai-assisted",
+        "perspective.questioning.ai-output"
+      ],
+      "levels": [
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-PROMPT-1",
+      "statement": "Choose the prompt or follow-up that would get an AI assistant to produce or fix code correctly.",
+      "nodes": [
+        "practice.reusing-remixing.ai-assisted"
+      ],
+      "levels": [
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-EXPRESS-1",
+      "statement": "Recognise using code to create and share a personally meaningful idea, as distinct from automating a routine task.",
+      "nodes": [
+        "perspective.expressing"
+      ],
+      "levels": [
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
+    },
+    {
+      "id": "LO-CONNECT-1",
+      "statement": "Prepare code, including AI-generated code, so that someone else can understand and build on it.",
+      "nodes": [
+        "perspective.connecting"
+      ],
+      "levels": [
+        "S1"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
     }
   ]
 }

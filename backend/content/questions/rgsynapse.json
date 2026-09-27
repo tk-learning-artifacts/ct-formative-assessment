@@ -151,6 +151,716 @@
       "topic": "Reviewing AI code",
       "qType": "Predict the output",
       "details": "Traces list indexing and notices which items the loop skips."
+    },
+    {
+      "id": "RGS-S1-03",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Order of assignment",
+      "prompt": "What does this Python program print?",
+      "code": {
+        "language": "python",
+        "source": "a = 1\nb = a + 1\na = 5\nprint(b)"
+      },
+      "options": [
+        "6",
+        "2",
+        "1",
+        "5"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 4,
+      "difficulty": 1,
+      "ontology": [
+        "concept.sequences",
+        "concept.data.variables",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Sequences and state",
+      "qType": "Predict the output",
+      "details": "b is computed once, from a's value at that line, and does not update later. Distractors: 6 assumes b recalculates from a's later value (a spreadsheet-style dataflow misconception); 1 stops tracing before the reassignment; 5 confuses b with a's final value."
+    },
+    {
+      "id": "RGS-S1-04",
+      "title": "Handlers only run when called",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "prompt": "This program defines two functions named like event handlers, then calls them directly in the order shown. What does it print?",
+      "code": {
+        "language": "python",
+        "source": "def on_key_a():\n    print(\"A\")\n\ndef on_key_b():\n    print(\"B\")\n\non_key_b()\non_key_a()"
+      },
+      "options": [
+        "A\nB",
+        "B\nA",
+        "AB",
+        "Nothing is printed, since no key was actually pressed"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 4,
+      "difficulty": 1,
+      "ontology": [
+        "concept.events",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-EVENTS-1",
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Events",
+      "qType": "Predict the output",
+      "details": "A handler runs when it is called, not in the order it was defined. Distractors: A\\nB assumes definition order decides execution order; AB assumes print does not add a line break; the 'nothing printed' option assumes a handler only fires from a real key press, not a direct call."
+    },
+    {
+      "id": "RGS-S1-05",
+      "title": "Independent counters",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "prompt": "add_a() and add_b() only ever change their own variable, so a program could run them at the same time, or in any order, without changing the result. If add_a() runs twice and add_b() runs once in total, what would print(score_a, score_b) show afterwards, no matter the order the calls happen in?",
+      "code": {
+        "language": "python",
+        "source": "score_a = 0\nscore_b = 0\n\ndef add_a():\n    global score_a\n    score_a += 1\n\ndef add_b():\n    global score_b\n    score_b += 1"
+      },
+      "options": [
+        "2 1",
+        "1 2",
+        "3 0",
+        "1 1"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 5,
+      "difficulty": 2,
+      "ontology": [
+        "concept.parallelism",
+        "concept.data.variables"
+      ],
+      "outcomes": [
+        "LO-PARALLEL-1",
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "computer-processes-hardware"
+      },
+      "topic": "Parallel and independent state",
+      "qType": "Reason about order",
+      "details": "Because the two functions never touch each other's variable, the totals depend only on how many times each was called, not on the order. Distractors: 1 2 swaps which counter got two increments; 3 0 assumes every call adds to score_a; 1 1 assumes repeated calls to the same function only count once."
+    },
+    {
+      "id": "RGS-S1-06",
+      "title": "AND before OR",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "prompt": "What does this Python program print?",
+      "code": {
+        "language": "python",
+        "source": "x = 5\ny = 0\nprint(x > 3 or y == 1 and x < 3)"
+      },
+      "options": [
+        "False",
+        "0",
+        "Error",
+        "True"
+      ],
+      "answer": {
+        "index": 3
+      },
+      "points": 6,
+      "difficulty": 3,
+      "ontology": [
+        "concept.operators.logic",
+        "concept.conditionals",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Logic operators",
+      "qType": "Predict the output",
+      "details": "Python evaluates 'and' before 'or', so this is x > 3 or (y == 1 and x < 3), which is True or False = True. Distractors: False assumes a left-to-right reading, (x > 3 or y == 1) and x < 3, which happens to differ here; 0 assumes booleans print as 0/1 as in some other languages; Error assumes mixing and/or without brackets is invalid."
+    },
+    {
+      "id": "RGS-S1-07",
+      "title": "Reusing a rectangle",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "prompt": "This Swift function computes the area of a rectangle. You want the area of a square with side length s, without writing any new arithmetic. Which call reuses rectangleArea correctly for every value of s?",
+      "code": {
+        "language": "swift",
+        "source": "func rectangleArea(_ w: Double, _ h: Double) -> Double {\n    return w * h\n}"
+      },
+      "options": [
+        "rectangleArea(s)",
+        "rectangleArea(1, s)",
+        "rectangleArea(s, s)",
+        "rectangleArea(s, 1)"
+      ],
+      "answer": {
+        "index": 2
+      },
+      "points": 4,
+      "difficulty": 1,
+      "ontology": [
+        "practice.reusing-remixing",
+        "concept.operators"
+      ],
+      "outcomes": [
+        "LO-REMIX-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reusing a function",
+      "qType": "Choose the reusing call",
+      "details": "rectangleArea(s, s) gives s * s for any s. Distractors: rectangleArea(s) forgets the function needs two arguments and would not compile; rectangleArea(1, s) and rectangleArea(s, 1) both give s, not s squared."
+    },
+    {
+      "id": "RGS-S1-08",
+      "title": "Planning a quiz app prompt",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "prompt": "You want an AI assistant to build a simple quiz app that asks a question, checks one answer, and keeps score across several questions. Which prompt is most likely to get correct, well-structured code on the first try?",
+      "options": [
+        "Build me a quiz app that asks questions, checks answers and keeps score.",
+        "First, write a function that checks whether one answer is correct. Then write a loop that asks several questions using that function and adds up the score.",
+        "First, write a loop that asks several questions and keeps score. Then write a function that checks whether one answer is correct.",
+        "Write a function that keeps score across many questions, without checking whether any answer is correct."
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 5,
+      "difficulty": 2,
+      "ontology": [
+        "practice.abstracting-modularizing.decomposition",
+        "practice.reusing-remixing.ai-assisted"
+      ],
+      "outcomes": [
+        "LO-DECOMPOSE-1",
+        "LO-PROMPT-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "interactions-systems-society"
+      },
+      "topic": "Planning an AI prompt",
+      "qType": "Choose the best prompt",
+      "details": "Breaking the task into the answer-checking function before the loop that depends on it gives the AI a clear, ordered spec. Distractors: option 0 is one vague prompt with no decomposition; option 2 decomposes but in the wrong dependency order (the loop before the function it needs); option 3 leaves out the checking step entirely."
+    },
+    {
+      "id": "RGS-S1-09",
+      "title": "Spot the bug: is_even",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "prompt": "You asked an AI assistant for a Python function that checks whether a number is even. It wrote the code below. What is wrong with it?",
+      "code": {
+        "language": "python",
+        "source": "def is_even(n):\n    if n % 2 = 0:\n        return True\n    else:\n        return False"
+      },
+      "options": [
+        "It uses = instead of ==, so the code will not even run",
+        "It returns True and False the wrong way round",
+        "The % operator does not work on negative numbers",
+        "It should use n // 2 == 0 instead of n % 2 == 0"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 4,
+      "difficulty": 1,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "concept.operators"
+      ],
+      "outcomes": [
+        "LO-AI-REVIEW-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reviewing AI code",
+      "qType": "Spot the bug",
+      "details": "A single = is assignment, not comparison, so Python raises a SyntaxError before the function can even run. Distractors: option 1 imagines a logic-direction bug that is not actually there; option 2 is a plausible-sounding but false claim about %; option 3 offers a working alternative, missing the real syntax error."
+    },
+    {
+      "id": "RGS-S1-10",
+      "title": "Spot the failing case: count_vowels",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "prompt": "An AI assistant wrote this function to count the vowels in a word. Which test word shows that the function has a bug?",
+      "code": {
+        "language": "python",
+        "source": "def count_vowels(word):\n    count = 0\n    for letter in word:\n        if letter in \"aeiou\":\n            count += 1\n    return count"
+      },
+      "options": [
+        "apple",
+        "sky",
+        "queue",
+        "APPLE"
+      ],
+      "answer": {
+        "index": 3
+      },
+      "points": 5,
+      "difficulty": 2,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "practice.testing-debugging.edge-cases",
+        "concept.data.representation.text"
+      ],
+      "outcomes": [
+        "LO-AI-REVIEW-1",
+        "LO-DEBUG-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reviewing AI code",
+      "qType": "Find the failing input",
+      "details": "The check only matches lowercase vowels, so an uppercase word like APPLE is counted as having none. Distractors: apple and queue are all lowercase and are counted correctly; sky has no vowels either way, so both readings agree."
+    },
+    {
+      "id": "RGS-S1-11",
+      "title": "A confident but wrong explanation",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "prompt": "An AI assistant explains: \"In Python, // always rounds to the nearest whole number, so 5 // 2 equals 3.\" Based on how // actually works in Python, what does 5 // 2 evaluate to?",
+      "code": {
+        "language": "python",
+        "source": "print(5 // 2)"
+      },
+      "options": [
+        "3, because // rounds to the nearest whole number, as the AI said",
+        "2, because // rounds down (floor division), not to the nearest whole number",
+        "2.5, because // works like regular division",
+        "An error, because // is not valid in Python"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 5,
+      "difficulty": 2,
+      "ontology": [
+        "perspective.questioning.ai-output",
+        "concept.operators"
+      ],
+      "outcomes": [
+        "LO-SPEC-1",
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "interactions-systems-society"
+      },
+      "topic": "Questioning AI output",
+      "qType": "Predict the output",
+      "details": "// is floor division: it rounds down, not to the nearest whole number, so 5 // 2 is 2. Distractor 0 is the AI's confidently wrong claim; distractor 2 confuses // with /; distractor 3 assumes an unfamiliar operator must be invalid."
+    },
+    {
+      "id": "RGS-S1-12",
+      "title": "Sharing code with a teammate",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "prompt": "You used an AI assistant to write a working chatbot for a class project. Before sharing the code with a teammate so she can build on it, what is most useful to do?",
+      "options": [
+        "Rename unclear variables and add a short comment explaining what each function does",
+        "Delete all comments so the file is shorter",
+        "Keep every variable name exactly as the AI generated it, even where it is unclear, so nothing changes",
+        "Nothing, since the code already works and does not need reviewing before sharing"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 4,
+      "difficulty": 1,
+      "ontology": [
+        "perspective.connecting",
+        "practice.reusing-remixing.ai-assisted"
+      ],
+      "outcomes": [
+        "LO-CONNECT-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "interactions-systems-society"
+      },
+      "topic": "Sharing code with others",
+      "qType": "Choose the best practice",
+      "details": "Judgement question about collaboration practice; no computed key. Correct option is the one that makes the code easier for a teammate to understand and extend; distractors either make it harder to read or skip review entirely."
+    },
+    {
+      "id": "RGS-S2-03",
+      "title": "One pass of a sort",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "prompt": "This code runs one pass over a short list, swapping any two neighbours that are out of order. What does it print?",
+      "code": {
+        "language": "python",
+        "source": "nums = [5, 2, 4, 1]\nfor i in range(len(nums) - 1):\n    if nums[i] > nums[i + 1]:\n        nums[i], nums[i + 1] = nums[i + 1], nums[i]\nprint(nums)"
+      },
+      "options": [
+        "[1, 2, 4, 5]",
+        "[2, 5, 4, 1]",
+        "[2, 4, 1, 5]",
+        "[5, 2, 4, 1]"
+      ],
+      "answer": {
+        "index": 2
+      },
+      "points": 6,
+      "difficulty": 3,
+      "ontology": [
+        "concept.data.structures.search-sort",
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-SORT-RGS-1",
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      },
+      "topic": "Sorting",
+      "qType": "Predict the output",
+      "details": "One bubble-sort pass swaps 5/2, then 5/4, then 5/1, leaving [2, 4, 1, 5]. Distractors: option 0 assumes one pass fully sorts the list; option 1 stops tracing after the first swap; option 3 assumes nothing changes."
+    },
+    {
+      "id": "RGS-S2-04",
+      "title": "A handler that triggers another",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "prompt": "events records which handler ran, in order. on_a() also calls on_b() itself. What does this print?",
+      "code": {
+        "language": "python",
+        "source": "events = []\n\ndef on_a():\n    events.append(\"A\")\n    on_b()\n\ndef on_b():\n    events.append(\"B\")\n\non_a()\non_b()\nprint(events)"
+      },
+      "options": [
+        "['A', 'B', 'B']",
+        "['A', 'B']",
+        "['A', 'B', 'A', 'B']",
+        "['B', 'A', 'B']"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 6,
+      "difficulty": 3,
+      "ontology": [
+        "concept.events",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-EVENTS-1",
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Events",
+      "qType": "Predict the output",
+      "details": "on_a() appends A then triggers on_b(), which appends B; the separate on_b() call afterwards appends a second B. Distractors: option 1 misses the second, direct call to on_b(); option 2 assumes calling on_a() replays both handlers; option 3 gets the first two entries' order backwards."
+    },
+    {
+      "id": "RGS-S2-05",
+      "title": "A lost update",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "prompt": "Two functions, step_a and step_b, each read counter, add 1, and write the result back. counter starts at 0. If their steps happen to interleave in the order shown, what is the final value of counter once both have finished?",
+      "art": "counter = 0\n\nStep 1: step_a reads counter (sees 0)\nStep 2: step_b reads counter (sees 0)\nStep 3: step_a writes counter = 0 + 1\nStep 4: step_b writes counter = 0 + 1",
+      "options": [
+        "2",
+        "0",
+        "An error, because two functions cannot read the same variable",
+        "1"
+      ],
+      "answer": {
+        "index": 3
+      },
+      "points": 7,
+      "difficulty": 4,
+      "ontology": [
+        "concept.parallelism"
+      ],
+      "outcomes": [
+        "LO-PARALLEL-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "computer-processes-hardware"
+      },
+      "topic": "Parallel execution",
+      "qType": "Trace an interleaving",
+      "details": "Both steps read counter before either writes, so one increment is lost: the classic race condition. Distractors: 2 assumes every call always adds one to the running total; 0 assumes the writes reset it; the error option assumes shared reads always crash rather than silently giving a wrong-but-valid result."
+    },
+    {
+      "id": "RGS-S2-06",
+      "title": "not and ==",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "prompt": "What does this Python program print?",
+      "code": {
+        "language": "python",
+        "source": "x = 0\nresult = not x == 5\nprint(result)"
+      },
+      "options": [
+        "False",
+        "True",
+        "0",
+        "None"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 6,
+      "difficulty": 3,
+      "ontology": [
+        "concept.operators.logic",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Logic operators",
+      "qType": "Predict the output",
+      "details": "== binds tighter than not, so this is not (x == 5), which is not False, which is True. Distractor False assumes not binds first, computing (not x) == 5; 0 assumes not on a number returns a number; None assumes the expression is too unusual to print anything meaningful."
+    },
+    {
+      "id": "RGS-S2-07",
+      "title": "Iterating with an AI assistant",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "prompt": "You're using an AI assistant to write a function for compound interest. Which order of steps best follows a good experiment-and-iterate cycle?",
+      "options": [
+        "Write the final, polished version straight away, and test it once at the end.",
+        "Ask the AI for a first attempt, then assume it is correct because it runs without errors, and move on.",
+        "Work out an example calculation by hand, then ask the AI for code, but never test the code because the AI already checked its own work.",
+        "Ask the AI for a first attempt, test it against a calculation you worked out by hand, and if the numbers don't match, tell the AI exactly which case failed and ask it to fix that; then test again."
+      ],
+      "answer": {
+        "index": 3
+      },
+      "points": 6,
+      "difficulty": 3,
+      "ontology": [
+        "practice.experimenting-iterating",
+        "practice.reusing-remixing.ai-assisted"
+      ],
+      "outcomes": [
+        "LO-ITERATE-1",
+        "LO-PROMPT-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "interactions-systems-society"
+      },
+      "topic": "Iterating with an AI assistant",
+      "qType": "Choose the best process",
+      "details": "Judgement question about process, checked by rule rather than computed: the correct option is the only one where a hand-checked test result feeds back into a specific, targeted follow-up prompt, repeated. Distractors: option 0 tests only once at the end; option 1 mistakes 'runs without errors' for 'correct'; option 2 never actually tests the AI's code."
+    },
+    {
+      "id": "RGS-S2-08",
+      "title": "Spotting the conversion pattern",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "prompt": "An AI assistant's convert() function turns a length in feet into metres. You try it on a few examples: convert(1) returns 0.3048; convert(2) returns 0.6096; convert(3) returns 0.9144. Based on this pattern, what would convert(10) most likely return?",
+      "options": [
+        "30.48",
+        "3.048",
+        "0.3048",
+        "10.3048"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 6,
+      "difficulty": 3,
+      "ontology": [
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-GENERALISE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Spotting a pattern",
+      "qType": "Generalise the pattern",
+      "details": "Each example is the input times 0.3048, so convert(10) is 3.048. Distractors: 30.48 misplaces the decimal point; 0.3048 assumes the function always returns the same fixed value; 10.3048 adds the constant instead of scaling by it."
+    },
+    {
+      "id": "RGS-S2-09",
+      "title": "Code as self-expression",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "prompt": "Four classmates each use an AI assistant to help build a small project. Which project is the clearest example of using code to express a personal idea, in the Brennan and Resnick sense of \"expressing\"?",
+      "options": [
+        "A script that automatically sorts a downloads folder by file type",
+        "An unchanged copy of a tutorial's game, typed in exactly as shown",
+        "An animation that turns a poem the student wrote into moving shapes and colours she designed",
+        "A script that checks whether a number is prime"
+      ],
+      "answer": {
+        "index": 2
+      },
+      "points": 5,
+      "difficulty": 2,
+      "ontology": [
+        "perspective.expressing"
+      ],
+      "outcomes": [
+        "LO-EXPRESS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "interactions-systems-society"
+      },
+      "topic": "Expressing ideas with code",
+      "qType": "Choose the best example",
+      "details": "Judgement question about a Brennan & Resnick perspective; no computed key. The animation is a personally meaningful creative work, not just a utility or an unmodified copy."
+    },
+    {
+      "id": "RGS-S2-10",
+      "title": "Checking a password rule against its spec",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "prompt": "Spec: is_valid_password(pw) should return True only if pw is at least 8 characters long AND contains at least one digit. Here is the AI's code. Which password shows that the code does not meet the spec?",
+      "code": {
+        "language": "python",
+        "source": "def is_valid_password(pw):\n    if len(pw) >= 8:\n        return True\n    for ch in pw:\n        if ch.isdigit():\n            return True\n    return False"
+      },
+      "options": [
+        "aaaaaaaa",
+        "abcdefg1",
+        "abcdefg",
+        "12345678"
+      ],
+      "answer": {
+        "index": 0
+      },
+      "points": 7,
+      "difficulty": 4,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "concept.operators.logic",
+        "perspective.questioning.ai-output"
+      ],
+      "outcomes": [
+        "LO-SPEC-1",
+        "LO-AI-REVIEW-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "interactions-systems-society"
+      },
+      "topic": "Checking AI code against a spec",
+      "qType": "Find the failing input",
+      "details": "The code returns True whenever pw is long enough, even with no digit, effectively checking length OR digit instead of length AND digit. \"aaaaaaaa\" is 8 letters with no digit: the spec says False, the code wrongly says True. The other three passwords happen to agree with the spec at those lengths, so they do not expose the bug."
+    },
+    {
+      "id": "RGS-S2-11",
+      "title": "Prompting a precise fix",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "prompt": "reversed_list([1, 2, 3]) should return [3, 2, 1], but it returns None. Here is the AI's code. Which follow-up prompt would most reliably get a correct, targeted fix?",
+      "code": {
+        "language": "python",
+        "source": "def reversed_list(nums):\n    nums.reverse()"
+      },
+      "options": [
+        "Rewrite the whole function from scratch in a different language",
+        "Make the function run faster",
+        "Add more comments explaining what the function does",
+        "Add a return statement so the function returns the reversed list"
+      ],
+      "answer": {
+        "index": 3
+      },
+      "points": 5,
+      "difficulty": 2,
+      "ontology": [
+        "practice.reusing-remixing.ai-assisted",
+        "practice.testing-debugging.reviewing-ai-code"
+      ],
+      "outcomes": [
+        "LO-PROMPT-1",
+        "LO-AI-REVIEW-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "interactions-systems-society"
+      },
+      "topic": "Prompting an AI assistant",
+      "qType": "Choose the best prompt",
+      "details": "nums.reverse() mutates the list in place and returns None, and the function has no return statement of its own, so it implicitly returns None. Distractors: rewriting from scratch and asking for speed both ignore the actual reported bug; more comments would not change the missing return."
+    },
+    {
+      "id": "RGS-S2-12",
+      "title": "A dedupe that never records anything",
+      "type": "mcq",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "prompt": "An AI assistant wrote this function to remove duplicates from a list while keeping the original order. What does dedupe([1, 2, 2, 3, 1]) actually return?",
+      "code": {
+        "language": "python",
+        "source": "def dedupe(items):\n    seen = set()\n    result = []\n    for item in items:\n        if item not in seen:\n            result.append(item)\n    return result"
+      },
+      "options": [
+        "[1, 2, 3]",
+        "[1, 2, 2, 3, 1]",
+        "[]",
+        "[1, 3]"
+      ],
+      "answer": {
+        "index": 1
+      },
+      "points": 6,
+      "difficulty": 3,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "concept.data.structures"
+      ],
+      "outcomes": [
+        "LO-AI-REVIEW-1",
+        "LO-DEBUG-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      },
+      "topic": "Reviewing AI code",
+      "qType": "Predict the output",
+      "details": "The function never adds anything to seen, so 'item not in seen' is always true and every item, including duplicates, is appended unchanged. Distractor 0 assumes the function works as intended; [] assumes the seen check blocks everything; [1, 3] is a plausible-looking but wrong partial dedupe. Illustrates checking a generated function's own logic, not just its name, before trusting it."
     }
   ]
 }
