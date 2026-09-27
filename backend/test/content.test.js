@@ -72,7 +72,7 @@ test("adding a core question does not change what the legacy ALL and level modes
     try {
       assert.equal(store.previewQuestions(selection.legacyModeToFilter("ALL", store.content)).length, 20);
       assert.equal(store.previewQuestions(selection.legacyModeToFilter("P5", store.content)).length, 5);
-      assert.equal(store.previewQuestions({ audiences: ["core"], levels: ["P5"] }).length, 6);
+      assert.equal(store.previewQuestions({ audiences: ["core"], levels: ["P5"], types: ["mcq"] }).length, 6);
     } finally {
       store.close();
     }

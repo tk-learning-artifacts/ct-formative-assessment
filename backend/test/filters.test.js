@@ -45,7 +45,7 @@ test("event filters and picker endpoints", async t => {
     const s1Default = await preview({ filter: { levels: ["S1"], types: ["mcq"] } });
     assert.deepEqual(s1Default.body.byAudience, { core: 5 });
     assert.deepEqual(s1Default.body.filter.audiences, ["core"]);
-    assert.deepEqual((await preview({ filter: { audiences: [], levels: ["P5"] } })).body.byAudience, { core: 5 });
+    assert.deepEqual((await preview({ filter: { audiences: [], levels: ["P5"], types: ["mcq"] } })).body.byAudience, { core: 5 });
 
     const s1Everyone = await preview({ filter: { levels: ["S1"], audiences: ["core", "rgsynapse"], types: ["mcq"] } });
     assert.deepEqual(s1Everyone.body.byAudience, { core: 5, rgsynapse: 12 });
@@ -60,12 +60,12 @@ test("event filters and picker endpoints", async t => {
     ]);
 
     const byOutcome = await preview({ filter: { outcomes: ["LO-DEBUG-1"], audiences: ["core", "rgsynapse"] } });
-    assert.deepEqual(byOutcome.body.questions.map(q => q.id), ["S1-01", "RGS-S1-02", "RGS-S1-10", "RGS-S2-12"]);
+    assert.deepEqual(byOutcome.body.questions.map(q => q.id), ["BLK-S2-01", "S1-01", "RGS-S1-02", "RGS-S1-10", "RGS-S2-12"]);
 
     const outcomeAndLevel = await preview({ filter: { outcomes: ["LO-PATH-1"], levels: ["S2"] } });
     assert.deepEqual(outcomeAndLevel.body.questions.map(q => q.id), ["S2-02"]);
 
-    const difficulty = await preview({ filter: { audiences: ["core"], difficulty: { min: 4 } } });
+    const difficulty = await preview({ filter: { audiences: ["core"], difficulty: { min: 4 }, types: ["mcq"] } });
     assert.equal(difficulty.body.count, 5);
     assert.deepEqual(difficulty.body.byLevel, { S2: 5 });
 
@@ -104,10 +104,10 @@ test("event filters and picker endpoints", async t => {
 
   await t.test("AI-scored questions are opt-in and come last", async () => {
     // A core event never gets RGSynapse or AI questions by default. It does
-    // get the core code-trace and Parsons samples.
+    // get the core code-trace, Parsons and block programming questions.
     const coreS1 = await preview({ filter: { levels: ["S1"] } });
-    assert.deepEqual(coreS1.body.byAudience, { core: 7 });
-    assert.deepEqual(coreS1.body.byType, { mcq: 5, "code-trace": 1, parsons: 1 });
+    assert.deepEqual(coreS1.body.byAudience, { core: 8 });
+    assert.deepEqual(coreS1.body.byType, { mcq: 5, "code-trace": 1, parsons: 1, blocks: 1 });
     assert.equal(coreS1.body.aiRequired, false);
 
     // A level filter on RGSynapse leaves the AI questions out...
@@ -202,7 +202,7 @@ test("event filters and picker endpoints", async t => {
     assert.deepEqual(rgsS2.body.outcomes.map(outcome => outcome.id), [
       "LO-DEBUG-1", "LO-CODE-TRACE-1", "LO-AI-REVIEW-1", "LO-TRANSLATE-1",
       "LO-EVENTS-1", "LO-PARALLEL-1", "LO-SORT-RGS-1", "LO-ITERATE-1",
-      "LO-GENERALISE-1", "LO-SPEC-1", "LO-PROMPT-1", "LO-EXPRESS-1"
+      "LO-GENERALISE-1", "LO-SPEC-1", "LO-PROMPT-1", "LO-EXPRESS-1", "LO-BLOCKS-2"
     ]);
     assert.ok(rgsS2.body.outcomes.every(outcome => outcome.nodes.length > 0));
 

@@ -19,19 +19,28 @@ const MAX_DURATION_MINUTES = 24 * 60;
 const REVIEW_FEEDBACK_MAX_CHARS = 500;
 
 // The files served from web/: its .html, .css and .js files (not build
-// config such as vite.config.js) and the question-type renderers in
-// web/types/. Derived from the folder, so a new renderer needs no edit here.
-// Nothing else (package.json, dotfiles, backend/) is reachable.
+// config such as vite.config.js), the question-type renderers in
+// web/types/, the .js and .css files in web/lib/ (shared with the server)
+// and in each folder of web/vendor/ (vendored libraries, ADR 0005). Derived
+// from the folders, so a new renderer needs no edit here. Nothing else
+// (package.json, licence files, dotfiles, backend/) is reachable.
 function listPublicFiles(dir = webDir) {
+  const filesIn = (sub, pattern) => {
+    const full = path.join(dir, sub);
+    return fs.existsSync(full)
+      ? fs.readdirSync(full).filter(name => pattern.test(name) && fs.statSync(path.join(full, name)).isFile()).map(name => `${sub}/${name}`)
+      : [];
+  };
   const top = fs.readdirSync(dir)
     .filter(name => /\.(html|css|js)$/.test(name) && !/\.config\.js$/.test(name))
     .filter(name => fs.statSync(path.join(dir, name)).isFile());
-  const typesDir = path.join(dir, "types");
-  const types = fs.existsSync(typesDir)
-    ? fs.readdirSync(typesDir).filter(name => name.endsWith(".js")).map(name => `types/${name}`)
+  const vendorDir = path.join(dir, "vendor");
+  const vendor = fs.existsSync(vendorDir)
+    ? fs.readdirSync(vendorDir).filter(name => fs.statSync(path.join(vendorDir, name)).isDirectory())
+      .flatMap(name => filesIn(`vendor/${name}`, /\.(css|js)$/))
     : [];
 
-  return new Set(top.concat(types).sort());
+  return new Set(top.concat(filesIn("types", /\.js$/), filesIn("lib", /\.(css|js)$/), vendor).sort());
 }
 
 const PUBLIC_FILES = listPublicFiles();

@@ -343,6 +343,41 @@
       "audiences": [
         "rgsynapse"
       ]
+    },
+    {
+      "id": "LO-BLOCKS-1",
+      "statement": "Complete a block program with sequences, loops and conditionals so that it does its job on every grid it is tested on, not only the one shown.",
+      "nodes": [
+        "concept.sequences",
+        "concept.loops",
+        "concept.conditionals",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "levels": [
+        "P5",
+        "P6",
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-BLOCKS-2",
+      "statement": "Use a variable and conditions in a block program to keep count or choose a route, and read the same program as Python.",
+      "nodes": [
+        "concept.data.variables",
+        "concept.conditionals",
+        "practice.reusing-remixing.translating"
+      ],
+      "levels": [
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
     }
   ]
 }
