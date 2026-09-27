@@ -77,7 +77,8 @@ Each LO has `id`, `statement`, `nodes` (at least one ontology node), `levels` (a
 | `type` | yes | A registered, active type: `mcq`, `code-trace`, `parsons`, `code-reading`, `blocks` or `open-response-ai` |
 | `audience`, `level` | yes | Level must be offered by the audience |
 | `title`, `prompt` | yes | Plain text; `prompt` keeps line breaks |
-| `art` | no | Monospaced figure (grids and similar) |
+| `art` | no | Monospaced figure (grids and similar). Kept for old snapshots; new content uses `visual` |
+| `visual` | no | A figure drawn from data or a reviewed illustration; public through its kind's allowlist. See ADR 0007 |
 | `code` | no | `{ language, source }`, shown in a code block |
 | `points` | yes | Positive integer |
 | `difficulty` | yes | Integer 1 to 5. Initial values follow level (P5=1 ... S2=4) and should be recalibrated from response data |

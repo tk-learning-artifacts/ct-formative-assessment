@@ -57,7 +57,7 @@ Why client-side, and not SVG rendered at build time or on the server:
 - **Tokens.** The SVG uses class names whose fills and strokes are Slate tokens in `web/visuals/visuals.css`, so a retint of `:root` retints every figure. A build-time SVG file would need its colours baked in, or would have to be inlined to use the page's CSS variables, which is what the client does anyway.
 - **No build step.** The app has none (ADR 0002, ADR 0006). A build-time renderer would need a script run after every content edit and generated files committed beside the data, and those can drift from it. Rendering from the data on every load cannot drift.
 - **One source for three consumers.** The same file validates at boot, generates the description, and draws. The solvers and tests read the same data the page draws from.
-- **Cost.** About 15 KB of script for all five kinds together, loaded once. The data per question is a few hundred bytes.
+- **Cost.** About 46 KB of script (uncompressed and commented) for the core and all six kind files, plus 4 KB of CSS, loaded once per page. The data per question is a few hundred bytes.
 
 The alternative, rendering on the server and sending markup in the question payload, was also weighed. It saves the client the kind files, but it puts trusted HTML in an API response that the page would have to insert unescaped, and the teacher preview would need a second route for it. The kind files are small enough that shipping them is the simpler path. Build-time rendering remains the better choice if a visual ever needs a heavy library (a graph layout engine, a charting library): generate the SVG once, commit it, and treat it like an illustration file.
 
@@ -99,7 +99,7 @@ Visual data and image files are public. The static allowlist serves `web/visuals
 
 - **The projection is an allowlist, twice.** `visual` is added to `BASE_PUBLIC_FIELDS` deliberately, and `scoring.toPublicQuestion` does not copy it as it stands: it passes it through `visuals.toPublic`, which keeps only `kind`, `caption` and the kind's own `fields`. `purpose` and `source` (the generator, the prompt used, the review date) never reach a student. They are not secret in the sense an answer is, but students have no use for them and the generation prompt could describe more than the picture shows.
 - **No answer in the data, the file name or the metadata.** Kind schemas have no field for marking a solution, and validation rejects unknown keys. Image names are the question id. Image files are re-encoded with every chunk except the image data stripped, and a test reads each served image and rejects any text, EXIF, XMP or C2PA chunk.
-- **Tests.** `test/visuals.test.js` checks, for every shipped visual: the public projection has only the allowed keys; no key text (an MCQ's correct option, a code-trace output) appears in the public visual or its description unless the prompt already contains it; the rendered SVG contains no hex, `rgb()` or named colour; each image is under the size cap and carries no metadata. `no-answer-leak.test.js` now also fetches the kind files and images, and `new-types-leak.test.js`-style checks on the start, resume and breakdown responses cover `visual` through the existing `ANSWER_KEYS` scan.
+- **Tests.** `test/visuals.test.js` checks, for every shipped visual: the public projection has only the allowed keys; no key text (an MCQ's correct option, a code-trace output) appears in the public visual or its description unless the prompt already contains it; the rendered SVG contains no hex, `rgb()` or named colour; each image is under the size cap and carries no metadata. The same file starts a real event holding every question with a visual and checks the start response and the released breakdown carry the projected visual and no `purpose` or `source`, while the teacher's question view carries both. `no-answer-leak.test.js` now also fetches the kind files and images (checking the images' content type rather than scanning them as text), and its existing `ANSWER_KEYS` scan of the start, resume and submit responses covers `visual` too. A numeric key the solver computes (P6-01's 6 steps, S2-02's cheapest cost) must not be one of the values a visual draws unless the prompt already contains that number.
 - **Solvers read the visual.** Every question with a structured visual has a solver that reads its data and fails without it. The answer-key test checks this by running the solver with the visual removed and expecting it to throw.
 
 ### 6. Schema and validation at boot
@@ -132,7 +132,7 @@ To add an illustration:
 1. Check it really is context only (§1 rule 4).
 2. Write a prompt with no student data (there is none in content anyway). Ask for a flat illustration, no text, no numbers, a plain light background, and describe only the scene, not the puzzle's answer. The prompts used are in the questions' `source.prompt`.
 3. Generate with `agy -p "…" --dangerously-skip-permissions` or `codex exec -s workspace-write "…"` in a scratch directory (§8), look at the result, and reject it if it breaks any rule in §2.
-4. Optimise and strip metadata: `cwebp -q 72 -resize 640 0 -metadata none in.png -o web/visuals/img/<id>.webp` (or `sips` to resize first).
+4. Optimise and strip metadata: `cwebp -q 70 -resize 640 0 -metadata none in.png -o web/visuals/img/<id>.webp` (or `sips` to resize first).
 5. Add `visual: { kind: "illustration", purpose: "context", src, alt, source }`.
 
 To add a kind: add `web/visuals/kinds/<kind>.js` with the exports in §2 and any styles to `web/visuals/visuals.css`. No shared file changes: the server and both pages find kinds by listing the folder (`GET /api/web-visuals`).
@@ -148,7 +148,30 @@ Which one was used for which image is recorded per question in `source.generator
 
 ## Coverage
 
-See the table at the end of this ADR, filled in when the content was applied.
+Applied on 2026-09-27. 14 questions gained a visual; the 6 block questions already had a stage drawn from grid data with a generated text description, which is this ADR's structured model in all but name, so they count. That is **20 of 69 questions (29%)**: 11 structured visuals, 3 illustrations and 6 block stages.
+
+| Question | Audience, level, type | Kind | Purpose | Note |
+|---|---|---|---|---|
+| P5-01 Packing order | core P5, mcq | illustration | context | codex. Robot, open empty box, sandwich and note beside it; no order shown |
+| P5-02 Sticker pattern | core P5, mcq | cells | reading-load | the first six stickers as shapes, numbered, then "…" |
+| P5-03 Ticket rule | core P5, mcq | flowchart | reading-load | the rule as one question with Yes and No |
+| P6-01 Shortest safe walk | core P6, mcq | grid | information | was `art`; the grid is stated once, in the visual |
+| P6-03 Neighbour swaps | core P6, mcq | cells | reading-load | Start and Goal rows |
+| P6-05 Two-step routes | core P6, mcq | graph | reading-load | the four connections as lines |
+| S1-03 Even-odd machine | core S1, mcq | flowchart | reading-load | the loop and the branch; the solver runs the flowchart |
+| TS-PA-01 Countdown to launch | core S1, parsons | illustration | context | agy. A rocket lifting off |
+| S2-02 Cheapest route | core S2, mcq | graph | reading-load | directed, weighted; was an edge list only |
+| S2-04 Counting blocks | core S2, mcq | cells | reading-load | the code's letters, numbered 1 to 8 |
+| CR-P5-01 What does the cat say? | core P5, code-reading | illustration | context | agy. A cat on a stage, empty speech bubble |
+| RGS-S2-03 One pass of a sort | RGSynapse S2, mcq | cells | reading-load | `nums` under its indexes 0 to 3 |
+| RGS-S2-05 A lost update | RGSynapse S2, mcq | table | information | was `art`; one column per function |
+| RGS-S2-08 Spotting the conversion pattern | RGSynapse S2, mcq | table | reading-load | the examples, then `convert(10)` and "?" |
+| BLK-P5-01, BLK-P6-01, BLK-S1-01, BLK-S2-01 | core P5 to S2, blocks | block stage (ADR 0006) | information | existing |
+| BLK-RGS-S1-01, BLK-RGS-S2-01 | RGSynapse S1, S2, blocks | block stage (ADR 0006) | information | existing |
+
+By audience: 15 of 30 core questions and 5 of 39 RGSynapse questions. No RGSynapse S1 question gained a new visual: its questions are code (the code is the structure) or judgement questions, and the one with a stage (BLK-RGS-S1-01) already counts. Considered and left out: S2-03 (an example move would show that two black tiles is reachable, which rules out an option), P5-05 (an illustration of three switches would carry the count the answer depends on), P6-02 (a picture of a machine would be decoration and nothing more).
+
+Five images were generated in all: one test image from each tool, then the three above, each accepted on first review.
 
 ## Consequences
 
