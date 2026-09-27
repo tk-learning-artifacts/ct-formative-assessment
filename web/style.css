@@ -638,6 +638,8 @@ pre {
 .opt__text {
   font-weight: 800;
   line-height: 1.45;
+  /* An option can be multi-line printed output (RGS-S1-04). */
+  white-space: pre-line;
 }
 
 .nav {

@@ -88,7 +88,7 @@ Each LO has `id`, `statement`, `nodes` (at least one ontology node), `levels` (a
 | `details` | no | Teacher-only focus note. Never sent to students, because it often names the method or the answer |
 | type-specific | per type | For `mcq`: `options` (at least 2, distinct) and `answer: { index }`. For `code-trace`, `parsons` and `open-response-ai`, see below |
 
-Correct-answer positions in the shipped banks are balanced (six keys at each of positions 0 to 3), so "always pick B" earns nothing in particular.
+Correct-answer positions in the shipped multiple-choice questions are balanced (eleven keys at each of positions 0 to 3 across the 44), so "always pick B" earns nothing in particular.
 
 Three more types became active in Phase 2 (2026-09-27):
 

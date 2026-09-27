@@ -162,12 +162,13 @@ module.exports = {
   "RGS-S1-08": q => ({
     // Judgement question about decomposition order, checked by rule: the
     // correct prompt introduces the single-answer check before the loop that
-    // depends on it.
+    // depends on it, and says the loop uses it.
     pick: option => {
       const text = option.toLowerCase();
       const checkIndex = text.indexOf("checks whether one answer is correct");
       const loopIndex = text.indexOf("loop");
-      return checkIndex !== -1 && loopIndex !== -1 && checkIndex < loopIndex;
+      const usesCheck = text.indexOf("using that function");
+      return checkIndex !== -1 && loopIndex !== -1 && checkIndex < loopIndex && usesCheck > loopIndex;
     }
   }),
 

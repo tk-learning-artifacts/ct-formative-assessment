@@ -217,7 +217,7 @@ All content is JSON under `backend/content/`. Restart the server (nodemon does t
 - Every question needs at least one `ontology` node and one `outcomes` LO, and each LO must cover the question's level and audience.
 - `details` is for teachers only and never reaches students.
 - `difficulty` is 1 to 5.
-- Spread correct answers across positions; the shipped banks have six keys at each of positions 0 to 3.
+- Spread correct answers across positions; the 44 shipped multiple-choice questions have eleven keys at each of positions 0 to 3.
 - Adding a core question does not change the legacy `ALL` or single-level modes. They are pinned in `legacy-modes.json`, and only an edit there changes them.
 
 Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question id. It gets the question and returns either the answer value (matched against option text or its leading number) or `{ pick: optionText => boolean }`. Parse the numbers from the question's text where you can. For code, either parse what you need or pin the exact source and translate it to JavaScript. Code-trace solvers return the program's output; Parsons solvers get the program built from each accepted order and return what it prints, which must equal `expectedOutput`. When `python3` or `swift` is installed, the answer-key test also runs these programs for real. A question that genuinely cannot be computed goes in `NOT_COMPUTABLE` in `test/solvers/index.js` with a reason. `npm test` fails if a question has neither.

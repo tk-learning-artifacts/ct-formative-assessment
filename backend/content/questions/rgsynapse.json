@@ -165,12 +165,12 @@
       },
       "options": [
         "6",
-        "2",
         "1",
+        "2",
         "5"
       ],
       "answer": {
-        "index": 1
+        "index": 2
       },
       "points": 4,
       "difficulty": 1,
@@ -232,7 +232,7 @@
       "type": "mcq",
       "audience": "rgsynapse",
       "level": "S1",
-      "prompt": "add_a() and add_b() only ever change their own variable, so a program could run them at the same time, or in any order, without changing the result. If add_a() runs twice and add_b() runs once in total, what would print(score_a, score_b) show afterwards, no matter the order the calls happen in?",
+      "prompt": "add_a() and add_b() only ever change their own variable, so running them one after another in any order gives the same result. If add_a() runs twice and add_b() runs once in total, one call at a time, what would print(score_a, score_b) show afterwards, no matter the order the calls happen in?",
       "code": {
         "language": "python",
         "source": "score_a = 0\nscore_b = 0\n\ndef add_a():\n    global score_a\n    score_a += 1\n\ndef add_b():\n    global score_b\n    score_b += 1"
@@ -261,7 +261,7 @@
       },
       "topic": "Parallel and independent state",
       "qType": "Reason about order",
-      "details": "Because the two functions never touch each other's variable, the totals depend only on how many times each was called, not on the order. Distractors: 1 2 swaps which counter got two increments; 3 0 assumes every call adds to score_a; 1 1 assumes repeated calls to the same function only count once."
+      "details": "Because the two functions never touch each other's variable, the totals depend only on how many times each was called, not on the order. Distractors: 1 2 swaps which counter got two increments; 3 0 assumes every call adds to score_a; 1 1 assumes repeated calls to the same function only count once. The calls happen one at a time: two add_a() calls that truly overlapped could lose an update, which RGS-S2-05 is about."
     },
     {
       "id": "RGS-S1-06",
@@ -367,7 +367,7 @@
       },
       "topic": "Planning an AI prompt",
       "qType": "Choose the best prompt",
-      "details": "Breaking the task into the answer-checking function before the loop that depends on it gives the AI a clear, ordered spec. Distractors: option 0 is one vague prompt with no decomposition; option 2 decomposes but in the wrong dependency order (the loop before the function it needs); option 3 leaves out the checking step entirely."
+      "details": "Breaking the task into the answer-checking function first, then a loop that uses it, gives the AI a clear, ordered spec in which each piece builds on the last. Distractors: option 0 is one vague prompt with no decomposition; option 2 decomposes, but asks for the score-keeping loop before anything exists to tell it which answers are right, and never says the loop should use the checking function, so the two pieces may not connect; option 3 leaves out the checking step entirely."
     },
     {
       "id": "RGS-S1-09",
@@ -403,7 +403,7 @@
       },
       "topic": "Reviewing AI code",
       "qType": "Spot the bug",
-      "details": "A single = is assignment, not comparison, so Python raises a SyntaxError before the function can even run. Distractors: option 1 imagines a logic-direction bug that is not actually there; option 2 is a plausible-sounding but false claim about %; option 3 offers a working alternative, missing the real syntax error."
+      "details": "A single = is assignment, not comparison, so Python raises a SyntaxError before the function can even run. Distractors: option 1 imagines a logic-direction bug that is not actually there; option 2 is a plausible-sounding but false claim about %; option 3 swaps in n // 2 == 0, which is not an even test at all (it is True only for 0 and 1) and misses the real syntax error."
     },
     {
       "id": "RGS-S1-10",
@@ -632,12 +632,12 @@
       },
       "options": [
         "False",
-        "True",
         "0",
+        "True",
         "None"
       ],
       "answer": {
-        "index": 1
+        "index": 2
       },
       "points": 6,
       "difficulty": 3,

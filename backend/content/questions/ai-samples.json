@@ -31,12 +31,12 @@
       "rubric": [
         {
           "id": "full",
-          "description": "Explains that count -= 1 is not indented, so it is outside the loop and count stays 10, which keeps count > 0 true forever; and says to indent count -= 1 into the loop body.",
+          "description": "Explains that count -= 1 is not indented, so it is outside the loop and count stays 10, which keeps count > 0 true forever; and gives a fix that makes count go down inside the loop: indent count -= 1 into the loop body, or an equivalent working change such as a for loop over range(10, 0, -1).",
           "points": 2
         },
         {
           "id": "partial",
-          "description": "Gives only one of the two: why count never changes (the line is outside the loop), or the fix (indent count -= 1), without the other.",
+          "description": "Gives only one of the two: why count never changes (the line is outside the loop), or a working fix (such as indenting count -= 1), without the other.",
           "points": 1
         },
         {
@@ -104,7 +104,7 @@
       "audience": "rgsynapse",
       "level": "S2",
       "title": "Before you trust it",
-      "prompt": "An AI assistant says this function checks whether a word is a palindrome (it reads the same backwards). Before you trust it, which test inputs would you try, and what should each one return? Give at least two, and say whether the function passes them.",
+      "prompt": "An AI assistant says this function checks whether a word is a palindrome (it reads the same backwards). It is for a word game where players may type words with or without capital letters. Before you trust it, which test inputs would you try, and what should each one return? Give at least two, and say whether the function passes them.",
       "code": {
         "language": "python",
         "source": "def is_palindrome(word):\n    return word == word[::-1]"
@@ -127,7 +127,7 @@
       "rubric": [
         {
           "id": "full",
-          "description": "Gives at least two concrete inputs with the expected result, including one the function gets wrong, such as mixed case (\"Racecar\" should be True but returns False).",
+          "description": "Gives at least two concrete inputs with the expected result, including one the function gets wrong, such as mixed case (\"Racecar\" should be True but returns False), and says the function fails it.",
           "points": 3
         },
         {
