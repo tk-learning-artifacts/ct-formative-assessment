@@ -204,7 +204,7 @@
       "audience": "core",
       "level": "S1",
       "title": "Follow the winding path",
-      "prompt": "The sprite walks along a path with no forks until it reaches the flag. When there is a path ahead it moves. Fill the \"else\" gap so that at a bend it turns the right way. The same program must work on other winding paths too.",
+      "prompt": "The sprite walks along a path with no forks until it reaches the flag. When there is a path ahead it moves. Fill the \"else\" gap so that at a bend it turns towards the path. The same program must work on other winding paths too.",
       "example": {
         "grid": [
           "...#...",
@@ -266,7 +266,7 @@
           "start": {
             "x": 0,
             "y": 0,
-            "facing": "north"
+            "facing": "east"
           },
           "expect": {
             "reachGoal": true
@@ -798,7 +798,7 @@
       "audience": "rgsynapse",
       "level": "S2",
       "title": "Solve any maze",
-      "prompt": "Write the body of the loop so the sprite finds the flag in any maze like this one, not just the one shown. Paths branch and some are dead ends. Hint: a walker who always keeps a hand on the wall on one side never gets lost in a maze with no loops. Run it, see where it goes wrong, and refine.",
+      "prompt": "Write the body of the loop so the sprite finds the flag in any maze like this one, not just the one shown. Paths branch and some are dead ends. Hint: in mazes like these, a walker who always keeps one hand on the wall on the same side reaches the flag. Run it, see where it goes wrong, and refine.",
       "example": {
         "grid": [
           "......#",
