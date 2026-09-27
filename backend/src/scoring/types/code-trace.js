@@ -33,9 +33,26 @@ function keyForms(question) {
   return [question.answer.output].concat(question.answer.accepted || []);
 }
 
-// Matching lines, position by position, against one accepted form. Extra or
-// missing lines count against the student through the larger denominator.
-function lineMatch(expected, given) {
+// Blank lines at the start and end removed. Only partial credit uses this:
+// one stray blank line typed above the output would otherwise shift every
+// line down by one and match none of them. The key is trimmed the same way,
+// so a key that starts with a blank line still lines up.
+function trimBlankLines(lines) {
+  let start = 0;
+  let end = lines.length;
+
+  while (start < end && lines[start] === "") start += 1;
+  while (end > start && lines[end - 1] === "") end -= 1;
+
+  return lines.slice(start, end);
+}
+
+// Matching lines, position by position, against one accepted form, with
+// blank lines at either end ignored. Extra or missing lines count against
+// the student through the larger denominator.
+function lineMatch(expectedLines, givenLines) {
+  const expected = trimBlankLines(expectedLines);
+  const given = trimBlankLines(givenLines);
   let matched = 0;
 
   expected.forEach((line, i) => {
@@ -144,7 +161,8 @@ module.exports = {
     }
 
     // Best line match over every accepted form. A wrong answer never earns
-    // full marks, even if rounding would allow it.
+    // full marks, even if rounding would allow it, so an answer that differs
+    // from the key only by a blank line at the start earns max - 1.
     const best = forms
       .map(form => lineMatch(form, given))
       .reduce((a, b) => (b.matched / b.of > a.matched / a.of ? b : a));

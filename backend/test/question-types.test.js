@@ -56,6 +56,27 @@ test("code-trace can collapse spaces, accept other forms and give credit per lin
   assert.equal(scoreTrace(partial, "1\n2\n3").earned, 0, "lines are compared by position");
 });
 
+test("code-trace partial credit ignores blank lines at the start and end of the answer", () => {
+  const partial = { ...traceQuestion, marking: { partial: "lines" } };
+
+  // One stray blank line above the output used to shift every line and
+  // score 0. It still differs from the output, so it never reaches full marks.
+  assert.deepEqual(scoreTrace(partial, "\na  b\n1\n2\n3"), { status: "scored", earned: 3, max: 4, correct: false, detail: { partial: { matchedLines: 4, ofLines: 4 } } });
+  assert.equal(scoreTrace(partial, "\n\n  \na  b\n1\n9\n3\n\n").earned, 3, "several blank lines, and a wrong line after them");
+  assert.deepEqual(scoreTrace(partial, "\na  b\n\n1\n2\n3").detail, { partial: { matchedLines: 1, ofLines: 5 } }, "only the ends are trimmed: a blank line inside the output still shifts the lines after it");
+
+  // All or nothing is unchanged: the same answer scores 0 without partial
+  // credit, because leading blank lines are part of the output.
+  assert.equal(scoreTrace(traceQuestion, "\na  b\n1\n2\n3").earned, 0);
+
+  // A key that starts with a blank line still needs it for full marks, and
+  // lines up with an answer that leaves it out.
+  const blankFirst = { ...partial, answer: { output: "\nx\ny" } };
+  assert.equal(scoreTrace(blankFirst, "\nx\ny").earned, 4);
+  assert.equal(scoreTrace(blankFirst, "x\ny").earned, 3);
+  assert.deepEqual(scoreTrace(blankFirst, "x\nz").detail, { partial: { matchedLines: 1, ofLines: 2 } });
+});
+
 test("code-trace records exactly what the student typed and validates its key", () => {
   assert.deepEqual(scoring.scoreResponse(traceQuestion, "a  b \r\n1").recorded, { text: "a  b \n1" });
   assert.equal(scoring.scoreResponse(traceQuestion, "").recorded, null);
@@ -330,12 +351,12 @@ test("code-trace and Parsons attempts over HTTP, from start to the released brea
   await t.test("submitting returns only the totals", async () => {
     const right = await submit(app, good.attempt, correctAnswers);
     assert.equal(right.status, 200);
-    assert.deepEqual(right.body.result, { score: 26, max: 26, breakdownReleased: false });
+    assert.deepEqual(right.body.result, { score: 26, max: 26, pending: 0, markedSoFar: false, breakdownReleased: false });
 
     const wrong = await submit(app, bad.attempt, wrongAnswers);
     assert.equal(wrong.status, 200);
     // CT-01: 2 of 4 lines; CT-02: 1 of 3; PA-02: longest run "list zero loop" 3 of 6 -> 2 of 5.
-    assert.deepEqual(wrong.body.result, { score: 5, max: 26, breakdownReleased: false });
+    assert.deepEqual(wrong.body.result, { score: 5, max: 26, pending: 0, markedSoFar: false, breakdownReleased: false });
 
     const before = await getAttempt(app, bad.attempt);
     assert.equal(before.body.result.perQuestion, undefined);

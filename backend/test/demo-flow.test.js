@@ -49,7 +49,7 @@ test("DEMO123 end to end", async t => {
     const res = await submit(app, grace, Object.fromEntries(ORIGINAL_IDS.map(id => [id, keys[id]])));
 
     assert.equal(res.status, 200);
-    assert.deepEqual(res.body.result, { score: 90, max: 90, breakdownReleased: false });
+    assert.deepEqual(res.body.result, { score: 90, max: 90, pending: 0, markedSoFar: false, breakdownReleased: false });
     assert.equal(res.body.attempt.late, false);
     assert.equal(res.body.attempt.status, "submitted");
   });

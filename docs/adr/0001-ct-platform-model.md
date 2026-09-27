@@ -92,7 +92,7 @@ Correct-answer positions in the shipped multiple-choice questions are balanced (
 
 Three more types became active in Phase 2 (2026-09-27):
 
-- `code-trace`: the student types the output of `code`. `answer: { output, accepted? }`, optional `marking: { collapseSpaces?, partial?: "lines" }`. Line endings are unified and trailing whitespace dropped before comparing. The response is stored as `{ text }`.
+- `code-trace`: the student types the output of `code`. `answer: { output, accepted? }`, optional `marking: { collapseSpaces?, partial?: "lines" }`. Line endings are unified and trailing whitespace dropped before comparing. The response is stored as `{ text }`. Leading blank lines count for an exact match, because they are part of the output. Partial credit per line (`partial: "lines"`) ignores blank lines at the start and end of both the answer and the key before lining them up (added 2026-09-27), so one stray blank line typed above the output no longer shifts every line and scores 0. Such an answer still differs from the output, so it earns one point less than full marks, the same cap as any other wrong answer; a blank line inside the output still shifts the lines after it.
 - `parsons`: the student orders `lines: [{ id, text }]`, with indentation inside the text, and leaves out distractors. `language`, `answer: { order, alternatives? }`, optional `expectedOutput` (public) and `marking: { partial: "longest-run" }`. Students get the lines under opaque ids, in a fixed shuffle that is never a correct order or the content order; validation rejects a question with no such order. Both the ids and the shuffle's seed are HMACs under a key derived from `JWT_SECRET`, so a student who has the source can neither guess content ids by hashing them nor replay the shuffle to recover the order the author wrote (unkeyed, both recovered the full answer in review). Rotating `JWT_SECRET` changes the ids, so a Parsons answer in progress then is lost. The response is stored as `{ lines: [{ id, text }] }`.
 - `open-response-ai`: free text scored by the AI provider against `rubric: [{ id, description, points }]` (at least 2 criteria, one worth the full points and one worth 0; server-only), with optional `responseMaxChars` (20 to 1000). Scoring is asynchronous; see §10. Its questions live in `questions/ai-samples.json`. They have no single key to compute, so their solvers compute the facts each full-credit criterion relies on, and the answer-key test checks that the criterion names them.
 
@@ -178,7 +178,7 @@ Event times must be absolute ISO 8601 strings with `Z` or an offset. A bare `202
   - For `attempt-in-progress` the response includes the attempt id, so a tab that holds that attempt's token resumes it. Without the token the student must ask the teacher.
   - The check and the insert share one synchronous transaction, so two simultaneous starts cannot both succeed.
 - **Teacher reset.** `POST /api/events/:id/attempts/:attemptId/reset` (owner only) sets `reset_at` and `reset_by`. The attempt is kept for the record and can no longer be submitted, and the student may start again.
-- **Results release.** On submit the student sees only the total. The per-question breakdown is returned by `GET /api/attempts/:id` only once `end_at` has passed or the teacher calls `POST /api/events/:id/release` (sets `events.results_released_at`). The breakdown covers which questions were right, the chosen and correct options, and AI feedback in `detail_json`.
+- **Results release.** On submit the student sees only the total. Before release that total leaves out every AI-scored question (added 2026-09-27, see ADR 0003 §4): it is labelled "Marked so far", with the number of written answers marked separately, and neither number moves when the AI or the teacher marks them, since a rise would say whether the answer earned credit. The per-question breakdown is returned by `GET /api/attempts/:id` only once `end_at` has passed or the teacher calls `POST /api/events/:id/release` (sets `events.results_released_at`). The breakdown covers which questions were right, the chosen and correct options, and AI feedback in `detail_json`.
   - Before release the student page says the teacher will release the breakdown.
   - Events that existed before the migration are marked released, so their behaviour does not change.
 - ADR 0003 (2026-09-27) makes feedback timing and navigation per-event settings. The rule above is the `release` mode, which stays the default for new events and applies to every existing one.
@@ -297,7 +297,7 @@ Phase 1 shipped the interface and guardrails. Phase 2 adds the OpenRouter adapte
   - It sets `scored`, keeps the AI's detail for the record under a new `review: { score, feedback?, reviewedBy, reviewedAt }`, and recomputes the total.
   - The teacher page shows each AI answer with its status, reason, the AI's feedback, and a small score-and-feedback form.
 - **What the student sees** (`policy.studentResultView`).
-  - `result.pending` counts answers still being marked; the total rises as they are scored. The student page says "being marked" and checks back every 15 s while any are pending.
+  - `result.pending` counts answers still being marked; once the breakdown is visible (`end`, `each`, or `release` after release) the total rises as they are scored. Before release the student's total is the instantly marked part and `pending` counts every non-blank AI-scored answer, with `markedSoFar: true` (ADR 0003 §4). The student page says "being marked" and checks back every 15 s while any are pending.
   - Per-question detail appears only after release, and only as `{ source: "ai", feedbackCode, feedback? }` or `{ source: "teacher", feedback? }`. Criterion ids, failure reasons, model names and reviewer ids stay with the teacher.
   - Feedback text is escaped like everything else on the page. Needs-review answers say "Waiting for your teacher to mark this."
 - **Tests** use a fake transport and never touch the network:
@@ -330,10 +330,10 @@ Student endpoints:
 |---|---|
 | `GET /api/web-types` | Renderer files the student page loads |
 | `POST /api/events/join` | Event summary and question count |
-| `POST /api/attempts` | 201 with `attempt` (`id`, `token`, `deadlineAt`), `serverNow`, `event`, `questions`; 409 with `code` for a second start |
-| `GET /api/attempts/:id` | Needs `X-Attempt-Token`. `attempt` (`status`: started/submitted/reset, `deadlineAt`, `late`), `serverNow`, `event`, `questions`, and `result` (`score`, `max`, `pending`, `breakdownReleased`, and `perQuestion` once released) |
-| `POST /api/attempts/:id/submit` | Needs `X-Attempt-Token`. Returns `attempt` and `result` with `score`, `max` and `breakdownReleased` only |
-| `POST /api/attempts/:id/answers/:questionId/commit` | Needs `X-Attempt-Token`. Commits one answer as final when the event's settings need it; returns `committed` and `progress` (ADR 0003) |
+| `POST /api/attempts` | 201 with `attempt` (`id`, `token`, `deadlineAt`), `serverNow`, `event`, `questions` (only the first under in-order navigation, ADR 0003 §3), `questionCount`; 409 with `code` for a second start |
+| `GET /api/attempts/:id` | Needs `X-Attempt-Token`. `attempt` (`status`: started/submitted/reset, `deadlineAt`, `late`), `serverNow`, `event`, `questions` (those reached so far under in-order navigation), `questionCount`, and `result` (`score`, `max`, `pending`, `markedSoFar`, `breakdownReleased`, and `perQuestion` once released). With `?fields=status`, only `attempt` (`id`, `status`, `deadlineAt`, `late`), `serverNow`, `progress` (settings and committed answers, no results) and `result` without `perQuestion` (ADR 0003 §10) |
+| `POST /api/attempts/:id/submit` | Needs `X-Attempt-Token`. Returns `attempt` and `result` with `score`, `max`, `pending`, `markedSoFar` and `breakdownReleased` only |
+| `POST /api/attempts/:id/answers/:questionId/commit` | Needs `X-Attempt-Token`. Commits one answer as final when the event's settings need it; returns `committed`, `progress` and, under in-order navigation, `next` (ADR 0003) |
 
 ## Decided after review (2026-09-27)
 

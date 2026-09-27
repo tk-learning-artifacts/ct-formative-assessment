@@ -38,6 +38,21 @@
 // Every route that shows a student their result, or a committed answer, goes
 // through studentResultView() or committedAnswerView(), so this file is the
 // only place these rules live.
+//
+// The total before release (decided here, 2026-09-27). Under "release" the
+// student sees a total but not the breakdown. If that total rose when an AI
+// or teacher mark arrived, the rise would tell the student whether their
+// written answer earned credit, which is the breakdown by another route.
+// Until release, the total a student sees is therefore the score of the
+// questions marked the moment they were answered (every type that does not
+// need the AI), labelled "Marked so far", with the number of answers marked
+// later. Both numbers are fixed at submit: neither depends on whether, or
+// how, those answers have been marked since. Hiding the total altogether
+// was the alternative; it was not chosen because an event with no AI
+// questions would lose the total its students see today, and the instant
+// part leaks nothing. Teachers always see the full total.
+
+const scoring = require("./scoring");
 
 function normalizePart(value) {
   return String(value || "")
@@ -143,6 +158,23 @@ function committedAnswerView(event, item) {
   return view;
 }
 
+// How many of the event's questions, from the first, a student may hold.
+// Under in-order navigation (decided by Akmal, 2026-09-27) an attempt gets
+// them one at a time: the ones it has committed, which are the first ones,
+// and the one it is on, so the content of later questions never reaches the
+// browser early. An attempt that ran while the event's navigation was free
+// (heldAll) was sent every question then and keeps them; so does every
+// attempt under free navigation. The same count applies after submit:
+// answers stored at submit are not commits, so it covers exactly the
+// questions the student reached.
+function deliveredQuestionCount(event, { total, committed, heldAll }) {
+  if (navigationMode(event) !== "linear" || heldAll) {
+    return total;
+  }
+
+  return Math.min(total, committed + 1);
+}
+
 // The attempt's settings and committed answers, for the start and resume
 // responses of an attempt still in progress.
 function studentProgressView(event, committedItems) {
@@ -153,21 +185,74 @@ function studentProgressView(event, committedItems) {
   };
 }
 
+// The same, for the status poll (GET /api/attempts/:id?fields=status): only
+// which answers are committed and, under "each", how far each one's marking
+// has got, so the page can tell whether to fetch the full attempt. No result,
+// key or feedback.
+function studentStatusView(event, committedItems) {
+  const each = feedbackMode(event) === "each";
+
+  return {
+    feedbackMode: feedbackMode(event),
+    navigationMode: navigationMode(event),
+    committed: (committedItems || []).map(item => {
+      const view = { questionId: item.id, skipped: item.response === null };
+
+      if (each) {
+        view.status = item.status;
+      }
+
+      return view;
+    })
+  };
+}
+
+// Whether an answer is marked after it is given, by the AI job or the
+// teacher, rather than by its scorer at once. A blank answer to an AI-scored
+// question is scored 0 on the spot and is never sent, so it is not waiting
+// for anything.
+function marksLater(item) {
+  const impl = scoring.getType(item.type);
+  return Boolean(impl && impl.requiresAi) && item.response !== null;
+}
+
+// The total a student may see. Once the breakdown is visible it is the full
+// total, and pending counts answers still being marked. Before that (only
+// under "release") it is the instant part, with markedSoFar set and pending
+// counting every answer marked later, whatever its status now; see the note
+// at the top of this file. An AI-scored question contributes nothing to the
+// instant part even when its answer was blank, so a teacher's mark on it
+// cannot move the total either.
+function studentTotal(event, result, now = Date.now()) {
+  const released = studentMaySeeBreakdown(event, now);
+  const items = result.perQuestion || [];
+
+  if (released) {
+    return { score: result.score, max: result.max, pending: result.pending || 0, markedSoFar: false, breakdownReleased: true };
+  }
+
+  const later = items.filter(marksLater).length;
+  const instant = items
+    .filter(item => {
+      const impl = scoring.getType(item.type);
+      return !(impl && impl.requiresAi);
+    })
+    .reduce((sum, item) => sum + (item.earned || 0), 0);
+
+  return { score: instant, max: result.max, pending: later, markedSoFar: later > 0, breakdownReleased: false };
+}
+
 // result: { score, max, pending, perQuestion } as computed from the stored
-// answers. pending counts answers still being marked; the total rises as
-// they are scored.
+// answers. pending counts answers still being marked. The total is the one
+// studentTotal allows: it rises as answers are marked only once the
+// breakdown is visible.
 function studentResultView(event, result, now = Date.now()) {
   if (!result) {
     return null;
   }
 
-  const released = studentMaySeeBreakdown(event, now);
-  const view = {
-    score: result.score,
-    max: result.max,
-    pending: result.pending || 0,
-    breakdownReleased: released
-  };
+  const view = studentTotal(event, result, now);
+  const released = view.breakdownReleased;
 
   if (released) {
     view.perQuestion = result.perQuestion.map(studentItem);
@@ -190,6 +275,10 @@ module.exports = {
   studentMaySeeBreakdown,
   studentFeedback,
   committedAnswerView,
+  deliveredQuestionCount,
   studentProgressView,
+  studentStatusView,
+  marksLater,
+  studentTotal,
   studentResultView
 };
