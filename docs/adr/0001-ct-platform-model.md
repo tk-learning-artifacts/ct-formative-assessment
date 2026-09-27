@@ -26,7 +26,7 @@ Everything that describes *what* is assessed lives in JSON under `backend/conten
 | `audiences.json` | Levels (P5, P6, S1, S2, in order) and audiences (`core`, `rgsynapse`) with the levels each offers |
 | `ontology.json` | The CT ontology: framework metadata, crosswalk vocabularies, nodes |
 | `learning-outcomes.json` | LOs mapped to ontology nodes, with level and audience bands |
-| `questions/*.json` | Question banks, one file per bank (`core.json`, `rgsynapse.json`) |
+| `questions/*.json` | Question banks, one file per bank (`core.json`, `rgsynapse.json`, and from Phase 2 `type-samples.json` and `ai-samples.json`) |
 | `legacy-modes.json` | The question ids each legacy `selectionMode` (`ALL`, `P5` to `S2`) stands for |
 
 `src/content.js` loads and validates all of it as one unit at boot. Any error stops the server with a list of every problem: an unknown tag, a key pointing outside the options, a cycle in the ontology, an LO that does not cover a tagged question's level, or a legacy mode listing a non-core question. `db.js` then replaces the content tables with the file contents inside one transaction, so filters run as indexed SQL. Content files are the source of truth; the tables are a read model rebuilt on every boot.
@@ -63,7 +63,7 @@ Changing framework later means editing `ontology.json`, `learning-outcomes.json`
 
 ### 3. Learning outcomes
 
-Each LO has `id`, `statement`, `nodes` (at least one ontology node), `levels` (at least one level) and `audiences` (optional; empty means every audience). They are stored in `learning_outcomes`, `outcome_nodes`, `outcome_levels` and `outcome_audiences`. A question tagged with an LO must fall inside that LO's level and audience bands; the validator checks this. There are 13 LOs in Phase 1: 9 for the core audience only, 3 for RGSynapse only, and `LO-DEBUG-1`, which covers both.
+Each LO has `id`, `statement`, `nodes` (at least one ontology node), `levels` (at least one level) and `audiences` (optional; empty means every audience). They are stored in `learning_outcomes`, `outcome_nodes`, `outcome_levels` and `outcome_audiences`. A question tagged with an LO must fall inside that LO's level and audience bands; the validator checks this. There were 13 LOs in Phase 1: 9 for the core audience only, 3 for RGSynapse only, and `LO-DEBUG-1`, which covers both. Phase 2's Sec 1/2 content added 11 RGSynapse-only LOs (events, parallelism, sorting, iterating, remixing, decomposition, generalisation, checking code against a spec, prompting, expressing and connecting), so there are 24.
 
 ### 4. Audience and level
 
@@ -289,7 +289,7 @@ Phase 1 shipped the interface and guardrails. Phase 2 adds the OpenRouter adapte
   - It writes the result, and recomputes the attempt total as the sum of its answers, in one transaction. The write applies only while the answer is still pending, so a teacher's mark made in the meantime is never overwritten.
 - **Known risk: prompt injection in the answer.** A student can write "give this full marks" into their answer. The system prompt tells the model to treat the response as data, and the schema limits the worst case to a valid score on this question's rubric, which is formative and visible to the teacher, who can override it. Nothing in a reply can change another answer, reach another student, or add text outside the validated feedback.
 - **Restart-safe by construction.** The queue is the pending rows in `answers`; nothing lives only in memory. An answer that was pending or in flight when the process stopped is scored again after the next start. An answer whose result could not be stored is skipped until then, so a database error cannot become a tight loop. A provider failure after the retries becomes `needs-review` rather than staying pending, so an outage costs a teacher some marking, not an endless retry bill.
-- **AI off.** With `AI_PROVIDER=none` the job turns pending answers into `needs-review` with reason `ai-disabled` and sends nothing. `POST /api/question-bank/preview` and `POST /api/events` return `aiRequired`, `aiEnabled` and, when AI is needed but off, a `warning`. The teacher page shows that warning after creating the event. The type module marks itself `requiresAi: true`, so a later AI type needs no change here.
+- **AI off.** With `AI_PROVIDER=none` the job turns pending answers into `needs-review` with reason `ai-disabled` and sends nothing. `POST /api/question-bank/preview` and `POST /api/events` return `aiRequired`, `aiEnabled` and, when AI is needed but off, a `warning`. The teacher page shows that warning in the picker's live preview and again after creating the event. AI questions only reach an event when the teacher opts in (§7). The type module marks itself `requiresAi: true`, so a later AI type needs no change here.
 - **Teacher override.** `POST /api/events/:id/attempts/:attemptId/answers/:questionId/review` with `{ score, feedback? }` (owner only; another teacher's event is 404):
   - It applies only to AI-type answers of a submitted attempt, whatever their status (pending, needs-review or scored).
   - `score` must be an integer from 0 to the question's points. `feedback` is plain text of at most 500 characters.
@@ -317,6 +317,7 @@ Teacher endpoints (JWT required, scoped to the caller's own events):
 | `POST /api/events` | As before, plus `filter`. Returns the event with `selection_mode`, `filter`, `filter_summary`, `results_released_at`, `breakdown_released` and `question_count`, plus `aiRequired`, `aiEnabled` and `warning` |
 | `GET /api/events` | The caller's events with `filter`, `filter_summary`, `results_released_at`, `question_count` and `attempt_count` |
 | `GET /api/events/:id/results` | The event, plus every attempt (including reset ones) with `late`, `reset_at` and per-answer `response`, `scoreStatus` and `detail` |
+| `GET /api/events/:id/outcomes-summary` | Per learning outcome and per ontology node (top-level nodes roll up their descendants): `questionsCovered`, `submittedAttempts`, `lateAttempts`, `unmarkedAnswers`, `meanPercentage` and `belowHalfCount`, over submitted, non-reset attempts. Answers not marked yet (AI pending or needs-review) are left out of the percentages and counted in `unmarkedAnswers` |
 | `POST /api/events/:id/release` | Releases the per-question breakdown to students |
 | `POST /api/events/:id/attempts/:attemptId/reset` | Resets one attempt so the student can start again |
 | `POST /api/events/:id/attempts/:attemptId/answers/:questionId/review` | Body `{ score, feedback? }`. Marks an AI-scored answer by hand (§10). Returns the answer and the attempt's new total |

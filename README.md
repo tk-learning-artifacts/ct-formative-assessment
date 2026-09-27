@@ -27,6 +27,7 @@ ct-formative-assessment/
 │   │   ├── content.js        Loads and validates backend/content/
 │   │   ├── selection.js      Event filters -> question lists
 │   │   ├── policy.js         One attempt per student; when students see their breakdown
+│   │   ├── outcomes-summary.js  Per-outcome and per-CT-node results for one event
 │   │   ├── security.js       Password hashing, attempt tokens
 │   │   ├── scoring/          Scorer registry; one module per question type in scoring/types/
 │   │   ├── migrations/       Timestamped migrations, recorded in schema_migrations
@@ -41,7 +42,7 @@ ct-formative-assessment/
 │   ├── index.html / app.js   Student quiz UI (countdown, auto-submit, resume after refresh)
 │   ├── type-registry.js      Loads the question-type renderers
 │   ├── types/                One renderer per question type (mcq, code-trace, parsons, open-response-ai)
-│   ├── admin.html / admin.js Teacher portal
+│   ├── admin.html / admin.js Teacher portal: event picker with live preview, results, per-outcome summary, AI marking
 │   ├── style.css             Shared styles (dark/light mode)
 │   └── vite.config.js        Dev server config (proxy + multi-page build)
 ├── docs/adr/                 Architecture decision records
@@ -153,10 +154,11 @@ The suite uses Node's built-in test runner (`node:test`) with `supertest` for HT
 | `teacher-scoping.test.js` | Teachers only see their own events and results |
 | `auth.test.js` | `JWT_SECRET` and `SEED_TEACHER_PASSWORD` rules, refusal of the demo password in production, `set-password`, salted hashes and rehash |
 | `migration.test.js` | Upgrading `fixtures/v1-app.sql` (made by the original code), chosen-option text kept, events with submissions left as their students saw them, backup, idempotence, rollback |
-| `filters.test.js` | Pinned legacy modes, the core-audience default, v2 filters, preview = event count, ontology/outcomes/catalog endpoints |
+| `filters.test.js` | Pinned legacy modes, the core-audience default, AI-scored questions opt-in and last, v2 filters, preview = event count, ontology/outcomes/catalog endpoints |
 | `events.test.js` | Absolute times only, 24-hour duration cap |
 | `scoring.test.js` | Types loaded from files, public projection checked for every type, plugging in a new type |
-| `question-types.test.js` | Code-trace normalisation and partial credit; Parsons scoring, opaque ids and a shuffle that never shows a correct order; an HTTP attempt from start to released breakdown |
+| `question-types.test.js` | Code-trace normalisation and partial credit; Parsons scoring, opaque ids and a shuffle that never shows a correct order, both keyed with the server secret (the attacks that recovered the answer unkeyed are replayed); an HTTP attempt from start to released breakdown |
+| `outcomes-summary.test.js` | Per-outcome and per-node results: rollups, reset, late and unsubmitted attempts, unmarked AI answers left out of the averages, owner scoping |
 | `content.test.js` | Content validation catches bad tags, bands, keys, cycles and legacy modes |
 | `ai.test.js` | AI off by default; the guarded provider builds every request; adversarial tests for each way student data could leak; model output validation |
 | `ai-openrouter.test.js` | The OpenRouter wire format and data-policy options; good, malformed and schema-breaking replies; timeout; 429 then success; bounded retries (fake `fetch`, no network) |
