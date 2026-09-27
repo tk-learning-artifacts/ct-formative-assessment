@@ -1,7 +1,7 @@
 # ADR 0003: Assessment settings and quick setup
 
-- **Status:** Accepted, 2026-09-27 (branch `feat/assessment-settings`). Akmal asked for all three parts; the choices below that he did not specify are marked as decided here, and are open to his review.
-- **Scope:** Two per-event settings (feedback timing and navigation), a per-question commit endpoint, quick setup presets for choosing questions, and a question-count cap on filters. Builds on ADR 0001 §7 (selection) and §8 (answer-key protection).
+- **Status:** Accepted, 2026-09-27 (branch `feat/assessment-settings`). Akmal asked for all three parts; the choices below that he did not specify are marked as decided here, and are open to his review. His answers to the three open questions of the first version are in "Decisions on the open questions" and sections 10 and 11.
+- **Scope:** Two per-event settings (feedback timing and navigation), a per-question commit endpoint, quick setup presets for choosing questions, a question-count cap on filters, editing an event's settings after creation, and recording which preset an event came from. Builds on ADR 0001 §7 (selection) and §8 (answer-key protection).
 
 ## Context
 
@@ -54,6 +54,8 @@ The combination `each` + `free` locks answers on commit, but the student may sti
 - `committedAnswerView(event, item)`: the result only under `each`.
 - `studentProgressView(event, items)`: the settings and committed answers, sent on start (`progress`) and on resume of an attempt in progress (`progress`, otherwise null).
 
+Each function is given the event as it is now, never as it was when the attempt started, so a teacher's change to the settings (section 10) applies from a student's next request.
+
 `breakdownReleased(event)` keeps its meaning (teacher release or `end_at`), which is what the teacher's page reports for `release` events.
 
 ### 5. Quick setup presets
@@ -68,6 +70,7 @@ A choice `{ id, who?, emphasis?, length? }` compiles to an ordinary filter (`src
 
 Checked at boot (`content.js`, then `db.js` once the content tables exist):
 
+- `shortLength` is an integer from 1 to 100, the largest `filter.limit` an event accepts
 - each filter is valid as an event filter, with no `questionIds`
 - a preset spanning several audiences offers `who`, so every compiled filter has one audience and fits the advanced picker
 - a preset that fixes `nodes` cannot offer `emphasis`, and one that fixes `limit` cannot offer `length`
@@ -82,17 +85,41 @@ The shipped presets are: Core CT check (P5 to S2), RGSynapse Sec 1 starter, RGSy
 
 ### 7. The teacher form
 
-Quick setup cards are the default view, with the chosen card's knobs under it and a line showing the live count, points, AI use and the AI-off warning. Choosing a card fills the advanced picker, which stays available, collapsed, as "Customise"; while it is open it decides the questions, as before. The picker gains a "Most questions" field for `limit`. The legacy "Question set" select appears only if the presets fail to load, without the three broken RGSynapse options. The legacy `selectionMode` API is unchanged.
+Quick setup cards are the default view, with the chosen card's knobs under it and a line showing the live count, points, AI use and the AI-off warning. Choosing a card or knob fills the advanced picker, which stays available, collapsed, as "Customise"; while it is open it decides the questions, as before. Once the teacher changes anything in Customise, closing it no longer refills the picker from the card, so their edits are there when they reopen it; choosing another card or knob starts again from that card. The picker gains a "Most questions" field for `limit`. The legacy "Question set" select appears only if the presets fail to load, without the three broken RGSynapse options. The legacy `selectionMode` API is unchanged.
 
 The two settings are small radio groups under the event's times. The event card and the results header show both. Under `each` and `end` the results header says when students see their results, and the Release button is hidden, because it would change nothing for students.
 
 ### 8. The student page
 
-The page reads the settings from `progress`. Under `linear` there is no Back; Next needs an answer and commits it, and Skip (with a confirmation) commits a blank. Under `each`, Check answer commits and shows the result under the locked answer. The progress dots are filled when answered, dashed when skipped, square once locked, and faded ahead of the current question under `linear`; the strip also says "N answered, M skipped". A refresh resumes at the first uncommitted question under `linear`.
+The page reads the settings from `progress`. Under `linear` there is no Back; Next needs an answer and commits it, and Skip (with a confirmation) commits a blank. Under `each`, Check answer commits and shows the result under the locked answer; a wrong answer shows the correct one beside it. While a commit is in flight the answer area is inert, so the locked answer drawn afterwards is what the server stored. A Skip that meets `time-up` submits with that question blank, whatever was typed into it. If a commit's response is lost and the retry gets `answer-locked`, the page fetches the attempt and shows that question's stored result, rather than moving on. The progress dots are filled when answered, dashed when skipped, square once locked, and faded ahead of the current question under `linear`; the strip also says "N answered, M skipped". A refresh resumes at the first uncommitted question under `linear`.
 
 ### 9. Storage
 
 Migration `202609270609-assessment-settings` adds `events.feedback_mode` (default `release`), `events.navigation_mode` (default `free`), both with CHECK constraints, and `answers.committed_at`. Existing events and answers are unchanged in meaning.
+
+### 10. Editing an event's settings (decided by Akmal, 2026-09-27)
+
+`PATCH /api/events/:id`, owner only (another teacher's event is the same 404 as a missing one), changes any of `title`, `feedbackMode`, `navigationMode`, `durationMinutes`, `startAt` and `endAt`, validated as at creation: absolute ISO times only, and the deadline later than the opening time, checked against the stored value of whichever one is not in the body. `null` or an empty value clears a time limit or a time. Anything else is refused with 400; the question set (`filter`, `preset`, `selectionMode` and similar) has its own message, because students' answers refer to the snapshot in `event_questions`. The response is `{ event, changes, attemptsUpdated }`.
+
+A teacher may edit at any time, including once students have started. What happens to attempts already running or finished:
+
+- **Feedback timing** is read from the event on every request (section 4), so there is nothing to migrate. Loosening (`release` to `end` to `each`) shows a submitted student their breakdown on their next request, and under `each` shows the results of answers already committed. Tightening (`each` to `release`) hides results from then on: committed answers stay committed and locked, and are listed as `{ questionId, skipped }` without a result; a submitted attempt shows its total only until release. If the new pair no longer locks answers (`release` or `end` with `free`), the commit endpoint answers `commit-not-used` and the remaining answers arrive at submit, which keeps every committed row.
+- **Navigation, free to in order:** from then on the student cannot go back. The page moves them to the first question with no answer, committed or typed, and commits, in order, the answers they had given before it (the commit endpoint's in-order rule accepts exactly that sequence). Questions they answered further on keep their typed answers. Because the attempt ran while navigation was free, its submit takes the body's answer for every uncommitted question, not only the current one; an attempt that started after the change gets the in-order submit rule in full (`db.submitAttempt` checks `event_setting_changes` for a `navigation_mode` change from `free` after the attempt started).
+- **Navigation, in order to free:** the student moves freely among the questions they have not committed. Committed ones stay locked.
+- **No change ever unlocks a committed answer.** A second commit is always `answer-locked`, and submit always keeps committed rows.
+- **Time limit and deadline:** every attempt still in progress (not submitted, not reset) gets `deadline_at` recomputed as the earlier of its start plus the time limit and the event's deadline, the same rule as at start, or null when neither is set. A deadline that has already passed is not enforced at the moment of the edit: the next commit gets `time-up`, and the page submits; the submit is stored and flagged late under the usual `SUBMIT_GRACE_SECONDS` rule. Nothing is lost. Changing the opening time does not affect attempts that have started.
+- **The student page** reads the current settings and deadline from `GET /api/attempts/:id` (`progress.feedbackMode`, `progress.navigationMode`, `attempt.deadlineAt`) after every move between questions and every 30 seconds (every 15 while an answer is being marked), restarts the timer when the deadline changes, and shows a one-line note on what the teacher changed. It redraws the question only when something it shows has changed, so a student typing is not interrupted by a result arriving for another question.
+- **Audit trail:** migration `202609271500-event-setting-changes` adds `event_setting_changes` (event, teacher, field, old value, new value, time), one row per field that actually changed; an edit that repeats the stored value writes nothing. `GET /api/events/:id/results` returns them newest first as `settingChanges`, and the results view lists them under "Settings history."
+
+The teacher's "Edit settings" form sits in the results view, with a note on what changes for students in progress and a line saying the questions cannot change. It sends only the fields the teacher touched.
+
+**Marking before submit (decided here).** Under `each` with AI off, a committed AI-scored answer becomes "Waiting for your teacher" at once. The teacher can now mark a committed answer of an attempt still in progress, so the student sees the mark on their next request. The attempt's total still appears only after submit, which sums every row, marks included. Answers on a reset attempt cannot be marked, and the scoring job no longer sends them to the AI provider.
+
+### 11. Preset provenance (decided by Akmal, 2026-09-27)
+
+Migration `202609271501-event-preset-provenance` adds `events.preset_id`, `events.preset_options_json` (the knob values, with defaults filled in for any left out) and `events.preset_customised`. An event created from a card (`{ preset }`) records the preset with `customised` 0. The form sends `{ filter, basedOnPreset }` when Customise is open; the server compiles `basedOnPreset` and sets `customised` only if the filter differs from it (lists compared in any order), so opening Customise and changing nothing still reads as the preset. An event from the advanced picker alone, the legacy question set, or before this migration has no preset.
+
+The teacher event APIs return `preset: { id, options, customised, summary }` or null. `summary` is built from the current `presets.json` (for example "Loops and conditionals (RGSynapse Secondary 1, short)"), leaving out an audience note that says nothing beyond the label, and falling back to the preset id if the preset has since been removed. The event card and results view say "From preset: …", with ", then customised" when that applies, or "Custom selection." Students never see it.
 
 ## Consequences
 
@@ -101,9 +128,14 @@ Migration `202609270609-assessment-settings` adds `events.feedback_mode` (defaul
 - Teachers see committed answers of attempts still in progress in `GET /api/events/:id/results` (with `committedAt`); the per-outcome summary still counts submitted attempts only.
 - The student breakdown is now in question order even when answers were committed out of order.
 - Presets are content: adding or changing one is a JSON edit and a restart, and a bad one stops the server with a list of problems.
+- A teacher's mid-event change reaches students within about 30 seconds, or on their next move. Tightening feedback cannot take back a key a student has already seen; it only stops showing it.
+- Each running student page makes one small GET every 30 seconds. For a class of 40 that is under 2 requests a second.
+- A preset renamed in `presets.json` renames the "From preset" line of older events too, because the summary is built from the current file; the stored id and knob values do not change.
 
-## Open questions
+## Decisions on the open questions
 
-1. Should the teacher be able to change the settings after creating an event, before anyone starts? Today they are fixed at creation, like the questions.
-2. Should `each` show the key after a wrong answer, or only "incorrect" and let the student try again (for no marks)? Today it shows the key, as asked.
-3. Should the event record which preset it came from? Today it records the filter only.
+The first version of this ADR left three questions open. Akmal answered them on 2026-09-27:
+
+1. **Can the teacher change an event's settings after creating it?** Yes, even after students have started. See section 10. The question set stays fixed.
+2. **Should `each` show the correct answer after a wrong one?** Yes, as built. `event-settings-edit.test.js` covers it for a committed wrong answer.
+3. **Should the event record which preset it came from?** Yes, with the knob values and whether it was customised. See section 11.
