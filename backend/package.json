@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "node --test --test-timeout=30000 --test-force-exit test/*.test.js"
+    "test": "node --test --test-timeout=30000 --test-force-exit test/*.test.js",
+    "set-password": "node scripts/set-password.js"
   },
   "dependencies": {
     "better-sqlite3": "~12.9.0",

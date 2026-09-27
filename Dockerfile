@@ -1,8 +1,8 @@
-# Stage 1: install production dependencies only
+# Stage 1: install production dependencies only, exactly as locked
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY backend/package.json ./backend/
-RUN npm install --prefix backend --omit=dev
+COPY backend/package*.json ./backend/
+RUN cd backend && npm ci --omit=dev
 
 # Stage 2: lean production image
 FROM node:20-alpine AS runtime
@@ -13,6 +13,7 @@ RUN addgroup -S app && adduser -S app -G app
 COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY backend/src                           ./backend/src
 COPY backend/content                       ./backend/content
+COPY backend/scripts                       ./backend/scripts
 COPY backend/package.json                  ./backend/
 COPY web                                   ./web
 
