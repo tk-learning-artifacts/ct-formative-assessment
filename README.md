@@ -18,7 +18,7 @@ ct-formative-assessment/
 │   │   ├── ontology.json         CT ontology (Brennan & Resnick + CT Quest sub-nodes)
 │   │   ├── learning-outcomes.json  LOs mapped to ontology nodes
 │   │   ├── legacy-modes.json     Question ids behind the old ALL/P5/P6/S1/S2 modes
-│   │   └── questions/            Question banks (core.json, rgsynapse.json)
+│   │   └── questions/            Question banks (core.json, rgsynapse.json, type-samples.json)
 │   ├── src/
 │   │   ├── server.js         Entry point: loads config, starts the app
 │   │   ├── app.js            Express app: routes, JWT auth, static allowlist
@@ -39,7 +39,7 @@ ct-formative-assessment/
 ├── web/                      Frontend: plain HTML/CSS/JS, no framework
 │   ├── index.html / app.js   Student quiz UI (countdown, auto-submit, resume after refresh)
 │   ├── type-registry.js      Loads the question-type renderers
-│   ├── types/                One renderer per question type (mcq.js)
+│   ├── types/                One renderer per question type (mcq, code-trace, parsons)
 │   ├── admin.html / admin.js Teacher portal
 │   ├── style.css             Shared styles (dark/light mode)
 │   └── vite.config.js        Dev server config (proxy + multi-page build)
@@ -153,6 +153,7 @@ The suite uses Node's built-in test runner (`node:test`) with `supertest` for HT
 | `filters.test.js` | Pinned legacy modes, the core-audience default, v2 filters, preview = event count, ontology/outcomes/catalog endpoints |
 | `events.test.js` | Absolute times only, 24-hour duration cap |
 | `scoring.test.js` | Types loaded from files, public projection checked for every type, plugging in a new type |
+| `question-types.test.js` | Code-trace normalisation and partial credit; Parsons scoring, opaque ids and a shuffle that never shows a correct order; an HTTP attempt from start to released breakdown |
 | `content.test.js` | Content validation catches bad tags, bands, keys, cycles and legacy modes |
 | `ai.test.js` | AI off by default; the guarded provider builds every request; adversarial tests for each way student data could leak; model output validation |
 
@@ -196,7 +197,7 @@ All content is JSON under `backend/content/`. Restart the server (nodemon does t
 - Spread correct answers across positions; the shipped banks have six keys at each of positions 0 to 3.
 - Adding a core question does not change the legacy `ALL` or single-level modes. They are pinned in `legacy-modes.json`, and only an edit there changes them.
 
-Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question id. It gets the question and returns either the answer value (matched against option text or its leading number) or `{ pick: optionText => boolean }`. Parse the numbers from the question's text where you can. For code, either parse what you need or pin the exact source and translate it to JavaScript. A question that genuinely cannot be computed goes in `NOT_COMPUTABLE` in `test/solvers/index.js` with a reason. `npm test` fails if a question has neither.
+Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question id. It gets the question and returns either the answer value (matched against option text or its leading number) or `{ pick: optionText => boolean }`. Parse the numbers from the question's text where you can. For code, either parse what you need or pin the exact source and translate it to JavaScript. Code-trace solvers return the program's output; Parsons solvers get the program built from each accepted order and return what it prints, which must equal `expectedOutput`. When `python3` or `swift` is installed, the answer-key test also runs these programs for real. A question that genuinely cannot be computed goes in `NOT_COMPUTABLE` in `test/solvers/index.js` with a reason. `npm test` fails if a question has neither.
 
 **Add an ontology node** to `ontology.json` under an existing parent of the same kind. The top two levels are reserved for Brennan & Resnick; CT Quest nodes go below them and cite `{ "framework": "ctquest" }`.
 
