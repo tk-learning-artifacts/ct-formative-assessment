@@ -337,6 +337,28 @@ function loadContent(contentDir = DEFAULT_CONTENT_DIR) {
     });
   });
 
+  // Legacy selectionMode values, pinned to explicit question ids.
+  const legacyFile = readJson(path.join(contentDir, "legacy-modes.json"));
+  const legacyModes = legacyFile.modes || {};
+  const byId = new Map(questions.map(question => [question.id, question]));
+
+  ["ALL", "P5", "P6", "S1", "S2"].forEach(mode => {
+    if (!Array.isArray(legacyModes[mode]) || !legacyModes[mode].length) {
+      errors.push(`legacy-modes.json: mode "${mode}" needs a non-empty list of question ids`);
+    }
+  });
+
+  Object.entries(legacyModes).forEach(([mode, ids]) => {
+    (ids || []).forEach(id => {
+      const question = byId.get(id);
+      if (!question) {
+        errors.push(`legacy-modes.json: mode "${mode}" lists unknown question "${id}"`);
+      } else if (question.audience !== "core" || (mode !== "ALL" && question.level !== mode)) {
+        errors.push(`legacy-modes.json: mode "${mode}" lists "${id}", which is not a core ${mode === "ALL" ? "" : `${mode} `}question`);
+      }
+    });
+  });
+
   if (errors.length) {
     const error = new Error(`Content in ${contentDir} is invalid:\n- ${errors.join("\n- ")}`);
     error.contentErrors = errors;
@@ -349,7 +371,8 @@ function loadContent(contentDir = DEFAULT_CONTENT_DIR) {
     audiences: catalog.audiences,
     nodes,
     outcomes,
-    questions
+    questions,
+    legacyModes
   };
 }
 

@@ -1,0 +1,15 @@
+{
+  "description": "What the original selectionMode values mean, pinned to explicit question ids so that adding core questions never changes an ALL or single-level event.",
+  "modes": {
+    "ALL": [
+      "P5-01", "P5-02", "P5-03", "P5-04", "P5-05",
+      "P6-01", "P6-02", "P6-03", "P6-04", "P6-05",
+      "S1-01", "S1-02", "S1-03", "S1-04", "S1-05",
+      "S2-01", "S2-02", "S2-03", "S2-04", "S2-05"
+    ],
+    "P5": ["P5-01", "P5-02", "P5-03", "P5-04", "P5-05"],
+    "P6": ["P6-01", "P6-02", "P6-03", "P6-04", "P6-05"],
+    "S1": ["S1-01", "S1-02", "S1-03", "S1-04", "S1-05"],
+    "S2": ["S2-01", "S2-02", "S2-03", "S2-04", "S2-05"]
+  }
+}

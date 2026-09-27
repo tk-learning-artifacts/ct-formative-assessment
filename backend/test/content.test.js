@@ -53,8 +53,30 @@ const brokenCases = [
     data.nodes.push({ id: "concept.algorithms", kind: "concept", label: "Algorithms", parent: "concept", prerequisites: [], sources: [{ framework: "ctquest", term: "x" }] });
   }, /reserved for brennan-resnick-2012 nodes/],
   ["questions/core.json", data => { data.questions[0].crosswalk = { bebrasCategory: "robots" }; }, /crosswalk bebrasCategory "robots" is not one of/],
-  ["questions/core.json", data => { data.questions[0].crosswalk = { moe: "x" }; }, /unknown crosswalk "moe"/]
+  ["questions/core.json", data => { data.questions[0].crosswalk = { moe: "x" }; }, /unknown crosswalk "moe"/],
+  ["legacy-modes.json", data => { data.modes.ALL.push("NOPE-1"); }, /lists unknown question "NOPE-1"/],
+  ["legacy-modes.json", data => { data.modes.P5.push("S1-01"); }, /not a core P5 question/],
+  ["legacy-modes.json", data => { data.modes.ALL.push("RGS-S1-01"); }, /not a core question/],
+  ["legacy-modes.json", data => { delete data.modes.S2; }, /mode "S2" needs/]
 ];
+
+test("adding a core question does not change what the legacy ALL and level modes select", () => {
+  const { openDatabase } = require("../src/db");
+  const selection = require("../src/selection");
+
+  withEditedContent("questions/core.json", data => {
+    data.questions.push({ ...data.questions[0], id: "P5-99", title: "New P5 question" });
+  }, dir => {
+    const store = openDatabase({ dbPath: ":memory:", contentDir: dir });
+    try {
+      assert.equal(store.previewQuestions(selection.legacyModeToFilter("ALL", store.content)).length, 20);
+      assert.equal(store.previewQuestions(selection.legacyModeToFilter("P5", store.content)).length, 5);
+      assert.equal(store.previewQuestions({ audiences: ["core"], levels: ["P5"] }).length, 6);
+    } finally {
+      store.close();
+    }
+  });
+});
 
 brokenCases.forEach(([file, edit, pattern]) => {
   test(`the validator rejects: ${pattern}`, () => {

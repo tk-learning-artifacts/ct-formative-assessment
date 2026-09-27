@@ -1,31 +1,32 @@
 // Turns a teacher's event filter into a list of questions.
 //
-// Filter shape (every key optional; omitted or empty means "no constraint"):
+// Filter shape (every key optional; omitted or empty means "no constraint",
+// except audiences, which defaults to ["core"] so a P5 cohort never gets
+// RGSynapse questions by accident):
 //   {
-//     audiences:  ["core"],                 question.audience is one of these
-//     levels:     ["S1", "S2"],             question.level is one of these
-//     outcomes:   ["LO-TRACE-1"],           tagged with at least one of these LOs
-//     nodes:      ["concept.loops"],        tagged with one of these ontology nodes
+//     audiences:   ["core"],                question.audience is one of these
+//     questionIds: ["P5-01", "P5-02"],      question.id is one of these
+//     levels:      ["S1", "S2"],            question.level is one of these
+//     outcomes:    ["LO-TRACE-1"],          tagged with at least one of these LOs
+//     nodes:       ["concept.loops"],       tagged with one of these ontology nodes
 //                                           or any node beneath them
-//     types:      ["mcq"],                  question.type is one of these
-//     difficulty: { "min": 1, "max": 3 }    inclusive difficulty band
+//     types:       ["mcq"],                 question.type is one of these
+//     difficulty:  { "min": 1, "max": 3 }   inclusive difficulty band
 //   }
 // Keys combine with AND; values inside one key combine with OR.
 //
-// The legacy selectionMode values map onto filters over the core audience, so
-// "ALL" still means the original 20 questions even as other banks are added.
+// The legacy selectionMode values map onto explicit question ids listed in
+// backend/content/legacy-modes.json, so "ALL" still means the original 20
+// questions even as the core bank grows.
 
 const scoring = require("./scoring");
 
 const LEGACY_MODES = ["ALL", "P5", "P6", "S1", "S2"];
-const LIST_KEYS = ["audiences", "levels", "outcomes", "nodes", "types"];
+const LIST_KEYS = ["audiences", "questionIds", "levels", "outcomes", "nodes", "types"];
+const DEFAULT_AUDIENCES = ["core"];
 
-function legacyModeToFilter(mode) {
-  if (mode === "ALL") {
-    return { audiences: ["core"] };
-  }
-
-  return { audiences: ["core"], levels: [mode] };
+function legacyModeToFilter(mode, content) {
+  return { audiences: ["core"], questionIds: content.legacyModes[mode].slice() };
 }
 
 function cleanList(value) {
@@ -41,7 +42,7 @@ function cleanList(value) {
 }
 
 // Returns { filter, errors }. The returned filter is canonical: only known
-// keys, deduplicated lists, empty lists dropped.
+// keys, deduplicated lists, empty lists dropped, audiences always present.
 function normalizeFilter(input, content) {
   const errors = [];
   const filter = {};
@@ -58,6 +59,7 @@ function normalizeFilter(input, content) {
 
   const known = {
     audiences: new Set(content.audiences.map(audience => audience.id)),
+    questionIds: new Set(content.questions.map(question => question.id)),
     levels: new Set(content.levels.map(level => level.id)),
     outcomes: new Set(content.outcomes.map(outcome => outcome.id)),
     nodes: new Set(content.nodes.map(node => node.id))
@@ -94,27 +96,42 @@ function normalizeFilter(input, content) {
     filter[key] = list;
   });
 
-  if (input.difficulty !== undefined && input.difficulty !== null) {
-    const { min, max } = input.difficulty;
-    const band = {};
+  if (!filter.audiences) {
+    filter.audiences = DEFAULT_AUDIENCES.slice();
+  }
 
-    [["min", min], ["max", max]].forEach(([name, value]) => {
-      if (value === undefined || value === null) {
-        return;
+  const difficulty = input.difficulty;
+
+  if (difficulty !== undefined && difficulty !== null) {
+    if (typeof difficulty !== "object" || Array.isArray(difficulty)) {
+      errors.push("filter.difficulty must be an object like { \"min\": 1, \"max\": 3 }");
+    } else {
+      const band = {};
+
+      Object.keys(difficulty).forEach(key => {
+        if (key !== "min" && key !== "max") {
+          errors.push(`unknown filter.difficulty key "${key}"`);
+        }
+      });
+
+      [["min", difficulty.min], ["max", difficulty.max]].forEach(([name, value]) => {
+        if (value === undefined || value === null) {
+          return;
+        }
+        if (!Number.isInteger(value) || value < 1 || value > 5) {
+          errors.push(`filter.difficulty.${name} must be an integer from 1 to 5`);
+          return;
+        }
+        band[name] = value;
+      });
+
+      if (band.min && band.max && band.min > band.max) {
+        errors.push("filter.difficulty.min must not be greater than max");
       }
-      if (!Number.isInteger(value) || value < 1 || value > 5) {
-        errors.push(`filter.difficulty.${name} must be an integer from 1 to 5`);
-        return;
+
+      if (Object.keys(band).length) {
+        filter.difficulty = band;
       }
-      band[name] = value;
-    });
-
-    if (band.min && band.max && band.min > band.max) {
-      errors.push("filter.difficulty.min must not be greater than max");
-    }
-
-    if (Object.keys(band).length) {
-      filter.difficulty = band;
     }
   }
 
@@ -135,7 +152,7 @@ function resolveSelection(body, content) {
     return { selectionMode: null, filter: null, errors: ["Unsupported selection mode."] };
   }
 
-  return { selectionMode: mode, filter: legacyModeToFilter(mode), errors: [] };
+  return { selectionMode: mode, filter: legacyModeToFilter(mode, content), errors: [] };
 }
 
 // Walks down parent_of edges so picking "concept.data" also matches questions
@@ -157,7 +174,7 @@ function selectQuestions(db, filter) {
   const where = [];
   const params = [];
 
-  [["audiences", "q.audience"], ["levels", "q.level"], ["types", "q.type"]].forEach(([key, column]) => {
+  [["audiences", "q.audience"], ["questionIds", "q.id"], ["levels", "q.level"], ["types", "q.type"]].forEach(([key, column]) => {
     if (filter[key] && filter[key].length) {
       where.push(`${column} IN (SELECT value FROM json_each(?))`);
       params.push(JSON.stringify(filter[key]));
@@ -208,9 +225,11 @@ function summarizeFilter(filter) {
   const parts = [];
 
   LIST_KEYS.forEach(key => {
-    if (filter[key] && filter[key].length) {
-      parts.push(`${key}: ${filter[key].join(", ")}`);
+    if (!filter[key] || !filter[key].length) {
+      return;
     }
+
+    parts.push(key === "questionIds" ? `${filter[key].length} chosen questions` : `${key}: ${filter[key].join(", ")}`);
   });
 
   if (filter.difficulty) {

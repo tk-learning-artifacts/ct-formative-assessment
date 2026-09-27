@@ -20,7 +20,8 @@ test("event filters and picker endpoints", async t => {
     const all = await preview({ selectionMode: "ALL" });
     assert.equal(all.body.count, 20);
     assert.deepEqual(all.body.byAudience, { core: 20 });
-    assert.deepEqual(all.body.filter, { audiences: ["core"] });
+    assert.deepEqual(all.body.filter.audiences, ["core"]);
+    assert.equal(all.body.filter.questionIds.length, 20);
 
     for (const level of ["P5", "P6", "S1", "S2"]) {
       const res = await preview({ selectionMode: level.toLowerCase() });
@@ -36,18 +37,23 @@ test("event filters and picker endpoints", async t => {
     const res = await createEvent({ selectionMode: "P6" });
     assert.equal(res.status, 201);
     assert.equal(res.body.event.selection_mode, "P6");
-    assert.deepEqual(res.body.event.filter, { audiences: ["core"], levels: ["P6"] });
+    assert.deepEqual(res.body.event.filter, { audiences: ["core"], questionIds: ["P6-01", "P6-02", "P6-03", "P6-04", "P6-05"] });
     assert.equal(res.body.event.question_count, 5);
   });
 
   await t.test("level is one filter among several", async () => {
-    const s1Everyone = await preview({ filter: { levels: ["S1"] } });
+    const s1Default = await preview({ filter: { levels: ["S1"] } });
+    assert.deepEqual(s1Default.body.byAudience, { core: 5 });
+    assert.deepEqual(s1Default.body.filter.audiences, ["core"]);
+    assert.deepEqual((await preview({ filter: { audiences: [], levels: ["P5"] } })).body.byAudience, { core: 5 });
+
+    const s1Everyone = await preview({ filter: { levels: ["S1"], audiences: ["core", "rgsynapse"] } });
     assert.deepEqual(s1Everyone.body.byAudience, { core: 5, rgsynapse: 2 });
 
     const rgs = await preview({ filter: { audiences: ["rgsynapse"] } });
     assert.deepEqual(rgs.body.questions.map(q => q.id), ["RGS-S1-01", "RGS-S1-02", "RGS-S2-01", "RGS-S2-02"]);
 
-    const byOutcome = await preview({ filter: { outcomes: ["LO-DEBUG-1"] } });
+    const byOutcome = await preview({ filter: { outcomes: ["LO-DEBUG-1"], audiences: ["core", "rgsynapse"] } });
     assert.deepEqual(byOutcome.body.questions.map(q => q.id), ["S1-01", "RGS-S1-02"]);
 
     const outcomeAndLevel = await preview({ filter: { outcomes: ["LO-PATH-1"], levels: ["S2"] } });
@@ -57,8 +63,11 @@ test("event filters and picker endpoints", async t => {
     assert.equal(difficulty.body.count, 5);
     assert.deepEqual(difficulty.body.byLevel, { S2: 5 });
 
-    const types = await preview({ filter: { types: ["mcq"] } });
+    const types = await preview({ filter: { types: ["mcq"], audiences: ["core", "rgsynapse"] } });
     assert.equal(types.body.count, 24);
+
+    const picked = await preview({ filter: { questionIds: ["S2-05", "P5-01"] } });
+    assert.deepEqual(picked.body.questions.map(q => q.id), ["P5-01", "S2-05"]);
   });
 
   await t.test("an ontology node matches questions tagged with it or anything beneath it", async () => {
@@ -80,7 +89,7 @@ test("event filters and picker endpoints", async t => {
 
     assert.equal(created.status, 201);
     assert.equal(created.body.event.selection_mode, "FILTER");
-    assert.deepEqual(created.body.event.filter, filter);
+    assert.deepEqual(created.body.event.filter, { ...filter, audiences: ["core"] });
     assert.equal(created.body.event.question_count, previewed.body.count);
 
     const started = await startAttempt(app, { joinCode: created.body.event.join_code });
@@ -97,6 +106,11 @@ test("event filters and picker endpoints", async t => {
       [{ types: ["essay"] }, /unknown question type/],
       [{ colour: ["red"] }, /unknown filter key/],
       [{ levels: "S1" }, /must be an array/],
+      [{ difficulty: 3 }, /difficulty must be an object/],
+      [{ difficulty: "easy" }, /difficulty must be an object/],
+      [{ difficulty: [1, 2] }, /difficulty must be an object/],
+      [{ difficulty: { lowest: 1 } }, /unknown filter.difficulty key/],
+      [{ questionIds: ["NOPE-1"] }, /unknown questionIds/],
       [{ difficulty: { min: 4, max: 2 } }, /min must not be greater/],
       [[], /must be an object/]
     ];
