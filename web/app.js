@@ -10,6 +10,11 @@
   // Waits before each retry of a failed submission, in seconds.
   const RETRY_DELAYS = [1, 2, 4, 8, 15, 30, 30, 30, 60, 60];
 
+  // While answers are being marked, the results page checks back this often
+  // (seconds), at most MARKING_POLLS times.
+  const MARKING_POLL_SECONDS = 15;
+  const MARKING_POLLS = 40;
+
   let ACTIVE_BANK = [];
 
   const state = {
@@ -21,6 +26,7 @@
     attemptToken: null,
     deadlineMs: null,
     timerId: null,
+    markingTimerId: null,
     submitting: false,
     i: 0,
     answers: {},
@@ -219,6 +225,9 @@
 
     if (response !== undefined) {
       state.answers[q.id] = response;
+    } else {
+      // A cleared text answer counts as unanswered again.
+      delete state.answers[q.id];
     }
 
     saveAttempt();
@@ -545,26 +554,61 @@
     });
   }
 
-  // After submitting: the total comes straight back; the breakdown, if the
-  // teacher has released it, comes from the token-guarded GET.
+  // After submitting: the total comes straight back. The token-guarded GET
+  // adds how many answers are still being marked and, once the teacher has
+  // released it, the breakdown.
   async function showResults(submitPayload, { auto }) {
     let view = { attempt: submitPayload.attempt, event: { title: state.eventTitle, joinCode: state.joinCode }, result: submitPayload.result };
 
-    if (submitPayload.result.breakdownReleased) {
-      try {
-        view = await api(`/api/attempts/${state.attemptId}`, { method: "GET", headers: attemptHeaders() });
-      } catch (_error) {
-        // Show the total; the breakdown can be fetched again on refresh.
-      }
+    try {
+      view = await api(`/api/attempts/${state.attemptId}`, { method: "GET", headers: attemptHeaders() });
+    } catch (_error) {
+      // Show the total; the rest can be fetched again on refresh.
     }
 
     renderResults(view, { auto });
   }
 
-  function renderResults(payload, { auto = false } = {}) {
+  function stopMarkingPoll() {
+    if (state.markingTimerId) {
+      clearTimeout(state.markingTimerId);
+      state.markingTimerId = null;
+    }
+  }
+
+  // AI-scored answers are marked after submit, so the total can rise. Check
+  // back a few times while any are still pending.
+  function pollWhileMarking(pending, { auto, polls = 0 }) {
+    stopMarkingPoll();
+
+    if (!pending || polls >= MARKING_POLLS) {
+      return;
+    }
+
+    const attemptId = state.attemptId;
+
+    state.markingTimerId = setTimeout(async () => {
+      state.markingTimerId = null;
+
+      try {
+        const view = await api(`/api/attempts/${attemptId}`, { method: "GET", headers: attemptHeaders() });
+
+        if (state.attemptId === attemptId && view.attempt.status === "submitted") {
+          renderResults(view, { auto, polls: polls + 1 });
+        }
+      } catch (_error) {
+        if (state.attemptId === attemptId) {
+          pollWhileMarking(pending, { auto, polls: polls + 1 });
+        }
+      }
+    }, MARKING_POLL_SECONDS * 1000);
+  }
+
+  function renderResults(payload, { auto = false, polls = 0 } = {}) {
     stopTimer();
 
     const result = payload.result || { score: 0, max: 0, breakdownReleased: false };
+    const pendingCount = result.pending || 0;
     const perQ = result.perQuestion || null;
     const late = payload.attempt && payload.attempt.late;
     const mins = state.startedAt
@@ -593,8 +637,13 @@
       })();
       const chosen = renderer ? renderer.describeResponse(item.response, h) : "";
       const correct = item.correctResponse && renderer ? renderer.describeResponse(item.correctResponse, h) : "";
-      const feedback = item.detail && item.detail.ai === "scored" && item.detail.feedback ? item.detail.feedback : "";
-      const pending = item.status !== "scored";
+      // detail is the student view from policy.js: who marked it and the
+      // validated feedback text. It is escaped like everything else.
+      const feedback = item.detail && item.detail.feedback ? item.detail.feedback : "";
+      const feedbackLabel = item.detail && item.detail.source === "teacher" ? "Teacher's feedback" : "Feedback";
+      const statusNote = item.status === "pending"
+        ? "Being marked. Check back soon."
+        : item.status === "needs-review" ? "Waiting for your teacher to mark this." : "";
       const meta = [item.level, item.topic, item.qType].filter(Boolean).join(" / ");
 
       return `
@@ -603,8 +652,8 @@
             <strong>${escapeHtml(item.id)}</strong> ${escapeHtml(item.title || "")}
             ${meta ? `<div class="result-meta">${escapeHtml(meta)}</div>` : ""}
             <div class="result-meta">Your answer: ${escapeHtml(chosen)}${correct && !item.correct ? ` / Correct: ${escapeHtml(correct)}` : ""}</div>
-            ${feedback ? `<div class="result-meta">Feedback: ${escapeHtml(feedback)}</div>` : ""}
-            ${pending ? `<div class="result-meta">Waiting for your teacher to mark this.</div>` : ""}
+            ${feedback ? `<div class="result-meta">${feedbackLabel}: ${escapeHtml(feedback)}</div>` : ""}
+            ${statusNote ? `<div class="result-meta">${statusNote}</div>` : ""}
           </div>
           <div>${item.correct ? `<span class="good">${item.earned}/${item.max}</span>` : `<span class="bad">${item.earned}/${item.max}</span>`}</div>
         </div>
@@ -639,6 +688,7 @@
           <h3>Saved Online</h3>
           ${auto ? `<p class="notice">Time ran out, so your answers were submitted automatically.</p>` : ""}
           ${late ? `<p class="notice">This was submitted after the time limit, so your teacher will see it marked late.</p>` : ""}
+          ${pendingCount ? `<p class="notice">${pendingCount} written answer${pendingCount === 1 ? " is" : "s are"} still being marked, so your score may go up. This page checks again every ${MARKING_POLL_SECONDS} seconds.</p>` : ""}
           <p class="muted">Your answers were submitted successfully. Your teacher can see them on the event dashboard.</p>
         </div>
 
@@ -664,6 +714,8 @@
       </section>
     `;
 
+    pollWhileMarking(pendingCount, { auto, polls });
+
     document.getElementById("copyBtn").addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(code);
@@ -674,6 +726,7 @@
     });
 
     document.getElementById("restartBtn").addEventListener("click", () => {
+      stopMarkingPoll();
       ACTIVE_BANK = [];
       state.name = "";
       state.group = "";
