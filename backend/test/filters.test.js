@@ -42,15 +42,15 @@ test("event filters and picker endpoints", async t => {
   });
 
   await t.test("level is one filter among several", async () => {
-    const s1Default = await preview({ filter: { levels: ["S1"] } });
+    const s1Default = await preview({ filter: { levels: ["S1"], types: ["mcq"] } });
     assert.deepEqual(s1Default.body.byAudience, { core: 5 });
     assert.deepEqual(s1Default.body.filter.audiences, ["core"]);
     assert.deepEqual((await preview({ filter: { audiences: [], levels: ["P5"] } })).body.byAudience, { core: 5 });
 
-    const s1Everyone = await preview({ filter: { levels: ["S1"], audiences: ["core", "rgsynapse"] } });
+    const s1Everyone = await preview({ filter: { levels: ["S1"], audiences: ["core", "rgsynapse"], types: ["mcq"] } });
     assert.deepEqual(s1Everyone.body.byAudience, { core: 5, rgsynapse: 2 });
 
-    const rgs = await preview({ filter: { audiences: ["rgsynapse"] } });
+    const rgs = await preview({ filter: { audiences: ["rgsynapse"], types: ["mcq"] } });
     assert.deepEqual(rgs.body.questions.map(q => q.id), ["RGS-S1-01", "RGS-S1-02", "RGS-S2-01", "RGS-S2-02"]);
 
     const byOutcome = await preview({ filter: { outcomes: ["LO-DEBUG-1"], audiences: ["core", "rgsynapse"] } });
@@ -78,7 +78,7 @@ test("event filters and picker endpoints", async t => {
     assert.ok(child.body.questions.every(q => parent.body.questions.some(p => p.id === q.id)));
     assert.ok(parent.body.count > child.body.count);
 
-    const practiceRoot = await preview({ filter: { nodes: ["practice"], audiences: ["rgsynapse"] } });
+    const practiceRoot = await preview({ filter: { nodes: ["practice"], audiences: ["rgsynapse"], types: ["mcq"] } });
     assert.equal(practiceRoot.body.count, 4);
   });
 
@@ -102,7 +102,7 @@ test("event filters and picker endpoints", async t => {
       [{ nodes: ["concept.nope"] }, /unknown nodes/],
       [{ levels: ["S9"] }, /unknown levels/],
       [{ audiences: ["mars"] }, /unknown audiences/],
-      [{ types: ["parsons"] }, /reserved/],
+      [{ types: ["short-answer"] }, /reserved/],
       [{ types: ["essay"] }, /unknown question type/],
       [{ colour: ["red"] }, /unknown filter key/],
       [{ levels: "S1" }, /must be an array/],
@@ -173,7 +173,7 @@ test("event filters and picker endpoints", async t => {
   });
 
   await t.test("RGSynapse questions reach students with their code and without keys", async () => {
-    const created = await createEvent({ filter: { audiences: ["rgsynapse"], levels: ["S1"] } });
+    const created = await createEvent({ filter: { audiences: ["rgsynapse"], levels: ["S1"], types: ["mcq"] } });
     const started = await startAttempt(app, { joinCode: created.body.event.join_code });
     assert.equal(started.questions.length, 2);
     assert.equal(started.questions[0].code.language, "python");
