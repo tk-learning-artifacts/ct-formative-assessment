@@ -42,6 +42,12 @@
     pickerEdited: false,
     // Whether the chosen event's "Edit settings" form is open.
     editingSettings: false,
+    // An admin's event list filter (ADR 0004): every teacher's events or
+    // only their own, and optionally one teacher's (by email).
+    eventFilter: {
+      scope: "all",
+      owner: ""
+    },
     // The event settings (ADR 0003), kept across re-renders.
     settings: {
       feedbackMode: "release",
@@ -122,12 +128,13 @@
   };
 
   // Status line for an AI-scored answer, for the teacher only, with the
-  // status tone it is drawn in.
-  function aiStatus(answer) {
+  // status tone it is drawn in. On an event the reader cannot change (an
+  // admin on another teacher's event) the mark is the owner's, not theirs.
+  function aiStatus(answer, canManage) {
     const detail = answer.detail || {};
 
     if (detail.review) {
-      return { tone: "positive", text: `Marked by you: ${detail.review.score}/${answer.maxPoints}` };
+      return { tone: "positive", text: `Marked by ${canManage ? "you" : "the teacher"}: ${detail.review.score}/${answer.maxPoints}` };
     }
 
     if (answer.scoreStatus === "pending") {
@@ -135,7 +142,7 @@
     }
 
     if (answer.scoreStatus === "needs-review") {
-      return { tone: "warning", text: `Needs your mark: ${AI_REASONS[detail.reason] || "AI could not score it"}` };
+      return { tone: "warning", text: `Needs ${canManage ? "your" : "the teacher's"} mark: ${AI_REASONS[detail.reason] || "AI could not score it"}` };
     }
 
     if (detail.ai === "scored") {
@@ -148,7 +155,7 @@
   // Each AI-scored answer, with a small form to set the score and feedback.
   // A committed answer can be marked before the student submits, so under
   // "after each question" they see the mark straight away.
-  function aiAnswersBlock(attempt) {
+  function aiAnswersBlock(attempt, canManage) {
     return attempt.answers
       .filter(answer => answer.questionType === "open-response-ai")
       .map(answer => {
@@ -156,7 +163,7 @@
         const aiFeedback = detail.ai === "scored" && detail.feedback ? detail.feedback : "";
         const reviewFeedback = detail.review && detail.review.feedback ? detail.review.feedback : "";
         const key = escapeHtml(`${attempt.id}-${answer.questionId}`);
-        const status = aiStatus(answer);
+        const status = aiStatus(answer, canManage);
 
         return `
           <div class="ai-review ${status.tone === "warning" ? "ai-review--attention" : ""}">
@@ -166,7 +173,7 @@
             </div>
             <p class="ai-review__answer">${escapeHtml(answer.response && answer.response.text ? answer.response.text : "No answer")}</p>
             ${aiFeedback ? `<p class="muted small">AI feedback: ${escapeHtml(aiFeedback)}</p>` : ""}
-            ${!attempt.reset_at && (attempt.status === "submitted" || answer.committedAt) ? `
+            ${canManage && !attempt.reset_at && (attempt.status === "submitted" || answer.committedAt) ? `
               <div class="ai-review__form">
                 <div class="field">
                   <label for="score-${key}">Score</label>
@@ -1339,15 +1346,65 @@
     });
   }
 
-  // ---------- Dashboard ----------
+  // ---------- Event list (and an admin's filter, ADR 0004) ----------
 
-  function renderDashboard() {
-    const eventCards = state.events.map(event => `
+  function isAdmin() {
+    return Boolean(state.user) && state.user.role === "admin";
+  }
+
+  // The teachers who own at least one event, for an admin's teacher filter.
+  function eventOwners() {
+    return Array.from(new Set(state.events.map(event => event.owner_email).filter(Boolean))).sort();
+  }
+
+  function visibleEvents() {
+    if (!isAdmin()) {
+      return state.events;
+    }
+
+    if (state.eventFilter.scope === "mine") {
+      return state.events.filter(event => event.owned);
+    }
+
+    return state.eventFilter.owner
+      ? state.events.filter(event => event.owner_email === state.eventFilter.owner)
+      : state.events;
+  }
+
+  function renderEventFilter() {
+    if (!isAdmin()) {
+      return "";
+    }
+
+    const scope = state.eventFilter.scope;
+    const scopeButton = (value, label) => `<button type="button" class="segmented__btn" data-event-scope="${value}" aria-pressed="${scope === value}">${label}</button>`;
+
+    return `
+      <div class="event-filter card__pad">
+        <div class="segmented" role="group" aria-label="Whose events">
+          ${scopeButton("all", "All teachers")}
+          ${scopeButton("mine", "Mine")}
+        </div>
+        ${scope === "all" ? `
+          <label class="visually-hidden" for="eventOwnerFilter">Teacher</label>
+          <select id="eventOwnerFilter">
+            <option value="">Any teacher</option>
+            ${eventOwners().map(email => `<option value="${escapeHtml(email)}" ${state.eventFilter.owner === email ? "selected" : ""}>${escapeHtml(email)}</option>`).join("")}
+          </select>
+        ` : ""}
+      </div>
+    `;
+  }
+
+  function renderEventList() {
+    const events = visibleEvents();
+    const cards = events.map(event => `
       <li>
         <button class="event-card ${state.selectedEventId === event.id ? "event-card--active" : ""}" data-event-id="${event.id}" ${state.selectedEventId === event.id ? `aria-current="true"` : ""}>
           <span class="event-card__title">${escapeHtml(event.title)}</span>
           <span class="tag tag--code">${escapeHtml(event.join_code)}</span>
           <span class="event-card__meta">
+            ${isAdmin() ? `<span class="event-card__owner">${event.owned ? "Yours" : escapeHtml(event.owner_email || "Unknown teacher")}</span>` : ""}
             <span>${escapeHtml(event.filter_summary || event.selection_mode)}</span>
             <span>${escapeHtml(presetLine(event))}</span>
             <span>${event.duration_minutes ? `${event.duration_minutes} min` : "No time limit"}</span>
@@ -1359,6 +1416,62 @@
       </li>
     `).join("");
 
+    if (cards) {
+      return `<ul class="event-list">${cards}</ul>`;
+    }
+
+    return state.events.length
+      ? `<p class="muted card__pad">No events match this filter.</p>`
+      : `<p class="muted card__pad">No events yet. Create one with the form above.</p>`;
+  }
+
+  function bindEventListEvents() {
+    Array.from(screen.querySelectorAll("[data-event-id]")).forEach(button => {
+      button.addEventListener("click", async () => {
+        state.selectedEventId = Number(button.getAttribute("data-event-id"));
+        state.editingSettings = false;
+        await loadResults(state.selectedEventId);
+      });
+    });
+
+    Array.from(screen.querySelectorAll("[data-event-scope]")).forEach(button => {
+      button.addEventListener("click", () => {
+        state.eventFilter = { scope: button.getAttribute("data-event-scope"), owner: "" };
+        refreshEventList(`[data-event-scope="${state.eventFilter.scope}"]`);
+      });
+    });
+
+    const ownerFilter = document.getElementById("eventOwnerFilter");
+
+    if (ownerFilter) {
+      ownerFilter.addEventListener("change", () => {
+        state.eventFilter = { ...state.eventFilter, owner: ownerFilter.value };
+        refreshEventList("#eventOwnerFilter");
+      });
+    }
+  }
+
+  // Filtering redraws only the list, so the new event form keeps what the
+  // teacher has typed. Focus goes back to the control they just used.
+  function refreshEventList(focusSelector) {
+    const el = document.getElementById("eventListBody");
+
+    if (!el) {
+      return;
+    }
+
+    el.innerHTML = renderEventFilter() + renderEventList();
+    bindEventListEvents();
+
+    const focusTarget = focusSelector ? el.querySelector(focusSelector) : null;
+    if (focusTarget) {
+      focusTarget.focus();
+    }
+  }
+
+  // ---------- Dashboard ----------
+
+  function renderDashboard() {
     const attemptStatus = attempt => attempt.reset_at
       ? `<span class="tag status status--neutral">Reset</span>`
       : attempt.status === "submitted"
@@ -1366,6 +1479,9 @@
         : `<span class="tag status status--pending">${escapeHtml(attempt.status === "started" ? "In progress" : attempt.status)}</span>`;
 
     const resultsEvent = state.results && state.results.event;
+    // An admin reading another teacher's event sees everything but cannot
+    // change it (ADR 0004); the server refuses those changes with 403 too.
+    const canManage = Boolean(resultsEvent && resultsEvent.can_manage);
     const resultsBlock = state.results
       ? `
         <section class="card">
@@ -1384,15 +1500,16 @@
                   : resultsEvent.breakdown_released
                     ? `<span class="tag status status--positive">Students can see their breakdown</span>`
                     : `<span class="tag status status--neutral">Breakdown hidden from students</span>`}
-              ${resultsEvent.results_released_at || (resultsEvent.feedback_mode && resultsEvent.feedback_mode !== "release") ? "" : `<button id="releaseBtn" class="btn btn--accent btn--sm">Release results</button>`}
-              ${state.editingSettings ? "" : `<button id="editSettingsBtn" class="btn btn--secondary btn--sm">Edit settings</button>`}
+              ${!canManage || resultsEvent.results_released_at || (resultsEvent.feedback_mode && resultsEvent.feedback_mode !== "release") ? "" : `<button id="releaseBtn" class="btn btn--accent btn--sm">Release results</button>`}
+              ${!canManage || state.editingSettings ? "" : `<button id="editSettingsBtn" class="btn btn--secondary btn--sm">Edit settings</button>`}
             </div>
           </div>
           <p class="muted small results-facts">
             ${escapeHtml(presetLine(resultsEvent))} · ${escapeHtml(resultsEvent.filter_summary || resultsEvent.selection_mode)} ·
             ${resultsEvent.duration_minutes ? `${resultsEvent.duration_minutes} min` : "No time limit"}${resultsEvent.end_at ? ` · Deadline ${escapeHtml(formatTime(resultsEvent.end_at))}` : ""}
           </p>
-          ${state.editingSettings ? renderEditSettings(resultsEvent) : ""}
+          ${canManage ? "" : `<p class="notice read-only">Read only: this is ${escapeHtml(resultsEvent.owner_email || "another teacher")}'s event. Only they can reset attempts, release results, edit settings or mark answers.</p>`}
+          ${canManage && state.editingSettings ? renderEditSettings(resultsEvent) : ""}
           ${renderSettingsHistory(state.results.settingChanges)}
           ${state.results.attempts.length
             ? `<ul class="attempts">${state.results.attempts.map(attempt => `
@@ -1405,9 +1522,9 @@
                     <span class="muted small">${attempt.submitted_at ? formatTime(attempt.submitted_at) : "Not submitted"}</span>
                   </span>
                   <span class="attempt__score">${attempt.max_score === null ? "&ndash;" : `${attempt.score ?? 0}/${attempt.max_score}`}</span>
-                  ${attempt.reset_at ? "<span></span>" : `<button class="btn btn--destructive btn--sm" data-reset-attempt="${attempt.id}" aria-label="Reset attempt for ${escapeHtml(attempt.student_name)}">Reset</button>`}
+                  ${attempt.reset_at || !canManage ? "<span></span>" : `<button class="btn btn--destructive btn--sm" data-reset-attempt="${attempt.id}" aria-label="Reset attempt for ${escapeHtml(attempt.student_name)}">Reset</button>`}
                 </div>
-                ${aiAnswersBlock(attempt)}
+                ${aiAnswersBlock(attempt, canManage)}
               </li>
             `).join("")}</ul>`
             : `<p class="muted">No submissions yet.</p>`
@@ -1487,9 +1604,9 @@
 
           <section class="card card--flush" aria-labelledby="eventsHeading">
             <div class="section-heading card__pad">
-              <h2 id="eventsHeading">Your events</h2>
+              <h2 id="eventsHeading">${isAdmin() ? "Events" : "Your events"}</h2>
             </div>
-            ${eventCards ? `<ul class="event-list">${eventCards}</ul>` : `<p class="muted card__pad">No events yet. Create one with the form above.</p>`}
+            <div id="eventListBody">${renderEventFilter()}${renderEventList()}</div>
           </section>
         </div>
 
@@ -1506,6 +1623,7 @@
       state.selectedEventId = null;
       state.results = null;
       state.outcomesSummary = null;
+      state.eventFilter = { scope: "all", owner: "" };
       localStorage.removeItem(TOKEN_KEY);
       renderLogin();
     });
@@ -1576,7 +1694,9 @@
       });
     }
 
-    bindEditSettings(resultsEvent);
+    if (canManage) {
+      bindEditSettings(resultsEvent);
+    }
 
     const releaseBtn = document.getElementById("releaseBtn");
 
@@ -1632,14 +1752,7 @@
       });
     });
 
-    Array.from(screen.querySelectorAll("[data-event-id]")).forEach(button => {
-      button.addEventListener("click", async () => {
-        state.selectedEventId = Number(button.getAttribute("data-event-id"));
-        state.editingSettings = false;
-        await loadResults(state.selectedEventId);
-      });
-    });
-
+    bindEventListEvents();
     bindOutcomesSummaryEvents();
   }
 
