@@ -1097,7 +1097,7 @@
 
     const art = q.art ? `<pre>${escapeHtml(q.art)}</pre>` : "";
     const code = !q.code ? "" : renderer.renderCode
-      ? renderer.renderCode(q.code, h)
+      ? renderer.renderCode(q.code, h, q)
       : `<p class="code-label">${escapeHtml(q.code.language)}</p><pre><code>${escapeHtml(q.code.source)}</code></pre>`;
 
     screen.innerHTML = `

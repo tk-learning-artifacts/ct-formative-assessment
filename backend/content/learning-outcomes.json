@@ -343,6 +343,39 @@
       "audiences": [
         "rgsynapse"
       ]
+    },
+    {
+      "id": "LO-READ-1",
+      "statement": "Read a short set of instructions or a program and say in plain words what it does for any input, not just for one run.",
+      "nodes": [
+        "practice.testing-debugging.tracing",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "levels": [
+        "P5",
+        "P6",
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "core"
+      ]
+    },
+    {
+      "id": "LO-READ-RGS-1",
+      "statement": "Read a short Python or Swift function, including one an AI assistant wrote, and describe its purpose, which inputs change its result and which line controls a given behaviour.",
+      "nodes": [
+        "practice.testing-debugging.tracing",
+        "practice.abstracting-modularizing.generalisation",
+        "perspective.questioning.ai-output"
+      ],
+      "levels": [
+        "S1",
+        "S2"
+      ],
+      "audiences": [
+        "rgsynapse"
+      ]
     }
   ]
 }

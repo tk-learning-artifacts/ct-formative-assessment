@@ -9,8 +9,10 @@
 //                                        leaves the saved answer as it is,
 //                                        null clears it
 //   describeResponse(response, h)        text for the results breakdown
-//   renderCode(code, h)                  optional; HTML for the question's
+//   renderCode(code, h, question)        optional; HTML for the question's
 //                                        code block instead of the default
+//                                        (code-reading marks its glossary
+//                                        words in it)
 //   renderContext(question, h)           optional; HTML shown under the
 //                                        question (instructions, target
 //                                        output), not on the answer side
