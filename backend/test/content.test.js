@@ -66,7 +66,9 @@ test("adding a core question does not change what the legacy ALL and level modes
   const selection = require("../src/selection");
 
   withEditedContent("questions/core.json", data => {
-    data.questions.push({ ...data.questions[0], id: "P5-99", title: "New P5 question" });
+    // Without P5-01's illustration, whose file is named after P5-01.
+    const { visual: _visual, ...copy } = data.questions[0];
+    data.questions.push({ ...copy, id: "P5-99", title: "New P5 question" });
   }, dir => {
     const store = openDatabase({ dbPath: ":memory:", contentDir: dir });
     try {

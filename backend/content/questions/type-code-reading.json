@@ -12,6 +12,18 @@
         "language": "scratch-style",
         "source": "when green flag clicked\nset biggest to item 1 of numbers\nfor each n in numbers\n    if n > biggest then\n        set biggest to n\n    end\nend\nsay biggest"
       },
+      "visual": {
+        "kind": "illustration",
+        "purpose": "context",
+        "src": "cr-p5-01.webp",
+        "alt": "A friendly orange cartoon cat stands on a small wooden stage and looks up at an empty speech bubble.",
+        "source": {
+          "generator": "agy",
+          "prompt": "An original friendly orange cartoon cat (not any existing character or mascot) standing on a small wooden stage, looking up, with an empty white speech bubble above its head. The speech bubble is completely empty. Style: flat vector illustration for 11-year-old students, simple rounded shapes, soft muted colours (sage green, warm cream, slate blue, a little mustard), a plain light cream background, no outlines heavier than needed. Absolutely no text, letters, numbers or symbols anywhere in the image. Landscape 4:3 composition with the subject centred and some empty space around it.",
+          "date": "2026-09-27",
+          "reviewed": true
+        }
+      },
       "options": [
         "The first number in the list",
         "The biggest number in the list",

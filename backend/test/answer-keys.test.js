@@ -28,6 +28,7 @@ const { SOLVERS, NOT_COMPUTABLE } = require("./solvers");
 const scoring = require("../src/scoring");
 const { normalizeOutput } = require("../src/scoring/types/code-trace");
 const blocksEngine = require("../../web/lib/blocks-engine");
+const visuals = require("../src/visuals");
 
 const { questions } = loadContent();
 
@@ -125,6 +126,19 @@ questions.forEach(question => {
     TYPE_CHECKS[question.type](question);
   });
 });
+
+// ADR 0007: a structured visual is checked against the prompt by the
+// question's solver. Handed the same visual with its data stripped (only
+// kind and purpose left), the solver must throw; one that ignores its
+// visual would return the answer as before.
+questions
+  .filter(question => question.visual && visuals.core.get(question.visual.kind).structured)
+  .forEach(question => {
+    test(`${question.id} solver reads its ${question.visual.kind} visual`, () => {
+      const stripped = { ...question, visual: { kind: question.visual.kind, purpose: question.visual.purpose } };
+      assert.throws(() => SOLVERS[question.id](stripped), `${question.id}: the solver ignores the visual; check its data against the prompt`);
+    });
+  });
 
 function parsonsSource(question, order) {
   const text = new Map(question.lines.map(line => [line.id, line.text]));

@@ -42,11 +42,15 @@
 const fs = require("fs");
 const path = require("path");
 
+const visuals = require("../visuals");
+
 const TYPES_DIR = path.join(__dirname, "types");
 
 // Shown to students for every type. Answer keys, rubrics, solutions and the
-// teacher-only "details" note are never in this list.
-const BASE_PUBLIC_FIELDS = ["id", "type", "audience", "level", "title", "prompt", "art", "code", "points", "topic", "qType"];
+// teacher-only "details" note are never in this list. "visual" is here on
+// purpose (ADR 0007 §5), and is itself projected through its kind's
+// allowlist, so its purpose and an illustration's provenance stay behind.
+const BASE_PUBLIC_FIELDS = ["id", "type", "audience", "level", "title", "prompt", "art", "code", "visual", "points", "topic", "qType"];
 
 const ACTIVE_KEYS = ["type", "label", "publicFields", "sample", "validate", "normalizeResponse", "recordResponse", "score"];
 
@@ -113,7 +117,7 @@ function toPublicQuestion(question) {
 
   BASE_PUBLIC_FIELDS.forEach(field => {
     if (question[field] !== undefined) {
-      safe[field] = question[field];
+      safe[field] = field === "visual" ? visuals.toPublic(question[field]) : question[field];
     }
   });
 

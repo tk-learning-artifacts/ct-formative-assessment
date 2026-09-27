@@ -114,6 +114,18 @@
       "level": "S1",
       "title": "Countdown to launch",
       "prompt": "Put these Python lines in order so the program counts down from 3 and then prints Go!. The indentation (spaces at the start of a line) is already correct.",
+      "visual": {
+        "kind": "illustration",
+        "purpose": "context",
+        "src": "ts-pa-01.webp",
+        "alt": "A cartoon rocket lifting off from its launch pad, with a puff of smoke below it and a few stars in a pale sky.",
+        "source": {
+          "generator": "agy",
+          "prompt": "A small cartoon rocket standing upright on a launch pad, ready to take off, with a little puff of smoke at its base and a few stars in a pale sky. Style: flat vector illustration for 11-year-old students, simple rounded shapes, soft muted colours (sage green, warm cream, slate blue, a little mustard), a plain light cream background, no outlines heavier than needed. Absolutely no text, letters, numbers or symbols anywhere in the image. Landscape 4:3 composition with the subject centred and some empty space around it.",
+          "date": "2026-09-27",
+          "reviewed": true
+        }
+      },
       "language": "python",
       "lines": [
         {

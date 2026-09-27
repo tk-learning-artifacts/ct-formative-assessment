@@ -1,0 +1,5 @@
+{
+  "type": "commonjs",
+  "private": true,
+  "description": "Visual kinds shared by the browser and the server (ADR 0007). The server require()s them, so they are CommonJS; web/ as a whole is an ES module package for Vite."
+}

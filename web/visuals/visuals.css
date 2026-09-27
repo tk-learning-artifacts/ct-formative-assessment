@@ -1,0 +1,245 @@
+/*
+ * Question visuals (web/visuals/, ADR 0007). Every fill and stroke is a
+ * theme-contract token from the :root block in style.css, so a retint there
+ * retints every figure; there is no colour value in this file.
+ *
+ * Contrast (ADR 0007 §3): figure text is --color-ink (13:1 or more) or
+ * --color-bg on --color-ink-soft (7:1); lines that carry meaning are
+ * --color-ink-soft or --color-muted (4.9:1 or more); --color-line and
+ * --color-line-strong are never used for a line that means something.
+ */
+
+.qv {
+  margin: 12px 0 0;
+}
+
+.qv__frame {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Scales down to the card on a phone, never up past its natural size. */
+.qv__svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  font-family: var(--font-sans);
+}
+
+.qv__caption {
+  margin-top: 6px;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.qv__describe {
+  margin-top: 6px;
+  font-size: 0.8125rem;
+}
+
+.qv__describe summary {
+  color: var(--color-accent-deep);
+  cursor: pointer;
+}
+
+.qv__describe p {
+  margin: 6px 0 0;
+  color: var(--color-ink-soft);
+}
+
+/* ---------- Shared marks ---------- */
+
+.qv-axis {
+  fill: var(--color-muted);
+  font-size: 13px;
+}
+
+.qv-cell {
+  stroke: var(--color-muted);
+  stroke-width: 1.5;
+}
+
+.qv-cell--open {
+  fill: var(--color-bg);
+}
+
+.qv-cell--mark {
+  fill: var(--color-accent-soft);
+}
+
+.qv-cell--wall,
+.qv-cell--dark {
+  fill: var(--color-ink-soft);
+  stroke: var(--color-ink);
+}
+
+.qv-cell__letter {
+  fill: var(--color-ink);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.qv-cell__text {
+  fill: var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.qv-cell__text--on-dark {
+  fill: var(--color-bg);
+}
+
+.qv-rowlabel {
+  fill: var(--color-ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.qv-shape {
+  fill: var(--color-ink-soft);
+  stroke: var(--color-ink);
+  stroke-width: 1;
+}
+
+.qv-edge {
+  fill: none;
+  stroke: var(--color-ink-soft);
+  stroke-width: 2;
+}
+
+.qv-arrowhead {
+  fill: var(--color-ink-soft);
+}
+
+.qv-edge__label {
+  fill: var(--color-accent-deep);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---------- Graph ---------- */
+
+.qv-node {
+  fill: var(--color-surface-2);
+  stroke: var(--color-ink-soft);
+  stroke-width: 2;
+}
+
+.qv-node__text {
+  fill: var(--color-ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.qv-chip {
+  fill: var(--color-bg);
+  stroke: var(--color-accent-deep);
+  stroke-width: 1.5;
+}
+
+.qv-chip__text {
+  fill: var(--color-accent-deep);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* ---------- Flowchart ---------- */
+
+.qv-box {
+  fill: var(--color-bg);
+  stroke: var(--color-ink-soft);
+  stroke-width: 1.5;
+}
+
+.qv-box--terminal {
+  fill: var(--color-accent-soft);
+}
+
+.qv-box--decision {
+  fill: var(--color-surface-2);
+}
+
+.qv-box__text {
+  fill: var(--color-ink);
+  font-size: 13px;
+}
+
+/* ---------- Table ---------- */
+
+.qv-table {
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  max-width: 100%;
+}
+
+.qv-table th,
+.qv-table td {
+  padding: 5px 10px;
+  border: 1px solid var(--color-muted);
+  text-align: left;
+  vertical-align: top;
+}
+
+.qv-table thead th {
+  background: var(--color-surface-2);
+  color: var(--color-ink);
+}
+
+.qv-table td {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.qv-table tbody th {
+  background: var(--color-surface-2);
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+/* ---------- Illustration ---------- */
+
+/* Beside the title, small, so it never pushes the options down. */
+.qv--illustration {
+  float: right;
+  margin: 0 0 8px 12px;
+}
+
+.qv-illustration {
+  display: block;
+  height: 120px;
+  width: auto;
+  max-width: 40vw;
+  border-radius: 6px;
+  border: 1px solid var(--color-line);
+}
+
+@media (max-width: 560px) {
+  .qv-illustration {
+    height: 96px;
+  }
+}
+
+/* ---------- Breakdown and teacher preview ---------- */
+
+.qv-recall {
+  margin-top: 6px;
+  font-size: 0.8125rem;
+}
+
+.qv-recall summary {
+  color: var(--color-accent-deep);
+  cursor: pointer;
+}
+
+.qv-recall .qv--illustration {
+  float: none;
+  margin: 8px 0 0;
+}
+
+/* Whatever follows the prompt starts below a floated scene. */
+.qv-clear {
+  clear: both;
+}

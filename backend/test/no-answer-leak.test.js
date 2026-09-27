@@ -12,7 +12,9 @@ test("the public file list comes from web/, without build config", () => {
   ["index.html", "admin.html", "app.js", "admin.js", "style.css", "type-registry.js", "types/mcq.js"]
     .forEach(name => assert.ok(files.includes(name), name));
   ["vite.config.js", "package.json"].forEach(name => assert.ok(!files.includes(name), name));
-  assert.ok(files.every(name => /\.(html|css|js)$/.test(name)));
+  assert.ok(files.every(name => /\.(html|css|js)$/.test(name) || /^visuals\/img\/[a-z0-9-]+\.webp$/.test(name)), "only pages, styles, scripts and the question illustrations");
+  ["visuals/visuals.js", "visuals/visuals.css", "visuals/kinds/grid.js"].forEach(name => assert.ok(files.includes(name), name));
+  assert.ok(!files.includes("visuals/package.json"));
 });
 
 // "details" is the teacher-facing focus note, which often gives the method away.
@@ -50,6 +52,13 @@ test("answer keys never reach students", async t => {
     for (const name of PUBLIC_FILES) {
       const res = await request(app).get(`/${name}`);
       assert.equal(res.status, 200, name);
+
+      // Images carry no text at all; visuals.test.js checks their chunks.
+      if (name.endsWith(".webp")) {
+        assert.match(res.headers["content-type"], /image\/webp/, name);
+        continue;
+      }
+
       assert.doesNotMatch(res.text, /answerIndex|"answer"\s*:/, `${name} mentions an answer key`);
       assert.doesNotMatch(res.text, /QUESTION_BANK/, `${name} still embeds the question bank`);
     }

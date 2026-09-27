@@ -523,6 +523,24 @@
         "language": "python",
         "source": "nums = [5, 2, 4, 1]\nfor i in range(len(nums) - 1):\n    if nums[i] > nums[i + 1]:\n        nums[i], nums[i + 1] = nums[i + 1], nums[i]\nprint(nums)"
       },
+      "visual": {
+        "kind": "cells",
+        "purpose": "reading-load",
+        "numbered": true,
+        "numberFrom": 0,
+        "caption": "nums before the loop, each item under its index.",
+        "rows": [
+          {
+            "label": "nums",
+            "cells": [
+              "5",
+              "2",
+              "4",
+              "1"
+            ]
+          }
+        ]
+      },
       "options": [
         "[1, 2, 4, 5]",
         "[2, 5, 4, 1]",
@@ -594,7 +612,39 @@
       "audience": "rgsynapse",
       "level": "S2",
       "prompt": "Two functions, step_a and step_b, each read counter, add 1, and write the result back. counter starts at 0. If their steps happen to interleave in the order shown, what is the final value of counter once both have finished?",
-      "art": "counter = 0\n\nStep 1: step_a reads counter (sees 0)\nStep 2: step_b reads counter (sees 0)\nStep 3: step_a writes counter = 0 + 1\nStep 4: step_b writes counter = 0 + 1",
+      "visual": {
+        "kind": "table",
+        "purpose": "information",
+        "rowHeader": true,
+        "caption": "counter starts at 0.",
+        "columns": [
+          "Step",
+          "step_a",
+          "step_b"
+        ],
+        "rows": [
+          [
+            "1",
+            "reads counter (sees 0)",
+            ""
+          ],
+          [
+            "2",
+            "",
+            "reads counter (sees 0)"
+          ],
+          [
+            "3",
+            "writes counter = 0 + 1",
+            ""
+          ],
+          [
+            "4",
+            "",
+            "writes counter = 0 + 1"
+          ]
+        ]
+      },
       "options": [
         "2",
         "0",
@@ -695,6 +745,32 @@
       "audience": "rgsynapse",
       "level": "S2",
       "prompt": "An AI assistant's convert() function turns a length in feet into metres. You try it on a few examples: convert(1) returns 0.3048; convert(2) returns 0.6096; convert(3) returns 0.9144. Based on this pattern, what would convert(10) most likely return?",
+      "visual": {
+        "kind": "table",
+        "purpose": "reading-load",
+        "columns": [
+          "Call",
+          "Returns"
+        ],
+        "rows": [
+          [
+            "convert(1)",
+            "0.3048"
+          ],
+          [
+            "convert(2)",
+            "0.6096"
+          ],
+          [
+            "convert(3)",
+            "0.9144"
+          ],
+          [
+            "convert(10)",
+            "?"
+          ]
+        ]
+      },
       "options": [
         "30.48",
         "3.048",

@@ -242,6 +242,46 @@
 
   const QP_FACING_ARROWS = { north: "▲", east: "▶", south: "▼", west: "◀" };
 
+  // Question visuals (ADR 0007), drawn with the same kind files as the
+  // student page. The kinds load once, before the first render.
+  const Visuals = window.CTQuestVisuals;
+  const visualsReady = Visuals ? Visuals.load().catch(() => null) : Promise.resolve();
+
+  const QP_VISUAL_PURPOSES = {
+    information: "needed to answer",
+    "reading-load": "restates the prompt, to cut reading",
+    context: "sets the scene only"
+  };
+
+  function qpFigure(question) {
+    if (!question.visual) {
+      return "";
+    }
+
+    const figure = Visuals && Visuals.get(question.visual.kind)
+      ? Visuals.figure(question.visual, { id: `qp-${question.id}` })
+      : "";
+
+    if (!figure) {
+      return `<p class="muted small">This question has a ${escapeHtml(question.visual.kind)} figure, which could not be drawn here.</p>`;
+    }
+
+    return Visuals.placement(question.visual) === "aside" ? `${figure}<div class="qv-clear"></div>` : figure;
+  }
+
+  // Teacher only: why the visual is there, and where an illustration came
+  // from (generator, date, the prompt used).
+  function qpVisualNote(visual) {
+    const purpose = QP_VISUAL_PURPOSES[visual.purpose] || visual.purpose;
+    const note = [`<p class="small">Figure: ${escapeHtml(visual.kind)}, ${escapeHtml(purpose)}.</p>`];
+
+    if (visual.source) {
+      note.push(`<p class="small">Illustration made with ${escapeHtml(visual.source.generator)} on ${escapeHtml(visual.source.date)}${visual.source.reviewed ? " and reviewed before use" : ""}. Prompt used: ${escapeHtml(visual.source.prompt)}</p>`);
+    }
+
+    return note.join("");
+  }
+
   function qpCountBlocks(block) {
     if (!block || typeof block !== "object") {
       return 0;
@@ -511,6 +551,10 @@
       bits.push(`<p>${escapeHtml(question.details)}</p>`);
     }
 
+    if (question.visual) {
+      bits.push(qpVisualNote(question.visual));
+    }
+
     if (question.type === "code-trace") {
       if (question.answer.accepted && question.answer.accepted.length) {
         bits.push(`<p class="small">Also accepted: ${question.answer.accepted.map(form => `<code>${escapeHtml(form)}</code>`).join(", ")}</p>`);
@@ -563,7 +607,7 @@
   }
 
   function qpQuestionBody(question) {
-    const parts = [`<p class="prompt-text">${escapeHtml(question.prompt)}</p>`];
+    const parts = [`<p class="prompt-text">${escapeHtml(question.prompt)}</p>`, qpFigure(question)];
 
     if (question.art) {
       parts.push(`<pre class="codebox">${escapeHtml(question.art)}</pre>`);
@@ -2426,6 +2470,8 @@
   }
 
   async function boot() {
+    await visualsReady;
+
     if (!state.token) {
       renderLogin();
       return;

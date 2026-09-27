@@ -10,6 +10,7 @@ const path = require("path");
 const scoring = require("./scoring");
 const selection = require("./selection");
 const { validatePresets } = require("./presets");
+const visuals = require("./visuals");
 
 const DEFAULT_CONTENT_DIR = path.resolve(__dirname, "../content");
 const NODE_KINDS = ["concept", "practice", "perspective"];
@@ -268,6 +269,8 @@ function validateQuestion(question, where, ctx, errors) {
     errors.push(`${label} code needs a language and a source string`);
   }
 
+  visuals.validateQuestionVisual(question, { imageDir: ctx.imageDir }).forEach(message => errors.push(`${label} ${message}`));
+
   if (!Array.isArray(question.ontology) || !question.ontology.length) {
     errors.push(`${label} must be tagged with at least one ontology node`);
   }
@@ -300,7 +303,9 @@ function validateQuestion(question, where, ctx, errors) {
   });
 }
 
-function loadContent(contentDir = DEFAULT_CONTENT_DIR) {
+// imageDir is where illustration files are checked (web/visuals/img/ unless
+// a test points it elsewhere).
+function loadContent(contentDir = DEFAULT_CONTENT_DIR, { imageDir } = {}) {
   const catalog = readJson(path.join(contentDir, "audiences.json"));
   const ontology = readJson(path.join(contentDir, "ontology.json"));
   const outcomeFile = readJson(path.join(contentDir, "learning-outcomes.json"));
@@ -325,7 +330,8 @@ function loadContent(contentDir = DEFAULT_CONTENT_DIR) {
     audiences: new Map(catalog.audiences.map(audience => [audience.id, audience])),
     nodes: nodesById,
     outcomes: outcomesById,
-    crosswalks: (ontology.framework && ontology.framework.crosswalks) || {}
+    crosswalks: (ontology.framework && ontology.framework.crosswalks) || {},
+    imageDir
   };
   const questions = [];
 

@@ -9,6 +9,42 @@ function must(match, what) {
   return match;
 }
 
+// A question's structured visual (ADR 0007), or null when it has none (the
+// v1 bank replayed by the answer-key test has none). A solver checks the
+// visual's data against the prompt with agree(); the answer-key test hands
+// every solver a visual stripped of its data, which must make it throw, so
+// a solver that ignores its visual fails.
+function visualOf(q, kind) {
+  if (q.visual === undefined) {
+    return null;
+  }
+  must(q.visual.kind === kind, `a ${kind} visual`);
+  return q.visual;
+}
+
+function agree(condition, what) {
+  if (!condition) {
+    throw new Error(`the visual and the prompt disagree on ${what}; fix one of them`);
+  }
+}
+
+// The cells of one row of a "cells" visual as plain values: the text, the
+// shape, or the fill; "…" stays as it is.
+function cellValues(row) {
+  must(row && Array.isArray(row.cells), "the cells visual's row");
+  return row.cells.map(cell => (typeof cell === "string" ? cell : cell.text !== undefined ? cell.text : cell.shape || cell.fill));
+}
+
+// Node pairs of a graph visual, as "A-B" (sorted when undirected) plus the
+// weight, sorted, for comparing with an edge list parsed from the prompt.
+function graphEdges(visual) {
+  must(Array.isArray(visual.edges) && Array.isArray(visual.nodes), "the graph visual's nodes and edges");
+  return visual.edges.map(edge => {
+    const ends = visual.directed ? [edge.from, edge.to] : [edge.from, edge.to].sort();
+    return `${ends.join("-")}${edge.weight !== undefined ? `:${edge.weight}` : ""}`;
+  }).sort();
+}
+
 function numberWord(word) {
   const words = { once: 1, twice: 2, "three times": 3, "four times": 4 };
   const value = words[String(word).toLowerCase()];
@@ -148,6 +184,10 @@ function swiftStrideTo(from, to, by) {
 
 module.exports = {
   must,
+  visualOf,
+  agree,
+  cellValues,
+  graphEdges,
   numberWord,
   gridShortestPath,
   countInversions,

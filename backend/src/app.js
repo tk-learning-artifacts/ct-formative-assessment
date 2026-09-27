@@ -21,9 +21,12 @@ const REVIEW_FEEDBACK_MAX_CHARS = 500;
 // The files served from web/: its .html, .css and .js files (not build
 // config such as vite.config.js), the question-type renderers in
 // web/types/, the .js and .css files in web/lib/ (shared with the server)
-// and in each folder of web/vendor/ (vendored libraries, ADR 0006). Derived
-// from the folders, so a new renderer needs no edit here. Nothing else
-// (package.json, licence files, dotfiles, backend/) is reachable.
+// and in each folder of web/vendor/ (vendored libraries, ADR 0006), and the
+// question visuals: web/visuals/*.js and *.css, the kinds in
+// web/visuals/kinds/ and the .webp illustrations in web/visuals/img/ (ADR
+// 0007). Derived from the folders, so a new renderer or kind needs no edit
+// here. Nothing else (package.json, licence files, dotfiles, backend/) is
+// reachable.
 function listPublicFiles(dir = webDir) {
   const filesIn = (sub, pattern) => {
     const full = path.join(dir, sub);
@@ -40,11 +43,15 @@ function listPublicFiles(dir = webDir) {
       .flatMap(name => filesIn(`vendor/${name}`, /\.(css|js)$/))
     : [];
 
-  return new Set(top.concat(filesIn("types", /\.js$/), filesIn("lib", /\.(css|js)$/), vendor).sort());
+  const visuals = filesIn("visuals", /\.(css|js)$/)
+    .concat(filesIn("visuals/kinds", /\.js$/), filesIn("visuals/img", /\.webp$/));
+
+  return new Set(top.concat(filesIn("types", /\.js$/), filesIn("lib", /\.(css|js)$/), vendor, visuals).sort());
 }
 
 const PUBLIC_FILES = listPublicFiles();
 const TYPE_RENDERERS = Array.from(PUBLIC_FILES).filter(name => name.startsWith("types/"));
+const VISUAL_KINDS = Array.from(PUBLIC_FILES).filter(name => name.startsWith("visuals/kinds/"));
 
 function normalizeJoinCode(rawCode) {
   return String(rawCode || "").trim().toUpperCase();
@@ -851,6 +858,11 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
   // The question-type renderers the student page loads.
   app.get("/api/web-types", (_req, res) => {
     res.json({ renderers: TYPE_RENDERERS });
+  });
+
+  // The visual kinds both pages load (ADR 0007).
+  app.get("/api/web-visuals", (_req, res) => {
+    res.json({ kinds: VISUAL_KINDS });
   });
 
   app.post("/api/events/join", (req, res) => {

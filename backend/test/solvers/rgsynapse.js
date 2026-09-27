@@ -5,7 +5,7 @@
 // source it re-implements with expectSource(), so changing the code without
 // updating the solver fails loudly.
 
-const { must, pythonRange, swiftStrideTo } = require("./lib");
+const { must, visualOf, agree, cellValues, pythonRange, swiftStrideTo } = require("./lib");
 
 function expectSource(q, expected) {
   if (q.code.source !== expected) {
@@ -223,6 +223,14 @@ module.exports = {
     ].join("\n"));
 
     const nums = [5, 2, 4, 1];
+    const visual = visualOf(q, "cells");
+
+    // The drawn list is nums as the code starts it, indexed from 0.
+    if (visual) {
+      agree(visual.numberFrom === 0, "indexes starting at 0");
+      agree(cellValues(must(visual.rows, "the rows")[0]).map(Number).join(",") === nums.join(","), "the list");
+    }
+
     for (let i = 0; i < nums.length - 1; i += 1) {
       if (nums[i] > nums[i + 1]) {
         const tmp = nums[i];
@@ -259,15 +267,40 @@ module.exports = {
     return `[${events.map(e => `'${e}'`).join(", ")}]`;
   },
 
+  // The interleaving is the table in the visual: one row per step, the
+  // step written under the function that takes it. Run it: a read copies
+  // counter into that function's own value (and must see what counter
+  // holds), a write stores that value plus 1 (and must write what the row
+  // says). Both read 0 before either writes, so one increment is lost.
   "RGS-S2-05": q => {
-    must(q.art && q.art.includes("Step 1: step_a reads counter (sees 0)"), "step 1 of the interleaving trace");
-    must(q.art && q.art.includes("Step 2: step_b reads counter (sees 0)"), "step 2 of the interleaving trace");
-    must(q.art && q.art.includes("Step 3: step_a writes counter = 0 + 1"), "step 3 of the interleaving trace");
-    must(q.art && q.art.includes("Step 4: step_b writes counter = 0 + 1"), "step 4 of the interleaving trace");
+    const visual = must(visualOf(q, "table"), "the table of steps");
+    const start = Number(must(q.prompt.match(/counter starts at (\d+)/), "the starting value")[1]);
+    const actors = must(visual.columns, "the table's columns").slice(1);
+    agree(actors.join(",") === "step_a,step_b", "the two functions");
+    let counter = start;
+    const seen = {};
 
-    // Both steps read counter while it is still 0, so both write 1: one
-    // increment is lost.
-    return 1;
+    must(visual.rows, "the table's rows").forEach((row, i) => {
+      agree(Number(row[0]) === i + 1, `step ${i + 1}'s number`);
+      const acting = actors.filter((_actor, a) => row[a + 1] !== "");
+      agree(acting.length === 1, `one function acting in step ${i + 1}`);
+      const actor = acting[0];
+      const text = row[actors.indexOf(actor) + 1];
+      let match;
+
+      if ((match = text.match(/^reads counter \(sees (\d+)\)$/))) {
+        agree(Number(match[1]) === counter, `what ${actor} sees in step ${i + 1}`);
+        seen[actor] = counter;
+      } else if ((match = text.match(/^writes counter = (\d+) \+ 1$/))) {
+        agree(seen[actor] === Number(match[1]), `what ${actor} writes in step ${i + 1}`);
+        counter = seen[actor] + 1;
+      } else {
+        must(false, `a read or a write in step ${i + 1}`);
+      }
+    });
+
+    agree(Object.keys(seen).length === 2, "both functions reading counter");
+    return counter;
   },
 
   "RGS-S2-06": q => {
@@ -288,13 +321,24 @@ module.exports = {
   }),
 
   "RGS-S2-08": q => {
-    const examples = [[1, 0.3048], [2, 0.6096], [3, 0.9144]];
+    const examples = [...q.prompt.matchAll(/convert\((\d+)\) returns (\d+(?:\.\d+)?)/g)].map(([, feet, metres]) => [Number(feet), Number(metres)]);
+    must(examples.length >= 2, "the worked examples");
+    const asked = Number(must(q.prompt.match(/what would convert\((\d+)\)/), "the asked input")[1]);
+    const visual = visualOf(q, "table");
+
+    // The table repeats the examples, then asks for the same input with "?".
+    if (visual) {
+      const rows = must(visual.rows, "the table's rows");
+      agree(JSON.stringify(rows.slice(0, -1)) === JSON.stringify(examples.map(([feet, metres]) => [`convert(${feet})`, String(metres)])), "the examples");
+      agree(JSON.stringify(rows[rows.length - 1]) === JSON.stringify([`convert(${asked})`, "?"]), "the asked input");
+    }
+
     const ratio = examples[0][1] / examples[0][0];
     examples.forEach(([feet, metres]) => {
       must(Math.abs(metres - feet * ratio) < 1e-9, "a consistent linear pattern across the examples");
     });
 
-    const value = 10 * ratio;
+    const value = asked * ratio;
     return {
       pick: option => {
         const leading = option.match(/^-?\d+(\.\d+)?/);

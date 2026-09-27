@@ -2,6 +2,7 @@
   const screen = document.getElementById("screen");
   const ATTEMPT_KEY = "ct-quest-attempt";
   const Types = window.CTQuestTypes;
+  const Visuals = window.CTQuestVisuals;
   const h = { escapeHtml };
 
   // Waits before each retry of a failed submission, in seconds.
@@ -1096,6 +1097,10 @@
     }).join("");
 
     const art = q.art ? `<pre>${escapeHtml(q.art)}</pre>` : "";
+    // A visual (ADR 0007): a figure after the prompt, or a small scene
+    // floated beside it; whatever follows the prompt starts below the scene.
+    const figure = q.visual ? Visuals.figure(q.visual, { id: `qv-${q.id}` }) : "";
+    const aside = Boolean(figure) && Visuals.placement(q.visual) === "aside";
     const code = !q.code ? "" : renderer.renderCode
       ? renderer.renderCode(q.code, h, q)
       : `<p class="code-label">${escapeHtml(q.code.language)}</p><pre><code>${escapeHtml(q.code.source)}</code></pre>`;
@@ -1119,7 +1124,9 @@
           </div>
           <div class="concept-tags q-meta">${meta}</div>
 
+          ${aside ? figure : ""}
           <p class="prompt-text">${escapeHtml(q.prompt)}</p>
+          ${aside ? `<div class="qv-clear"></div>` : figure}
           ${art}
           ${code}
           ${renderer.renderContext ? renderer.renderContext(q, h) : ""}
@@ -1323,8 +1330,17 @@
       answers: state.answers
     }));
 
+    // The questions this attempt was sent, for their figures: a released
+    // breakdown offers a structured visual again beside the key.
+    const heldQuestions = new Map((payload.questions || ACTIVE_BANK || []).map(question => [question.id, question]));
+
     const rows = perQ ? perQ.map(item => {
       const meta = [item.level, item.topic, item.qType].filter(Boolean).join(" · ");
+      const held = heldQuestions.get(item.id);
+      const kind = held && held.visual ? Visuals.get(held.visual.kind) : null;
+      const recall = kind && kind.structured
+        ? `<details class="qv-recall"><summary>Show the figure</summary>${Visuals.figure(held.visual, { id: `qv-r-${item.id}` })}</details>`
+        : "";
 
       return `
         <li class="result-row">
@@ -1332,6 +1348,7 @@
             <strong>${escapeHtml(item.title || item.id)}</strong>
             ${meta ? `<div class="result-meta">${escapeHtml(meta)}</div>` : ""}
             ${resultLines(item)}
+            ${recall}
           </div>
           <div class="result-row__side">${resultScore(item)}</div>
         </li>
@@ -1425,7 +1442,7 @@
 
   async function boot() {
     try {
-      await Types.load();
+      await Promise.all([Types.load(), Visuals.load()]);
     } catch (_error) {
       screen.innerHTML = `<section class="card"><p class="notice notice--critical">Could not load the test. Check your connection and refresh.</p></section>`;
       return;
