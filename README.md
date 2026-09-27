@@ -101,7 +101,7 @@ To change the schema, add a new file with the current date and time in its name.
 
 - **Teachers:** JWT. The backend issues a 7-day token on login; protected routes need `Authorization: Bearer <token>`. The secret comes from `JWT_SECRET`, which is required when `NODE_ENV=production`. Teachers only see events they created; another teacher's event answers 404, like a missing one. Passwords created by the original code (one fixed salt) still work and are rehashed with a random salt on the next login.
 - **Admins (heads of department):** an account with the `admin` role also sees every teacher's events, with each owner's email, and can open their results, outcomes summary, settings history and attempt details. On events it did not create it is read-only: reset, release, Edit settings and marking answer 403 and are hidden on the page. Its own events work as a teacher's do. The role is read from the database on every request, so a change applies at once. See ADR 0004, which also describes the full-control alternative and how to switch to it.
-- **First account:** `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` create the first teacher in an empty database, and `SEED_TEACHER_ROLE=admin` makes it an admin. In production the server refuses to start with the demo password `changeme123`, without `SEED_TEACHER_PASSWORD` when the database has no teacher yet, or while any stored account still accepts the demo password. Fix an account with `npm run set-password -- <email>`, described below.
+- **First account:** `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` create the first account in an empty database. That first account is an admin (ADR 0004); later accounts are teachers. In production the server refuses to start with the demo password `changeme123`, without `SEED_TEACHER_PASSWORD` when the database has no teacher yet, or while any stored account still accepts the demo password. Fix an account with `npm run set-password -- <email>`, described below.
 - **Students:** no account. Starting an attempt returns a one-off attempt token. The page keeps it in `sessionStorage` and sends it as `X-Attempt-Token` to resume (`GET /api/attempts/:id`) and to submit. Only a hash is stored.
 - **Deadlines:** an attempt's deadline is the earlier of start + duration and the event's `end_at`. A submission up to `SUBMIT_GRACE_SECONDS` after it counts as on time; a later one is stored and marked late. The page counts down, auto-submits at zero and retries if the network fails.
 
@@ -130,7 +130,7 @@ The backend auto-restarts on file changes (nodemon), including edits to `.env.de
 
 | | |
 |---|---|
-| Teacher email | `teacher@ctquest.local` |
+| Teacher email | `teacher@ctquest.local` (an admin, as the first account) |
 | Teacher password | `changeme123` |
 | Demo join code | `DEMO123` |
 
@@ -153,7 +153,7 @@ npm run set-role -- head@school.edu.sg admin      # can read every teacher's eve
 npm run set-role -- head@school.edu.sg teacher    # back to their own events only
 ```
 
-The account must already exist (create it with `set-password` first). The change applies on the account's next request, without signing in again. To make the very first account an admin, set `SEED_TEACHER_ROLE=admin` alongside `SEED_TEACHER_EMAIL` and `SEED_TEACHER_PASSWORD` before the first start. In Docker: `docker compose run --rm app node backend/scripts/set-role.js head@school.edu.sg admin`.
+The account must already exist (create it with `set-password` first). The change applies on the account's next request, without signing in again. The first account seeded into an empty database is already an admin. In Docker: `docker compose run --rm app node backend/scripts/set-role.js head@school.edu.sg admin`.
 
 ---
 
@@ -174,7 +174,7 @@ The suite uses Node's built-in test runner (`node:test`) with `supertest` for HT
 | `answer-keys.test.js` | Every question's key against a computed answer (see below) |
 | `no-answer-leak.test.js` | No answer fields or `details` in any public file or student response; the public file list comes from `web/`; JSON 404 for unknown API routes |
 | `teacher-scoping.test.js` | Teachers only see their own events and results |
-| `admin-role.test.js` | Every event route under a teacher on their own event, another teacher, an admin on their own event, an admin on a teacher's event (200 on reads, 403 on writes, nothing changed) and a teacher on an admin's event; the admin's event list with owners; the role read per request; the role triggers; `SEED_TEACHER_ROLE`; `set-role` |
+| `admin-role.test.js` | Every event route under a teacher on their own event, another teacher, an admin on their own event, an admin on a teacher's event (200 on reads, 403 on writes, nothing changed) and a teacher on an admin's event; the admin's event list with owners; the role read per request; the role triggers; the seeded first account is an admin; `set-role` |
 | `compose-env.test.js` | `docker-compose.yml` passes every setting `config.js` reads (except `HOST` and `DB_PATH`), so a new setting cannot be dropped silently in Docker |
 | `auth.test.js` | `JWT_SECRET` and `SEED_TEACHER_PASSWORD` rules, refusal of the demo password in production, `set-password`, salted hashes and rehash |
 | `migration.test.js` | Upgrading `fixtures/v1-app.sql` (made by the original code), chosen-option text kept, events with submissions left as their students saw them, backup, idempotence, rollback |
@@ -316,7 +316,6 @@ Upgrading the image migrates the database in the volume on first start and leave
 |---|---|---|---|
 | `JWT_SECRET` | Yes | — | Secret used to sign JWTs. Use a long random string. The server refuses to start without it when `NODE_ENV=production`. |
 | `SEED_TEACHER_EMAIL` | No | `teacher@ctquest.local` | First teacher account, created only in an empty database. |
-| `SEED_TEACHER_ROLE` | No | `teacher` | `admin` makes that first account a head of department who can read every teacher's events (ADR 0004). Ignored once the database has an account. |
 | `SEED_TEACHER_PASSWORD` | On first production boot | `changeme123` in development | Password for that account. Production refuses the demo password, and refuses to seed an empty database without it. |
 | `PORT` | No | `3000` | Port the server listens on. |
 | `HOST` | No | all interfaces | Address to bind, e.g. `127.0.0.1` for a local-only run. |

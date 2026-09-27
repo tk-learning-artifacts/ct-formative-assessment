@@ -54,7 +54,7 @@ Every event the teacher routes return carries `owner_email`, `owned` (the caller
 ### 6. Managing accounts from the command line
 
 - `npm run set-role -- <email> admin|teacher` changes an existing account's role and prints the old one. It refuses an unknown email and points to `set-password`, which creates accounts. In Docker: `docker compose run --rm app node backend/scripts/set-role.js <email> admin`.
-- `SEED_TEACHER_ROLE=admin` makes the first account, seeded into an empty database, an admin. It is optional, defaults to `teacher`, and is ignored once the database has an account, so it cannot promote anyone later.
+- The first account, seeded into an empty database from `SEED_TEACHER_EMAIL` and `SEED_TEACHER_PASSWORD`, is always an admin: whoever deploys the app oversees it. Every later account starts as a teacher. Roles live in `users.role`; seeding happens only on an empty database, so it cannot promote anyone later. (An earlier draft had a `SEED_TEACHER_ROLE` setting for this. It was dropped as one more setting to get wrong, after it was found missing from `docker-compose.yml`.)
 
 ### 7. The teacher page (decided here)
 

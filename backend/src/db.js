@@ -965,7 +965,9 @@ function createStore(db, content) {
         );
       }
 
-      createUser({ email: seedTeacher.email, password: seedTeacher.password, role: seedTeacher.role || "teacher" });
+      // The first account is the admin (ADR 0004): whoever deploys the app
+      // oversees it. Later accounts come from set-password as teachers.
+      createUser({ email: seedTeacher.email, password: seedTeacher.password, role: "admin" });
     }
 
     const eventCount = db.prepare("SELECT COUNT(*) AS count FROM events").get().count;

@@ -2,7 +2,7 @@
 // teacher on their own event, another teacher, an admin on their own event,
 // and an admin on a teacher's event (read yes, change no). Plus the role
 // coming from the database rather than the token, the role triggers, the
-// SEED_TEACHER_ROLE setting and the set-role script.
+// seeded first account being an admin, and the set-role script.
 
 const path = require("path");
 const fs = require("fs");
@@ -225,23 +225,22 @@ test("users.role only ever holds teacher or admin", async t => {
 
   assert.throws(() => store.createUser({ email: "x@school.test", password: "x-password-1", role: "superuser" }), /teacher or admin/);
   assert.throws(() => store.setRole("teacher@ctquest.local", "owner"), /teacher or admin/);
-  assert.equal(store.findUserByEmail("teacher@ctquest.local").role, "teacher");
+  assert.equal(store.findUserByEmail("teacher@ctquest.local").role, "admin");
   assert.equal(store.setRole("nobody@school.test", "admin"), null);
 });
 
-test("SEED_TEACHER_ROLE seeds the first account as an admin, and defaults to teacher", async t => {
-  assert.equal(loadConfig({}).seedTeacher.role, "teacher");
-  assert.equal(loadConfig({ SEED_TEACHER_ROLE: "Admin" }).seedTeacher.role, "admin");
-  assert.throws(() => loadConfig({ SEED_TEACHER_ROLE: "root" }), /SEED_TEACHER_ROLE/);
-
-  const seeded = await buildApp({ env: { SEED_TEACHER_ROLE: "admin" } });
+test("the seeded first account is an admin, and later accounts are teachers", async t => {
+  const seeded = await buildApp();
   t.after(() => seeded.cleanup());
   assert.equal(seeded.store.findUserByEmail("teacher@ctquest.local").role, "admin");
 
-  // Only an empty database is seeded, so the setting cannot promote anyone later.
-  const plain = await buildApp();
-  plain.close();
-  const reopened = await buildApp({ dbPath: plain.dbPath, env: { SEED_TEACHER_ROLE: "admin" } });
+  seeded.store.createUser({ email: "later@school.test", password: "later-password-1" });
+  assert.equal(seeded.store.findUserByEmail("later@school.test").role, "teacher");
+
+  // Only an empty database is seeded, so a demoted first account stays demoted.
+  seeded.store.setRole("teacher@ctquest.local", "teacher");
+  seeded.close();
+  const reopened = await buildApp({ dbPath: seeded.dbPath });
   t.after(() => reopened.cleanup());
   assert.equal(reopened.store.findUserByEmail("teacher@ctquest.local").role, "teacher");
 });
@@ -258,15 +257,16 @@ test("npm run set-role changes an existing account's role and nothing else", asy
   });
 
   try {
-    const promoted = run(["Teacher@CTQuest.local", "admin"]);
-    assert.equal(promoted.status, 0, promoted.stderr);
-    assert.match(promoted.stdout, /Set teacher@ctquest\.local to admin \(was teacher\)/);
-
+    // The seeded first account starts as an admin.
     assert.match(run(["teacher@ctquest.local", "admin"]).stdout, /already admin/);
 
-    const demoted = run(["teacher@ctquest.local", "teacher"]);
+    const demoted = run(["Teacher@CTQuest.local", "teacher"]);
     assert.equal(demoted.status, 0, demoted.stderr);
-    assert.match(demoted.stdout, /to teacher \(was admin\)/);
+    assert.match(demoted.stdout, /Set teacher@ctquest\.local to teacher \(was admin\)/);
+
+    const promoted = run(["teacher@ctquest.local", "admin"]);
+    assert.equal(promoted.status, 0, promoted.stderr);
+    assert.match(promoted.stdout, /to admin \(was teacher\)/);
 
     const missing = run(["nobody@school.test", "admin"]);
     assert.equal(missing.status, 1);

@@ -10,6 +10,9 @@ test("teacher scoping", async t => {
   t.after(() => ctx.cleanup());
   const { app, store } = ctx;
 
+  // The seeded first account is an admin (ADR 0004); this file is about two
+  // plain teachers, so it is made a teacher first.
+  store.setRole("teacher@ctquest.local", "teacher");
   store.createUser({ email: "other@school.test", password: "other-password-1" });
   const demoToken = await login(app);
   const otherToken = await login(app, { email: "other@school.test", password: "other-password-1" });

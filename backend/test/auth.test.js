@@ -53,7 +53,7 @@ test("production refuses to start without JWT_SECRET or with the demo seed passw
   assert.throws(() => loadConfig({ NODE_ENV: "production", JWT_SECRET: "x", SEED_TEACHER_PASSWORD: "changeme123" }), /SEED_TEACHER_PASSWORD/);
   assert.equal(loadConfig(PROD).jwtSecret, "long-random");
   assert.equal(loadConfig({ NODE_ENV: "development" }).jwtSecret, "ct-quest-dev-secret");
-  assert.deepEqual(loadConfig({ NODE_ENV: "development" }).seedTeacher, { email: "teacher@ctquest.local", password: "changeme123", role: "teacher" });
+  assert.deepEqual(loadConfig({ NODE_ENV: "development" }).seedTeacher, { email: "teacher@ctquest.local", password: "changeme123" });
 });
 
 test("server.js exits non-zero in production without JWT_SECRET", () => {

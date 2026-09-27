@@ -48,7 +48,6 @@ Copy the values from your local `.env`. Mark the secrets as secret in Coolify.
 | `JWT_SECRET` | from `.env` | Secret. Changing it later logs every teacher out and loses in-progress Parsons answers |
 | `SEED_TEACHER_EMAIL` | from `.env` | Creates the first teacher in an empty database only |
 | `SEED_TEACHER_PASSWORD` | from `.env` | Secret. Needed only for the first boot; remove it afterwards |
-| `SEED_TEACHER_ROLE` | `admin` or unset | `admin` makes the seeded account a head of department who can read every teacher's events (ADR 0004). Unset means `teacher`. Used on the first boot only |
 | `AI_PROVIDER` | `openrouter` | Use `none` to turn AI marking off |
 | `AI_API_KEY` | from `.env` | Secret. The OpenRouter key |
 | `AI_APP_URL` | `https://ctquest.snack.tinkertofu.com` | Sent to OpenRouter as the referring site |
@@ -67,9 +66,9 @@ defaults.
 3. `https://ctquest.snack.tinkertofu.com/questions.js` returns 404 (no answer key is
    served).
 4. Sign in at `https://ctquest.snack.tinkertofu.com/admin.html` with the seed teacher.
-   The header says `(admin)` after the email if `SEED_TEACHER_ROLE=admin`
-   was set.
-5. Remove `SEED_TEACHER_PASSWORD` (and `SEED_TEACHER_ROLE`) from Coolify and
+   The seeded account is the admin, so the header says `(admin)` after the
+   email.
+5. Remove `SEED_TEACHER_PASSWORD` from Coolify and
    redeploy. From now on, manage accounts from the container's terminal in
    Coolify, in `/app/backend`:
    - `npm run set-password -- <email>` sets a password, creating the account
