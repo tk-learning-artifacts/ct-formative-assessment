@@ -9,6 +9,7 @@ const scoring = require("./scoring");
 const selection = require("./selection");
 const policy = require("./policy");
 const { createAiProvider } = require("./ai");
+const { buildOutcomesSummary } = require("./outcomes-summary");
 
 const webDir = path.resolve(__dirname, "../../web");
 const MAX_DURATION_MINUTES = 24 * 60;
@@ -415,6 +416,18 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
       event: teacherEvent(event),
       attempts: db.getResults(event.id)
     });
+  });
+
+  // Per-learning-outcome and per-ontology-node results, for the teacher's
+  // picker to report back against what was actually tested.
+  app.get("/api/events/:id/outcomes-summary", requireAuth, (req, res) => {
+    const event = ownEvent(req, res);
+
+    if (!event) {
+      return;
+    }
+
+    res.json(buildOutcomesSummary(db, event.id));
   });
 
   app.post("/api/events/:id/release", requireAuth, (req, res) => {
