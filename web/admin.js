@@ -716,14 +716,18 @@
     }
 
     const lateNote = row.lateAttempts ? ` <span class="pill">${row.lateAttempts} late</span>` : "";
+    // AI-scored answers still waiting for a mark are left out of the average.
+    const unmarkedNote = row.unmarkedAnswers ? ` <span class="pill">${row.unmarkedAnswers} not marked yet</span>` : "";
     return `
       <li class="result-row">
         <span>${escapeHtml(labelText)}</span>
         <span class="row" style="gap:16px">
           <span>${row.submittedAttempts} student${row.submittedAttempts === 1 ? "" : "s"}</span>
-          <span class="${row.meanPercentage < 50 ? "bad" : "good"}">${row.meanPercentage}% average</span>
+          ${row.meanPercentage === null
+            ? `<span class="muted" style="margin:0">No marked answers yet</span>`
+            : `<span class="${row.meanPercentage < 50 ? "bad" : "good"}">${row.meanPercentage}% average</span>`}
           <span class="${row.belowHalfCount ? "bad" : "muted"}" style="margin:0">${row.belowHalfCount} below 50%</span>
-          ${lateNote}
+          ${lateNote}${unmarkedNote}
         </span>
       </li>
     `;

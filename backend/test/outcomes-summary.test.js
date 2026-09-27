@@ -105,3 +105,45 @@ test("outcomes summary endpoint", async t => {
     assert.equal((await request(app).get(`/api/events/${event.id}/outcomes-summary`)).status, 401);
   });
 });
+
+test("outcomes summary leaves unmarked AI answers out of the average", async t => {
+  const ctx = await buildApp();
+  t.after(() => ctx.cleanup());
+  const { app } = ctx;
+  const token = await login(app);
+  const auth = { Authorization: `Bearer ${token}` };
+
+  // Both tagged LO-CODE-TRACE-1: an MCQ worth 5 and an AI question worth 2.
+  const created = await request(app).post("/api/events").set(auth).send({
+    title: "AI outcomes",
+    filter: { audiences: ["rgsynapse"], questionIds: ["RGS-S1-01", "AIS-S1-01"] }
+  });
+  assert.equal(created.status, 201);
+  const event = created.body.event;
+
+  const ada = await startAttempt(app, { joinCode: event.join_code, studentName: "Ada" });
+  await submit(app, ada.attempt, { "RGS-S1-01": 2, "AIS-S1-01": "The decrement is outside the loop." });
+  // AI is off in tests, so the job marks the AI answer needs-review.
+  await ctx.expressApp.locals.scoringQueue.drain();
+
+  const summary = async () => {
+    const res = await request(app).get(`/api/events/${event.id}/outcomes-summary`).set(auth);
+    assert.equal(res.status, 200);
+    return Object.fromEntries(res.body.outcomes.map(outcome => [outcome.id, outcome]));
+  };
+
+  const before = (await summary())["LO-CODE-TRACE-1"];
+  assert.equal(before.unmarkedAnswers, 1);
+  assert.equal(before.meanPercentage, 100, "the unmarked answer is not counted as 0");
+  assert.equal(before.belowHalfCount, 0);
+
+  const review = await request(app)
+    .post(`/api/events/${event.id}/attempts/${ada.attempt.id}/answers/AIS-S1-01/review`)
+    .set(auth)
+    .send({ score: 0 });
+  assert.equal(review.status, 200);
+
+  const after = (await summary())["LO-CODE-TRACE-1"];
+  assert.equal(after.unmarkedAnswers, 0);
+  assert.equal(after.meanPercentage, 71.4);
+});
