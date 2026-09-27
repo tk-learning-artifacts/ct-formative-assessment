@@ -5,6 +5,15 @@
 (function () {
   const DEFAULT_MAX_CHARS = 1000;
 
+  // Every keystroke counts as a change, as in the code-trace renderer, so a
+  // refresh keeps the draft even while the box still has focus (a textarea
+  // only fires "change" on blur).
+  document.addEventListener("input", event => {
+    if (event.target.matches && event.target.matches("#openResponse")) {
+      event.target.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+
   window.CTQuestTypes.register("open-response-ai", {
     renderInput(question, response, h) {
       const maxChars = question.responseMaxChars || DEFAULT_MAX_CHARS;
