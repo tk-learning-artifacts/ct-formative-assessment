@@ -2,10 +2,11 @@
 // Answer key shape: { "index": <integer> }. Response shape: an integer index.
 
 // Fields a student is allowed to see. Anything not listed here (answer,
-// future rubric or solution fields) never leaves the server.
+// future rubric or solution fields) never leaves the server. "details" is
+// teacher-only because it often names the method or the answer.
 const PUBLIC_FIELDS = [
   "id", "type", "audience", "level", "title", "prompt", "art", "code",
-  "options", "points", "topic", "qType", "details"
+  "options", "points", "topic", "qType"
 ];
 
 function validate(question) {

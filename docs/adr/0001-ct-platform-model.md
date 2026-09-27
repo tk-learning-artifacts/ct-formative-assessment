@@ -186,13 +186,17 @@ Phase 1 ships the interface and guardrails only. No provider is implemented and 
 
 Student endpoints are unchanged in shape, except that `POST /api/attempts` adds `attempt.token`, `attempt.deadlineAt` and `serverNow`, and submit requires `X-Attempt-Token` and returns `attempt.late`.
 
-## Still open (for Akmal)
+## Decided after review (2026-09-27)
 
-1. **Which AI provider**, and under what data processing terms: where data is processed, retention, and whether it is used for training. The interface is provider-neutral.
-2. **Consent for AI scoring of minors:** whether schools or parents opt in per event, per school or per student, and whether AI scoring is on by default for RGSynapse. The ADR fixes *what* may be sent, not *whether* it is sent.
-3. **Whether AI feedback text is ever shown to students**, even after validation, or only the feedback code plus teacher-written text. The schema allows up to 200 characters; showing it is a Phase 2 UI decision.
-4. **MOE syllabus crosswalk:** add one if schools want LOs reported in syllabus terms.
-5. **Admin role:** today every account is scoped to its own events. A head of department who sees all of them needs a role check.
+1. **AI provider: OpenRouter.** The Phase 2 adapter calls OpenRouter's chat completions API with a JSON-schema response format built by `buildScoreSchema`. The key is read from the environment (`AI_API_KEY`); in local development it lives at `~/.config/openrouter/key` and is never committed. Any model reached through OpenRouter must support structured output, and the validator still checks every reply.
+2. **Consent is out of scope for the app.** Akmal holds consent for the cohorts using it, and AI scores are formative only: they carry no consequence for the student. The app still enforces decision B (no personal data in payloads, structured output only).
+3. **Students see the validated AI feedback text** (at most 200 characters, single line) alongside the feedback code. Only text that passed `validateModelScore` is ever shown; anything else stays `needs-review` for the teacher.
+4. **"Capabilities" means ontology nodes plus question types**, as sections 2, 5 and 7 describe.
+
+## Still open
+
+1. **MOE syllabus crosswalk:** add one if schools want LOs reported in syllabus terms.
+2. **Admin role:** today every account is scoped to its own events. A head of department who sees all of them needs a role check.
 
 ## Consequences
 

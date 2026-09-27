@@ -7,7 +7,8 @@ const request = require("supertest");
 const { buildApp, login, startAttempt, submit, allKeys } = require("./helpers");
 const { PUBLIC_FILES } = require("../src/app");
 
-const ANSWER_KEYS = ["answer", "answerIndex", "correctIndex", "correct_index", "accepted", "rubric", "solution"];
+// "details" is the teacher-facing focus note, which often gives the method away.
+const ANSWER_KEYS = ["answer", "answerIndex", "correctIndex", "correct_index", "accepted", "rubric", "solution", "details"];
 
 test("answer keys never reach students", async t => {
   const ctx = await buildApp();

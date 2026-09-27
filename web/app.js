@@ -287,10 +287,6 @@
       </div>
     `;
 
-    const detailsLine = q.details
-      ? `<p class="muted" style="margin-top:12px"><strong>Focus:</strong> ${escapeHtml(q.details)}</p>`
-      : "";
-
     const art = q.art ? `<pre>${escapeHtml(q.art)}</pre>` : "";
     const code = q.code
       ? `<p class="code-label">${escapeHtml(q.code.language)}</p><pre><code>${escapeHtml(q.code.source)}</code></pre>`
@@ -315,7 +311,6 @@
             <h2>${escapeHtml(q.title)}</h2>
             <p class="muted">${escapeHtml(state.eventTitle)}</p>
             ${metaPills}
-            ${detailsLine}
           </div>
 
           <div class="progress-panel">
