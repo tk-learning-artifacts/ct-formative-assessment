@@ -13,7 +13,10 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { execFileSync } = require("child_process");
+const { execFile, execFileSync } = require("child_process");
+const { promisify } = require("util");
+
+const execFileAsync = promisify(execFile);
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Database = require("better-sqlite3");
@@ -166,14 +169,20 @@ const RUNNERS = {
   swift: { command: "swift", available: hasCommand("swift", ["--version"]), extension: ".swift" }
 };
 
-function runProgram(language, source) {
+// Asynchronous on purpose: a synchronous run (swift takes seconds) blocks the
+// event loop while the test reporter's output queues up, and with
+// --test-force-exit on macOS, where pipe writes are asynchronous, the child
+// could exit before that output reached the runner, silently dropping the
+// rest of this file's results.
+async function runProgram(language, source) {
   const runner = RUNNERS[language];
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ctquest-run-"));
   const file = path.join(dir, `main${runner.extension}`);
 
   try {
     fs.writeFileSync(file, `${source}\n`);
-    return execFileSync(runner.command, [file], { encoding: "utf8", timeout: 60000 });
+    const { stdout } = await execFileAsync(runner.command, [file], { encoding: "utf8", timeout: 60000 });
+    return stdout;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -184,22 +193,22 @@ questions.filter(question => question.type === "code-trace" || question.type ===
   const runner = RUNNERS[language];
   const skip = !runner ? `no runner for ${language}` : !runner.available && `${runner.command} is not installed`;
 
-  test(`${question.id} key checked by running real ${language}`, { skip }, () => {
+  test(`${question.id} key checked by running real ${language}`, { skip }, async () => {
     if (question.type === "code-trace") {
-      const printed = runProgram(language, question.code.source);
+      const printed = await runProgram(language, question.code.source);
       assert.equal(scoring.scoreResponse(question, printed).result.correct, true, `${question.id}: ${runner.command} printed ${JSON.stringify(printed)}`);
       return;
     }
 
-    parsonsOrders(question).forEach(order => {
-      const printed = runProgram(language, parsonsSource(question, order));
+    for (const order of parsonsOrders(question)) {
+      const printed = await runProgram(language, parsonsSource(question, order));
       assert.deepEqual(normalizeOutput(printed), normalizeOutput(question.expectedOutput), `${question.id}: order ${order.join(",")} printed ${JSON.stringify(printed)}`);
-    });
+    }
 
     // A reference program in the code block (TS-PA-03 shows the Python it
     // translates) must print the same thing.
     if (question.code && RUNNERS[question.code.language] && RUNNERS[question.code.language].available) {
-      assert.deepEqual(normalizeOutput(runProgram(question.code.language, question.code.source)), normalizeOutput(question.expectedOutput));
+      assert.deepEqual(normalizeOutput(await runProgram(question.code.language, question.code.source)), normalizeOutput(question.expectedOutput));
     }
   });
 });
