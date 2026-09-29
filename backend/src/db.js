@@ -157,8 +157,16 @@ function syncContent(db, content, log = () => {}) {
 // Every preset must match at least one question with its default settings,
 // or its card would offer an event that cannot be created. Checked at boot,
 // after the content tables are filled, because matching runs as SQL.
-function assertPresetsMatch(db, content) {
+function assertPresetsMatch(db, content, log = () => {}) {
   const empty = overlay.presetsWithoutQuestions(db, content);
+  const retired = db.prepare("SELECT id FROM bank_questions WHERE retired = 1").all().map(row => row.id);
+
+  // Retirements are made in the running app, which is the only place to undo
+  // them, so they must never stop the app from starting.
+  if (empty.length && retired.length) {
+    log(`Presets matching no questions while ${retired.length} are retired (${retired.join(", ")}): ${empty.map(preset => preset.id).join(", ")}. Restore a question from the bank.`);
+    return;
+  }
 
   if (empty.length) {
     throw new Error(`Content is invalid:\n- presets.json: ${empty.map(preset => `preset "${preset.id}" matches no questions with its default settings`).join("\n- ")}`);
@@ -194,7 +202,7 @@ function openDatabase({
   try {
     const migration = migrate(db, { dbPath: resolvedPath, ctx: { content, log }, log });
     const stale = syncContent(db, content, log);
-    assertPresetsMatch(db, content);
+    assertPresetsMatch(db, content, log);
 
     store = createStore(db, content, { stale, log });
     store.migration = migration;
@@ -928,7 +936,7 @@ function createStore(db, content, { stale, log } = {}) {
       ORDER BY position ASC
     `).all();
     const prereqs = db.prepare("SELECT from_id, to_id FROM ontology_edges WHERE kind = 'requires'").all();
-    const counts = db.prepare("SELECT node_id, COUNT(*) AS count FROM question_nodes GROUP BY node_id").all()
+    const counts = db.prepare("SELECT n.node_id, COUNT(*) AS count FROM question_nodes n JOIN bank_questions q ON q.id = n.question_id WHERE q.retired = 0 GROUP BY n.node_id").all()
       .reduce((acc, row) => ({ ...acc, [row.node_id]: row.count }), {});
 
     return nodes.map(node => ({
@@ -953,7 +961,7 @@ function createStore(db, content, { stale, log } = {}) {
              (SELECT json_group_array(node_id) FROM outcome_nodes n WHERE n.outcome_id = o.id) AS nodes_json,
              (SELECT json_group_array(level) FROM outcome_levels l WHERE l.outcome_id = o.id) AS levels_json,
              (SELECT json_group_array(audience) FROM outcome_audiences au WHERE au.outcome_id = o.id) AS audiences_json,
-             (SELECT COUNT(*) FROM question_outcomes qo WHERE qo.outcome_id = o.id) AS question_count
+             (SELECT COUNT(*) FROM question_outcomes qo JOIN bank_questions q ON q.id = qo.question_id WHERE qo.outcome_id = o.id AND q.retired = 0) AS question_count
       FROM learning_outcomes o
       WHERE (@level IS NULL OR EXISTS (SELECT 1 FROM outcome_levels l WHERE l.outcome_id = o.id AND l.level = @level))
         AND (@audience IS NULL

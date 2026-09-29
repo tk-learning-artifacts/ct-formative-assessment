@@ -338,3 +338,41 @@ test("nothing the overlay does writes to backend/content", async t => {
 
   assert.equal(contentHash(), before);
 });
+
+test("a retirement that empties a preset after a content change is logged at boot, not fatal", async t => {
+  const ctx = await setup(t);
+  assert.equal((await ctx.send("post", "/api/question-bank/TS-CT-01/retire", ctx.admin)).status, 200);
+  // The state a later edit to presets.json could leave behind, written past the API guard.
+  ctx.store.db.prepare("INSERT INTO question_overrides (question_id, retired_at, retired_by, updated_at) VALUES ('TS-PA-01', 'now', NULL, 'now')").run();
+  const { dbPath } = ctx;
+  ctx.close();
+
+  const logs = [];
+  const reopened = openDatabase({ dbPath, seedTeacher: null, log: message => logs.push(message) });
+  t.after(() => reopened.close());
+  assert.ok(logs.some(message => message.includes("ordering-tracing") && message.includes("TS-PA-01")), logs.join("\n"));
+});
+
+test("edited values are capped: points, string lengths and list sizes", async t => {
+  const ctx = await setup(t);
+  const patch = body => ctx.send("patch", "/api/question-bank/P5-02", ctx.admin, body);
+
+  assert.equal((await patch({ points: 1e300 })).status, 400);
+  assert.equal((await patch({ points: 101 })).status, 400);
+  assert.equal((await patch({ details: "x".repeat(5001) })).status, 400);
+  assert.equal((await patch({ topic: "x".repeat(101) })).status, 400);
+  assert.equal((await patch({ outcomes: Array.from({ length: 51 }, () => "LO-SEQ-1") })).status, 400);
+  assert.equal((await ctx.entry("P5-02")).overlay, null);
+});
+
+test("the picker's question counts leave retired questions out", async t => {
+  const ctx = await setup(t);
+  const count = async () => {
+    const res = await ctx.send("get", "/api/outcomes", ctx.teacher);
+    assert.equal(res.status, 200);
+    return res.body.outcomes.reduce((sum, outcome) => sum + outcome.questionCount, 0);
+  };
+  const before = await count();
+  assert.equal((await ctx.send("post", "/api/question-bank/P5-02/retire", ctx.admin)).status, 200);
+  assert.ok(await count() < before);
+});

@@ -17,26 +17,30 @@ const { validateQuestion, questionContext } = require("./content");
 // The fields an admin may override: the API name, the column, and whether the
 // column holds JSON.
 const FIELDS = [
-  { key: "level", column: "level", check: isNonEmptyString },
-  { key: "points", column: "points", check: Number.isInteger },
-  { key: "topic", column: "topic", check: isNonEmptyString },
-  { key: "qType", column: "q_type", check: isNonEmptyString },
+  { key: "level", column: "level", check: isShortString },
+  { key: "points", column: "points", check: value => Number.isInteger(value) && value <= POINTS_MAX },
+  { key: "topic", column: "topic", check: isShortString },
+  { key: "qType", column: "q_type", check: isShortString },
   { key: "difficulty", column: "difficulty", check: Number.isInteger },
   { key: "ontology", column: "ontology_json", json: true, check: isStringList },
   { key: "outcomes", column: "outcomes_json", json: true, check: isStringList },
-  { key: "details", column: "details", check: value => typeof value === "string" }
+  { key: "details", column: "details", check: value => typeof value === "string" && value.length <= DETAILS_MAX }
 ];
 
 const AUDIT_COLUMN = { level: "level", points: "points", topic: "topic", qType: "q_type", difficulty: "difficulty", ontology: "ontology", outcomes: "outcomes", details: "details" };
 const FLAG_NOTE_MAX = 1000;
 const COMMENT_MAX = 2000;
+const POINTS_MAX = 100;
+const DETAILS_MAX = 5000;
+const SHORT_MAX = 100;
+const LIST_MAX = 50;
 
-function isNonEmptyString(value) {
-  return typeof value === "string" && value.trim().length > 0;
+function isShortString(value) {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= SHORT_MAX;
 }
 
 function isStringList(value) {
-  return Array.isArray(value) && value.every(item => typeof item === "string");
+  return Array.isArray(value) && value.length <= LIST_MAX && value.every(item => typeof item === "string" && item.length <= SHORT_MAX);
 }
 
 function nowIso() {
