@@ -78,18 +78,20 @@ const devRoleLogin = {
   name: 'dev-role-login',
   apply: 'serve',
   configureServer(server) {
-    // The backend's dev seed, from the one file `pnpm run dev` loads. Not
-    // loadEnv: it would also read the repo-root .env, the production file. A
-    // variable exported in the shell wins, as it does for the backend. Blank
-    // means the backend's own defaults. Read once, so a change to the file
-    // needs a Vite restart.
+    // The dev seed account, from the one file `pnpm run dev` loads. Not
+    // loadEnv (it would also read the repo-root .env, the production file), and
+    // not the shell for SEED_TEACHER_*: a shell that exports the production
+    // seed account would have that password embedded in a script served to the
+    // browser, for an account the dev database does not have. Blank means the
+    // backend's own defaults. Read once, so a change to the file needs a Vite
+    // restart. The DEV_* names may also come from the shell.
     let fromFile = {}
     try {
       fromFile = parseEnv(readFileSync(resolve(__dirname, '../.env.development'), 'utf8'))
     } catch (_error) {
       // no file: defaults
     }
-    const setting = key => process.env[key] || fromFile[key]
+    const setting = key => (key.startsWith('DEV_') && process.env[key]) || fromFile[key]
     const script = devLoginScript({
       email: setting('SEED_TEACHER_EMAIL') || 'teacher@ctquest.local',
       password: setting('SEED_TEACHER_PASSWORD') || 'changeme123',

@@ -54,9 +54,10 @@ teacher path is the same request the login form sends.
 Credentials come from `.env.development`, the file `pnpm run dev` loads: the
 plugin reads `SEED_TEACHER_EMAIL` and `SEED_TEACHER_PASSWORD` from it (blank
 means `teacher@ctquest.local` / `changeme123`). It reads only that file, never
-the repo-root `.env`, which is the production file. A variable exported in the
-shell wins over the file, as it does for the backend. Optional overrides, set the
-same way: `DEV_JOIN_CODE` (default `DEMO123`), `DEV_STUDENT_NAME` (`Dev
+the repo-root `.env`, which is the production file, and never a `SEED_TEACHER_*`
+exported in your shell: a shell that carries the production seed account would
+otherwise have that password embedded in the script. Optional overrides, which
+may also be exported in the shell: `DEV_JOIN_CODE` (default `DEMO123`), `DEV_STUDENT_NAME` (`Dev
 Student`), `DEV_STUDENT_GROUP` (`Dev Class`). `DEV_API_TARGET` (the backend the
 dev server proxies to, default `http://localhost:3000`) is read from the
 environment only.
@@ -73,7 +74,7 @@ Things that go wrong quietly:
   set `SEED_TEACHER_*` to that account.
 - Vite reads `.env.development` once, at start, and does not watch it (nodemon
   restarts the backend on a change, so the two can disagree until you restart
-  Vite). A variable exported in the shell overrides the file for both sides, and
+  Vite). A `SEED_TEACHER_*` exported in the shell can still reach the backend, and
   the same stray variables break the backend tests (`SEED_TEACHER_*` breaks the
   seeded logins, `AI_*` switches the AI on), so run `pnpm test` with them unset.
 - The demo event `DEMO123` is created only when the database has no events.
