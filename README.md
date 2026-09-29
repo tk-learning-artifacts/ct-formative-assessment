@@ -165,6 +165,10 @@ Leave out the `--` npm needed: pnpm passes it to the script, which then rejects 
 
 The account is created if it does not exist. The password is never accepted as a command-line argument. It must be at least 10 characters and not the demo password.
 
+### Starting in production on a database with a demo-password account
+
+Production refuses to start while any stored account still accepts the demo password `changeme123`, which a database from an early deploy can hold (the log says "These accounts still use the demo password"). With a shell, run `set-password` for that account. With no shell, as on a hosted deploy: set `SEED_TEACHER_EMAIL` to that account's email and `SEED_TEACHER_PASSWORD` to a new password of at least 10 characters, and redeploy. The new password replaces the demo one, only on an account that still has the demo password, and the server then starts. Another demo-password account still blocks start-up and is named in the log. Once it is running you may remove `SEED_TEACHER_PASSWORD`.
+
 ### Seeded events and removing an event
 
 `backend/content/seeded-events.json` lists events every server has: today the **RGSynapse challenge**, join code `RGSYN2`, 20 questions in a fixed order (10 multiple choice; 10 code tracing, ordering lines, code reading and one block program; difficulty 3 and 4; nothing AI scored). On every start the server creates any listed event whose join code does not exist yet, owned by the first admin, so deploying a build that adds an event to the file adds it to the running server on its next start. An event that exists is never touched again, so teachers' edits to it are kept. `SEED_EVENTS=false` turns this off. Its questions come from the bank by id, so they can be swapped by editing the file before the event is first created, or by "Change questions" on the teacher page afterwards, while no attempt is live.
@@ -361,7 +365,7 @@ Upgrading the image migrates the database in the volume on first start and leave
 |---|---|---|---|
 | `JWT_SECRET` | Yes | — | Secret used to sign JWTs. Use a long random string. The server refuses to start without it when `NODE_ENV=production`. |
 | `SEED_TEACHER_EMAIL` | No | `teacher@ctquest.local` | First teacher account, created only in an empty database. |
-| `SEED_TEACHER_PASSWORD` | On first production boot | `changeme123` in development | Password for that account. Production refuses the demo password, and refuses to seed an empty database without it. |
+| `SEED_TEACHER_PASSWORD` | On first production boot | `changeme123` in development | Password for that account. Production refuses the demo password, and refuses to seed an empty database without it. If that account already exists and still accepts the demo password, this password replaces it on start (at least 10 characters). It never changes an account with any other password. |
 | `SEED_EVENTS` | No | `true` | Create the events in `backend/content/seeded-events.json` on start (see below). `false` leaves them out. |
 | `PORT` | No | `3000` | Port the server listens on. |
 | `HOST` | No | all interfaces | Address to bind, e.g. `127.0.0.1` for a local-only run. |

@@ -98,7 +98,10 @@ test("production refuses an existing database that still holds the demo password
   const dbPath = path.join(dir, "app.db");
   (await buildApp({ dbPath })).close();
 
-  const refused = runNode(SERVER, [], { ...PROD, DB_PATH: dbPath });
+  // Without SEED_TEACHER_PASSWORD: with it, start-up replaces the demo password
+  // instead (test/demo-password-replace.test.js).
+  const { SEED_TEACHER_PASSWORD: _omitted, ...PROD_WITHOUT_SEED_PASSWORD } = PROD;
+  const refused = runNode(SERVER, [], { ...PROD_WITHOUT_SEED_PASSWORD, DB_PATH: dbPath });
   assert.equal(refused.status, 1);
   assert.match(refused.stderr, /demo password: teacher@ctquest\.local/);
   assert.match(refused.stderr, /set-password/);

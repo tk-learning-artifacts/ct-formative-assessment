@@ -1002,7 +1002,8 @@ function createStore(db, content, { stale, log } = {}) {
     if (offenders.length) {
       throw new Error(
         `These accounts still use the demo password: ${offenders.join(", ")}. ` +
-        "Run `npm run set-password -- <email>` (or `node backend/scripts/set-password.js <email>` in the container) before starting in production."
+        "Run `npm run set-password -- <email>` (or `node backend/scripts/set-password.js <email>` in the container) before starting in production. " +
+        "With no shell, set SEED_TEACHER_EMAIL to one of these accounts and SEED_TEACHER_PASSWORD to a new password of at least 10 characters, and restart: the demo password on that account is replaced."
       );
     }
   }
@@ -1104,6 +1105,37 @@ function createStore(db, content, { stale, log } = {}) {
     })();
   }
 
+  // A database from before production refused the demo password can hold an
+  // account that still accepts it, and the server will not start with one.
+  // An operator with no shell (a hosted deploy) can clear it by setting
+  // SEED_TEACHER_EMAIL to that account and SEED_TEACHER_PASSWORD to a new
+  // password: the new password replaces the old one, but only while the old
+  // one is still the demo password. An account with any other password is
+  // never touched, so this cannot be used to take over a real account.
+  const MIN_SEED_PASSWORD_LENGTH = 10;
+
+  function replaceDemoPassword(seedTeacher) {
+    if (!seedTeacher || !seedTeacher.password || seedTeacher.password === DEFAULT_TEACHER_PASSWORD) {
+      return;
+    }
+
+    const user = findUserByEmail(String(seedTeacher.email).trim().toLowerCase());
+
+    if (!user || !verifyPassword(DEFAULT_TEACHER_PASSWORD, user.password_hash).ok) {
+      return;
+    }
+
+    if (seedTeacher.password.length < MIN_SEED_PASSWORD_LENGTH) {
+      throw new Error(`${user.email} still uses the demo password, and SEED_TEACHER_PASSWORD is too short to replace it: use at least ${MIN_SEED_PASSWORD_LENGTH} characters.`);
+    }
+
+    updatePasswordHash(user.id, hashPassword(seedTeacher.password));
+
+    if (log) {
+      log(`Replaced the demo password on ${user.email} with SEED_TEACHER_PASSWORD.`);
+    }
+  }
+
   function seed(seedTeacher, { events = true } = {}) {
     const userCount = db.prepare("SELECT COUNT(*) AS count FROM users").get().count;
 
@@ -1118,6 +1150,8 @@ function createStore(db, content, { stale, log } = {}) {
       // oversees it. Later accounts come from set-password as teachers.
       createUser({ email: seedTeacher.email, password: seedTeacher.password, role: "admin" });
     }
+
+    replaceDemoPassword(seedTeacher);
 
     const eventCount = db.prepare("SELECT COUNT(*) AS count FROM events").get().count;
 
