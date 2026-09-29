@@ -591,7 +591,7 @@
       "type": "code-reading",
       "audience": "core",
       "level": "P6",
-      "title": "Counting the climbs",
+      "title": "Going through a list",
       "prompt": "This script looks at a list of numbers. Which sentence says what it works out, for any list?",
       "visual": {
         "kind": "cells",

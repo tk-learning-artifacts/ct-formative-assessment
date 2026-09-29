@@ -660,14 +660,14 @@ module.exports = {
 
   // The two functions can be defined in either order.
   "TS-PA-08": (q, source) => {
-    const area = ["def area(w, h):", "    return w * h"];
-    const square = ["def square(s):", "    return area(s, s)"];
-    const calls = ["print(square(5))", "print(area(2, 3))"];
-    expectSource(q, source, [lines(...area, ...square, ...calls), lines(...square, ...area, ...calls)]);
+    const cost = ["def cost(n, price):", "    return n * price"];
+    const dozen = ["def dozen(price):", "    return cost(12, price)"];
+    const calls = ["print(dozen(3))", "print(cost(4, 5))"];
+    expectSource(q, source, [lines(...cost, ...dozen, ...calls), lines(...dozen, ...cost, ...calls)]);
 
-    const areaOf = (w, h) => w * h;
-    const squareOf = side => areaOf(side, side);
-    return `${squareOf(5)}\n${areaOf(2, 3)}`;
+    const costOf = (n, price) => n * price;
+    const dozenOf = price => costOf(12, price);
+    return `${dozenOf(3)}\n${costOf(4, 5)}`;
   },
 
   "TS-CT-18": q => {

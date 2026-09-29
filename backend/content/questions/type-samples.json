@@ -391,7 +391,7 @@
       "audience": "core",
       "level": "P5",
       "title": "Robot in the garden",
-      "prompt": "The robot starts on S. It follows the moves below in order, one square at a time. If the next square is a wall (a dark square) or outside the garden, the robot stops that move early and goes on to the next line.\n\nWhich square does the robot stop on? Type its column letter and then its row number, like A1.",
+      "prompt": "The robot starts on S. It follows the moves below in order, one square at a time. If the next square is a wall (a dark square) or outside the garden, the robot stops that move early and goes on to the next line.\n\nThe T is only a tree; the robot is not trying to get to it. Which square does the robot stop on? Type its column letter and then its row number, like A1.",
       "visual": {
         "kind": "grid",
         "purpose": "information",
@@ -482,7 +482,6 @@
         "practice.testing-debugging.tracing"
       ],
       "outcomes": [
-        "LO-DATA-1",
         "LO-TRACE-1"
       ],
       "crosswalk": {
@@ -1036,7 +1035,6 @@
         "practice.testing-debugging.tracing"
       ],
       "outcomes": [
-        "LO-DATA-1",
         "LO-TRACE-1"
       ],
       "crosswalk": {
@@ -1280,7 +1278,8 @@
       "answer": {
         "output": "ZEBRA",
         "accepted": [
-          "zebra"
+          "zebra",
+          "Zebra"
         ]
       },
       "points": 4,
@@ -1504,64 +1503,64 @@
       "type": "parsons",
       "audience": "rgsynapse",
       "level": "S1",
-      "title": "A square from a rectangle",
-      "prompt": "area(w, h) already works out the area of a rectangle. Reuse it: put the lines in order to add a square function that calls area, then print the area of a 5 by 5 square and then of a 2 by 3 rectangle. Two of the lines are not needed; leave them out.",
+      "title": "A dozen from a price",
+      "prompt": "cost(n, price) already works out what n items cost. Reuse it: put the lines in order to add a dozen function that calls cost, then print the cost of a dozen items at 3 dollars each and then of 4 items at 5 dollars each. Two of the lines are not needed; leave them out.",
       "language": "python",
       "lines": [
         {
-          "id": "area",
-          "text": "def area(w, h):"
+          "id": "cost",
+          "text": "def cost(n, price):"
         },
         {
-          "id": "areaBody",
-          "text": "    return w * h"
+          "id": "costBody",
+          "text": "    return n * price"
         },
         {
-          "id": "square",
-          "text": "def square(s):"
+          "id": "dozen",
+          "text": "def dozen(price):"
         },
         {
-          "id": "squareBody",
-          "text": "    return area(s, s)"
+          "id": "dozenBody",
+          "text": "    return cost(12, price)"
         },
         {
-          "id": "printSquare",
-          "text": "print(square(5))"
+          "id": "printDozen",
+          "text": "print(dozen(3))"
         },
         {
-          "id": "printArea",
-          "text": "print(area(2, 3))"
+          "id": "printCost",
+          "text": "print(cost(4, 5))"
         },
         {
-          "id": "twoSides",
-          "text": "def square(s, s):"
+          "id": "twoPrices",
+          "text": "def dozen(price, price):"
         },
         {
           "id": "twoArgs",
-          "text": "print(square(5, 5))"
+          "text": "print(dozen(3, 12))"
         }
       ],
       "answer": {
         "order": [
-          "area",
-          "areaBody",
-          "square",
-          "squareBody",
-          "printSquare",
-          "printArea"
+          "cost",
+          "costBody",
+          "dozen",
+          "dozenBody",
+          "printDozen",
+          "printCost"
         ],
         "alternatives": [
           [
-            "square",
-            "squareBody",
-            "area",
-            "areaBody",
-            "printSquare",
-            "printArea"
+            "dozen",
+            "dozenBody",
+            "cost",
+            "costBody",
+            "printDozen",
+            "printCost"
           ]
         ]
       },
-      "expectedOutput": "25\n6",
+      "expectedOutput": "36\n20",
       "marking": {
         "partial": "longest-run"
       },
@@ -1579,7 +1578,7 @@
       },
       "topic": "Reusing a function",
       "qType": "Order the lines",
-      "details": "A square is a rectangle with equal sides, so square takes one side and passes it to area twice; a function cannot have two parameters with the same name, and square(5, 5) gives it one argument too many. The two functions can be defined in either order, because Python only looks area up when square runs; both orders are accepted. Partial credit for the longest run in the right order."
+      "details": "A dozen is 12 items, so dozen takes only the price and passes 12 and the price to cost; a function cannot have two parameters with the same name, and dozen(3, 12) gives it one argument too many. The two functions can be defined in either order, because Python only looks cost up when dozen runs; both orders are accepted. Partial credit for the longest run in the right order."
     },
     {
       "id": "TS-CT-18",
