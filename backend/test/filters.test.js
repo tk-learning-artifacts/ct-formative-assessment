@@ -60,10 +60,10 @@ test("event filters and picker endpoints", async t => {
     ]);
 
     const byOutcome = await preview({ filter: { outcomes: ["LO-DEBUG-1"], audiences: ["core", "rgsynapse"] } });
-    assert.deepEqual(byOutcome.body.questions.map(q => q.id), ["BLK-S2-01", "S1-01", "RGS-S1-02", "RGS-S1-10", "RGS-S2-12", "CR-RGS-S1-02"]);
+    assert.deepEqual(byOutcome.body.questions.map(q => q.id), ["BLK-S2-01", "S1-01", "RGS-S1-02", "RGS-S1-10", "RGS-S2-12", "CR-RGS-S1-02", "CR-S1-02"]);
 
     const outcomeAndLevel = await preview({ filter: { outcomes: ["LO-PATH-1"], levels: ["S2"] } });
-    assert.deepEqual(outcomeAndLevel.body.questions.map(q => q.id), ["S2-02"]);
+    assert.deepEqual(outcomeAndLevel.body.questions.map(q => q.id), ["S2-02", "TS-CT-12"]);
 
     const difficulty = await preview({ filter: { audiences: ["core"], difficulty: { min: 4 }, types: ["mcq"] } });
     assert.equal(difficulty.body.count, 5);
@@ -80,7 +80,7 @@ test("event filters and picker endpoints", async t => {
     const parent = await preview({ filter: { nodes: ["concept.data"] } });
     const child = await preview({ filter: { nodes: ["concept.data.structures.paths"] } });
 
-    assert.deepEqual(child.body.questions.map(q => q.id), ["P6-01", "P6-05", "S2-02"]);
+    assert.deepEqual(child.body.questions.map(q => q.id), ["P6-01", "P6-05", "S2-02", "TS-PA-04", "TS-CT-08", "TS-CT-12"]);
     assert.ok(child.body.questions.every(q => parent.body.questions.some(p => p.id === q.id)));
     assert.ok(parent.body.count > child.body.count);
 
@@ -107,8 +107,8 @@ test("event filters and picker endpoints", async t => {
     // get the core code-trace, Parsons, code-reading and block programming
     // questions.
     const coreS1 = await preview({ filter: { levels: ["S1"] } });
-    assert.deepEqual(coreS1.body.byAudience, { core: 9 });
-    assert.deepEqual(coreS1.body.byType, { mcq: 5, "code-trace": 1, parsons: 1, "code-reading": 1, blocks: 1 });
+    assert.deepEqual(coreS1.body.byAudience, { core: 13 });
+    assert.deepEqual(coreS1.body.byType, { mcq: 5, "code-trace": 2, parsons: 2, "code-reading": 3, blocks: 1 });
     assert.equal(coreS1.body.aiRequired, false);
 
     // A level filter on RGSynapse leaves the AI questions out...

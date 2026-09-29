@@ -971,6 +971,187 @@
       "topic": "Block programming",
       "qType": "Finish the program",
       "details": "The wall-follower: if there is a path to the right, turn right and move; else if the path ahead is open, move; else turn left. The left-hand version works too. A corridor follower (Follow the winding path) or a fixed route passes the example at best; dead ends and junctions in the hidden mazes need the priority order."
+    },
+    {
+      "id": "BLK-P5-02",
+      "type": "blocks",
+      "world": "maze",
+      "audience": "core",
+      "level": "P5",
+      "title": "Star on the way",
+      "prompt": "Add blocks under \"when Run clicked\" so the sprite picks up the star and then stops on the flag. Walking into a wall stops the program.",
+      "example": {
+        "grid": [
+          "..*##",
+          "##.##",
+          "##..G"
+        ],
+        "start": {
+          "x": 0,
+          "y": 0,
+          "facing": "east"
+        },
+        "expect": {
+          "reachGoal": true,
+          "collectAll": true
+        }
+      },
+      "cases": [],
+      "startProgram": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "locked": true
+          }
+        ]
+      },
+      "toolbox": [
+        "move_forward",
+        "turn_left",
+        "turn_right",
+        "pick_up"
+      ],
+      "solution": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "move_forward",
+              "next": {
+                "type": "move_forward",
+                "next": {
+                  "type": "pick_up",
+                  "next": {
+                    "type": "turn_right",
+                    "next": {
+                      "type": "move_forward",
+                      "next": {
+                        "type": "move_forward",
+                        "next": {
+                          "type": "turn_left",
+                          "next": {
+                            "type": "move_forward",
+                            "next": {
+                              "type": "move_forward"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.sequences"
+      ],
+      "outcomes": [
+        "LO-SEQ-1",
+        "LO-BLOCKS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Block programming",
+      "qType": "Finish the program",
+      "details": "A sequence with an action in the middle: the sprite has to stop on the star and pick it up before it turns. At the star it faces east, so it turns right to go down (turning left, thinking of the page, walks into a wall), then left to face the flag."
+    },
+    {
+      "id": "BLK-P6-02",
+      "type": "blocks",
+      "world": "maze",
+      "audience": "core",
+      "level": "P6",
+      "title": "Four corners",
+      "prompt": "Pick up all four stars using at most 7 blocks under \"when Run clicked\". The sprite starts on one of the stars. Walking into a wall stops the program.",
+      "example": {
+        "grid": [
+          "*...*",
+          ".###.",
+          ".###.",
+          ".###.",
+          "*...*"
+        ],
+        "start": {
+          "x": 0,
+          "y": 0,
+          "facing": "east"
+        },
+        "expect": {
+          "collectAll": true
+        }
+      },
+      "cases": [],
+      "startProgram": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "locked": true
+          }
+        ]
+      },
+      "toolbox": [
+        "move_forward",
+        "turn_left",
+        "turn_right",
+        "pick_up",
+        "repeat_times"
+      ],
+      "maxBlocks": 7,
+      "solution": {
+        "scripts": [
+          {
+            "type": "when_run",
+            "next": {
+              "type": "repeat_times",
+              "fields": {
+                "TIMES": 4
+              },
+              "inputs": {
+                "DO": {
+                  "type": "move_forward",
+                  "next": {
+                    "type": "move_forward",
+                    "next": {
+                      "type": "move_forward",
+                      "next": {
+                        "type": "move_forward",
+                        "next": {
+                          "type": "pick_up",
+                          "next": {
+                            "type": "turn_right"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-PAT-1",
+        "LO-BLOCKS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Block programming",
+      "qType": "Finish the program",
+      "details": "The same blocks (one side of moves, pick up, turn right) repeat four times; writing them all out takes 24 blocks, far over the limit of 7. The star the sprite starts on is picked up last, when it comes back round. A repeat inside the repeat for the moves also works."
     }
   ]
 }

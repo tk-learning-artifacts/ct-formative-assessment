@@ -298,7 +298,13 @@ test("code-trace and Parsons attempts over HTTP, from start to the released brea
   const { app } = ctx;
   const token = await login(app);
   const auth = { Authorization: `Bearer ${token}` };
-  const filter = { types: ["code-trace", "parsons"], audiences: ["core", "rgsynapse"] };
+  // The six original samples: the answers below are written for them. The
+  // later code-trace and Parsons questions are checked by answer-keys.test.js.
+  const filter = {
+    types: ["code-trace", "parsons"],
+    audiences: ["core", "rgsynapse"],
+    questionIds: ["TS-CT-01", "TS-CT-02", "TS-CT-03", "TS-PA-01", "TS-PA-02", "TS-PA-03"]
+  };
 
   const created = await request(app).post("/api/events").set(auth).send({ title: "New types", filter });
   assert.equal(created.status, 201);

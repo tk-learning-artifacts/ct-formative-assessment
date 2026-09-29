@@ -1,6 +1,6 @@
 {
   "bank": "type-samples",
-  "description": "Sample code-trace and Parsons questions, one of each kind per audience level. Not part of any legacy mode.",
+  "description": "Code-trace and Parsons questions for every audience level, many with a figure to read (a grid, a row of boxes, a network, a flowchart or a table). Not part of any legacy mode.",
   "questions": [
     {
       "id": "TS-CT-01",
@@ -327,6 +327,1593 @@
       "topic": "Translating code",
       "qType": "Order the lines",
       "details": "range(1, 5) stops before 5, which is Swift's closed range 1...4, not 1..<4. A total that changes must be var, not let (let will not compile). All or nothing."
+    },
+    {
+      "id": "TS-CT-04",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "P5",
+      "title": "Frog on the lily pads",
+      "prompt": "A frog sits on lily pad 1. Each pad has a letter on it, as the picture shows. The frog follows this script. Type each letter the frog says, one letter on each line.",
+      "visual": {
+        "kind": "cells",
+        "purpose": "information",
+        "caption": "Lily pads 1 to 8, each with a letter",
+        "rows": [
+          {
+            "label": "Pads",
+            "cells": [
+              "M",
+              "P",
+              "S",
+              "O",
+              "U",
+              "A",
+              "N",
+              "R"
+            ]
+          }
+        ],
+        "numbered": true
+      },
+      "code": {
+        "language": "scratch-style",
+        "source": "when green flag clicked\ngo to pad 1\nrepeat 3 times\n    hop forward 2 pads\n    say the letter on this pad\nend"
+      },
+      "answer": {
+        "output": "S\nU\nN",
+        "accepted": [
+          "s\nu\nn"
+        ]
+      },
+      "marking": {
+        "partial": "lines"
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "Tracing a loop: the frog is on pads 3, 5 and 7 when it speaks, so it says S, U, N. P, S, O means hopping one pad at a time; O, A, R means counting pad 1 as the first hop. One mark per correct line."
+    },
+    {
+      "id": "TS-CT-05",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "P5",
+      "title": "Robot in the garden",
+      "prompt": "The robot starts on S. It follows the moves below in order, one square at a time. If the next square is a wall (a dark square) or outside the garden, the robot stops that move early and goes on to the next line.\n\nWhich square does the robot stop on? Type its column letter and then its row number, like A1.",
+      "visual": {
+        "kind": "grid",
+        "purpose": "information",
+        "rows": [
+          "S..#.",
+          ".#...",
+          ".#.#.",
+          "...#T",
+          "....."
+        ]
+      },
+      "code": {
+        "language": "scratch-style",
+        "source": "move right 3\nmove down 3\nmove right 2\nmove down 1"
+      },
+      "answer": {
+        "output": "C5",
+        "accepted": [
+          "c5"
+        ]
+      },
+      "points": 3,
+      "difficulty": 2,
+      "ontology": [
+        "concept.sequences",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "Following a sequence exactly, including a move that is cut short: the first move stops at C1 because D1 is a wall, so the robot goes down column C, is blocked again at D4, and ends on C5. E4 (T) means assuming the moves work as planned."
+    },
+    {
+      "id": "TS-CT-06",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "P5",
+      "title": "Reading the light panel",
+      "prompt": "Each bulb on this light panel has a value written above it. The script reads the panel from left to right. Type the number it says.",
+      "visual": {
+        "kind": "cells",
+        "purpose": "information",
+        "rows": [
+          {
+            "label": "Value",
+            "cells": [
+              "8",
+              "4",
+              "2",
+              "1"
+            ]
+          },
+          {
+            "label": "Bulb",
+            "cells": [
+              "ON",
+              {
+                "text": "OFF",
+                "fill": "dark"
+              },
+              "ON",
+              "ON"
+            ]
+          }
+        ],
+        "fillWords": {
+          "light": "lit",
+          "dark": "unlit"
+        }
+      },
+      "code": {
+        "language": "scratch-style",
+        "source": "set total to 0\nfor each bulb, left to right\n    if the bulb is ON then\n        add its value to total\n    end\nend\nsay total"
+      },
+      "answer": {
+        "output": "11"
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.data.representation.binary",
+        "concept.conditionals",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-DATA-1",
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "Place values: only the bulbs that are ON count, so 8 + 2 + 1 = 11 (binary 1011). 3 counts the ON bulbs, 15 adds every value, and 13 reads the OFF bulb as ON and one ON bulb as OFF."
+    },
+    {
+      "id": "TS-CT-07",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "P5",
+      "title": "The magic piggy bank",
+      "prompt": "Mei's magic piggy bank doubles her coins every day. This script works out how many days it takes until she has more than 20 coins. The flowchart shows the same steps. Type the number the script says.",
+      "visual": {
+        "kind": "flowchart",
+        "purpose": "reading-load",
+        "nodes": [
+          {
+            "id": "start",
+            "type": "start",
+            "text": "Start",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "set",
+            "type": "process",
+            "text": "Set coins to 1 and days to 0",
+            "col": 0,
+            "row": 1
+          },
+          {
+            "id": "check",
+            "type": "decision",
+            "text": "More than 20 coins?",
+            "col": 0,
+            "row": 2
+          },
+          {
+            "id": "double",
+            "type": "process",
+            "text": "Double coins and add 1 to days",
+            "col": 0,
+            "row": 3
+          },
+          {
+            "id": "say",
+            "type": "end",
+            "text": "Say days",
+            "col": 1,
+            "row": 3
+          }
+        ],
+        "edges": [
+          {
+            "from": "start",
+            "to": "set"
+          },
+          {
+            "from": "set",
+            "to": "check"
+          },
+          {
+            "from": "check",
+            "to": "say",
+            "label": "Yes",
+            "exit": "right"
+          },
+          {
+            "from": "check",
+            "to": "double",
+            "label": "No"
+          },
+          {
+            "from": "double",
+            "to": "check",
+            "exit": "left",
+            "enter": "left"
+          }
+        ]
+      },
+      "code": {
+        "language": "scratch-style",
+        "source": "set coins to 1\nset days to 0\nrepeat until coins is over 20\n    double coins\n    change days by 1\nend\nsay days"
+      },
+      "answer": {
+        "output": "5"
+      },
+      "points": 3,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.data.variables",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "A loop that stops on a condition rather than after a fixed count: coins go 2, 4, 8, 16, 32, and the loop stops after day 5 because 16 is not more than 20. 4 stops one day early; 32 gives the coins, not the days."
+    },
+    {
+      "id": "TS-PA-04",
+      "type": "parsons",
+      "audience": "core",
+      "level": "P5",
+      "title": "Guide the robot to T",
+      "prompt": "Put the lines in order so the robot walks from S to T without ever stepping on a wall (a dark square), then says the square it is on. Each move goes the number of squares it says. Two of the lines are not needed; leave them out.",
+      "visual": {
+        "kind": "grid",
+        "purpose": "information",
+        "rows": [
+          "S.#.",
+          "#.#.",
+          "....",
+          ".##T"
+        ]
+      },
+      "language": "scratch-style",
+      "lines": [
+        {
+          "id": "right1",
+          "text": "move right 1"
+        },
+        {
+          "id": "down2",
+          "text": "move down 2"
+        },
+        {
+          "id": "right2",
+          "text": "move right 2"
+        },
+        {
+          "id": "down1",
+          "text": "move down 1"
+        },
+        {
+          "id": "say",
+          "text": "say where you are"
+        },
+        {
+          "id": "left1",
+          "text": "move left 1"
+        },
+        {
+          "id": "down3",
+          "text": "move down 3"
+        }
+      ],
+      "answer": {
+        "order": [
+          "right1",
+          "down2",
+          "right2",
+          "down1",
+          "say"
+        ]
+      },
+      "expectedOutput": "D4",
+      "marking": {
+        "partial": "longest-run"
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.sequences",
+        "concept.data.structures.paths"
+      ],
+      "outcomes": [
+        "LO-SEQ-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code ordering",
+      "qType": "Order the lines",
+      "details": "The walls fix the order: going down first from S hits a wall, and so does moving right 2 before going down. \"move left 1\" and \"move down 3\" are not needed. Partial credit for the longest run of lines in the right order."
+    },
+    {
+      "id": "TS-CT-08",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "P6",
+      "title": "The nearest-road rule",
+      "prompt": "A delivery robot has to get from A to F. The number on each road is how many minutes it takes, and a new place is one the robot has not been to yet. The robot chooses its roads with the rule below. Type the number it says.",
+      "visual": {
+        "kind": "graph",
+        "purpose": "information",
+        "nodes": [
+          {
+            "id": "A",
+            "x": 40,
+            "y": 150
+          },
+          {
+            "id": "B",
+            "x": 130,
+            "y": 50
+          },
+          {
+            "id": "C",
+            "x": 130,
+            "y": 250
+          },
+          {
+            "id": "D",
+            "x": 240,
+            "y": 50
+          },
+          {
+            "id": "E",
+            "x": 240,
+            "y": 250
+          },
+          {
+            "id": "F",
+            "x": 330,
+            "y": 150
+          }
+        ],
+        "edges": [
+          {
+            "from": "A",
+            "to": "B",
+            "weight": 3
+          },
+          {
+            "from": "A",
+            "to": "C",
+            "weight": 2
+          },
+          {
+            "from": "B",
+            "to": "C",
+            "weight": 5
+          },
+          {
+            "from": "B",
+            "to": "D",
+            "weight": 4
+          },
+          {
+            "from": "B",
+            "to": "E",
+            "weight": 7
+          },
+          {
+            "from": "C",
+            "to": "E",
+            "weight": 6
+          },
+          {
+            "from": "D",
+            "to": "F",
+            "weight": 5
+          },
+          {
+            "from": "E",
+            "to": "F",
+            "weight": 1
+          }
+        ],
+        "weightUnit": "minutes"
+      },
+      "code": {
+        "language": "scratch-style",
+        "source": "start at A\nset total to 0\nrepeat until you are at F\n    of the roads to new places,\n        take the shortest one\n    add its number to total\nend\nsay total"
+      },
+      "answer": {
+        "output": "16"
+      },
+      "points": 4,
+      "difficulty": 3,
+      "ontology": [
+        "concept.data.structures.paths",
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-PATH-1",
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "communication-networking"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "Tracing a greedy rule: A to C (2), C to B (5, not E at 6), B to D (4), D to F (5) = 16. The rule never looks ahead, so it misses A, C, E, F, which takes only 9. Worth asking the class afterwards whether the rule finds the quickest route."
+    },
+    {
+      "id": "TS-CT-09",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "P6",
+      "title": "Looking for 7",
+      "prompt": "Two robots each look for the locker that holds the number 7. The picture shows what is inside each locker, but a robot only finds out when it opens one. Type the number Robot A says on the first line and the number Robot B says on the second line.",
+      "visual": {
+        "kind": "cells",
+        "purpose": "information",
+        "caption": "Lockers 1 to 8 and what is inside them",
+        "rows": [
+          {
+            "label": "Inside",
+            "cells": [
+              "12",
+              "5",
+              "9",
+              "3",
+              "15",
+              "7",
+              "10",
+              "4"
+            ]
+          }
+        ],
+        "numbered": true
+      },
+      "code": {
+        "language": "scratch-style",
+        "source": "Robot A:\nrepeat until it finds 7\n    open the next locker,\n        (left to right)\nend\nsay how many lockers it opened\n\nRobot B:\nrepeat until it finds 7\n    open the next locker,\n        (right to left)\nend\nsay how many lockers it opened"
+      },
+      "answer": {
+        "output": "6\n3"
+      },
+      "marking": {
+        "partial": "lines"
+      },
+      "points": 4,
+      "difficulty": 1,
+      "ontology": [
+        "concept.data.structures.search-sort",
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-EFF-1",
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "Searching one by one: how much work it takes depends on where the item is and which end you start from. A opens 6 lockers, B opens 3. Answering 7 means reading the locker's number instead of what is inside. One mark per line."
+    },
+    {
+      "id": "TS-CT-10",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "P6",
+      "title": "Sorting the parcels",
+      "prompt": "A sorting machine sends each parcel in the table by truck, van or bike, using the rule below. Type what it says for each parcel, one word on each line, in the order of the table.",
+      "visual": {
+        "kind": "table",
+        "purpose": "information",
+        "columns": [
+          "Parcel",
+          "Weight (kg)",
+          "Fragile?"
+        ],
+        "rows": [
+          [
+            "1",
+            "3",
+            "No"
+          ],
+          [
+            "2",
+            "7",
+            "Yes"
+          ],
+          [
+            "3",
+            "2",
+            "Yes"
+          ],
+          [
+            "4",
+            "5",
+            "No"
+          ],
+          [
+            "5",
+            "6",
+            "No"
+          ]
+        ]
+      },
+      "code": {
+        "language": "scratch-style",
+        "source": "for each parcel, top to bottom\n    if heavier than 5 kg then\n        say Truck\n    else if it is fragile then\n        say Van\n    else\n        say Bike\n    end\nend"
+      },
+      "answer": {
+        "output": "Bike\nTruck\nVan\nBike\nTruck",
+        "accepted": [
+          "bike\ntruck\nvan\nbike\ntruck"
+        ]
+      },
+      "marking": {
+        "partial": "lines"
+      },
+      "points": 5,
+      "difficulty": 2,
+      "ontology": [
+        "concept.conditionals",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-COND-1",
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "Rules with priority: parcel 2 is fragile but goes by truck, because weight is checked first; parcel 4 weighs exactly 5 kg, which is not more than 5, so it goes by bike. One mark per correct line."
+    },
+    {
+      "id": "TS-PA-05",
+      "type": "parsons",
+      "audience": "core",
+      "level": "P6",
+      "title": "Up the steps",
+      "prompt": "Put the lines in order so the robot gets from S to T without ever stepping on a wall (a dark square), then says the square it is on. A line that starts with spaces belongs inside the repeat above it. Two of the lines are not needed; leave them out.",
+      "visual": {
+        "kind": "grid",
+        "purpose": "information",
+        "rows": [
+          "S.####",
+          "#..###",
+          "##..##",
+          "###..T"
+        ]
+      },
+      "language": "scratch-style",
+      "lines": [
+        {
+          "id": "loop",
+          "text": "repeat 3 times"
+        },
+        {
+          "id": "right",
+          "text": "    move right 1"
+        },
+        {
+          "id": "down",
+          "text": "    move down 1"
+        },
+        {
+          "id": "last",
+          "text": "move right 2"
+        },
+        {
+          "id": "say",
+          "text": "say where you are"
+        },
+        {
+          "id": "down2",
+          "text": "    move down 2"
+        },
+        {
+          "id": "right1",
+          "text": "move right 1"
+        }
+      ],
+      "answer": {
+        "order": [
+          "loop",
+          "right",
+          "down",
+          "last",
+          "say"
+        ]
+      },
+      "expectedOutput": "F4",
+      "marking": {
+        "partial": "longest-run"
+      },
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.sequences",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-SEQ-1",
+        "LO-PAT-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code ordering",
+      "qType": "Order the lines",
+      "details": "Spotting the step that repeats (right, then down) and what is left over after it. Putting down before right bumps into a wall straight away. Partial credit for the longest run of lines in the right order."
+    },
+    {
+      "id": "TS-CT-11",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "S1",
+      "title": "Adding 1 in binary",
+      "prompt": "Four bulbs show a number in binary: 1 means on and 0 means off. The picture shows the bulbs at the start, with each bulb's value. Each time round the loop, the procedure adds 1 to the number. Type the four bulbs it says each time, one pattern on each line, written like 0110.",
+      "visual": {
+        "kind": "cells",
+        "purpose": "information",
+        "rows": [
+          {
+            "label": "Value",
+            "cells": [
+              "8",
+              "4",
+              "2",
+              "1"
+            ]
+          },
+          {
+            "label": "Start",
+            "cells": [
+              "1",
+              "0",
+              "1",
+              "1"
+            ]
+          }
+        ]
+      },
+      "code": {
+        "language": "pseudocode",
+        "source": "repeat 3 times\n    go to the rightmost bulb\n    while this bulb is 1\n        set it to 0\n        move one bulb left\n    end\n    set this bulb to 1\n    say the four bulbs\nend"
+      },
+      "answer": {
+        "output": "1100\n1101\n1110"
+      },
+      "marking": {
+        "partial": "lines"
+      },
+      "points": 3,
+      "difficulty": 3,
+      "ontology": [
+        "concept.data.representation.binary",
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-DATA-1",
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "The carry: adding 1 to 1011 (11) turns the two 1s on the right into 0s and the next 0 into 1, giving 1100 (12), then 1101 (13) and 1110 (14). 1012 means adding as with ordinary digits. One mark per line."
+    },
+    {
+      "id": "TS-PA-06",
+      "type": "parsons",
+      "audience": "core",
+      "level": "S1",
+      "title": "Ticket prices by age",
+      "prompt": "Build a Python function that gives the ticket price for an age, following the price table, so that the program prints the four prices shown. Two of the lines are not needed; leave them out.",
+      "visual": {
+        "kind": "table",
+        "purpose": "reading-load",
+        "columns": [
+          "Age",
+          "Ticket price"
+        ],
+        "rows": [
+          [
+            "Under 4",
+            "Free (0)"
+          ],
+          [
+            "4 to 12",
+            "5"
+          ],
+          [
+            "13 and over",
+            "10"
+          ]
+        ]
+      },
+      "language": "python",
+      "lines": [
+        {
+          "id": "def",
+          "text": "def price(age):"
+        },
+        {
+          "id": "if4",
+          "text": "    if age < 4:"
+        },
+        {
+          "id": "free",
+          "text": "        return 0"
+        },
+        {
+          "id": "if13",
+          "text": "    if age < 13:"
+        },
+        {
+          "id": "child",
+          "text": "        return 5"
+        },
+        {
+          "id": "adult",
+          "text": "    return 10"
+        },
+        {
+          "id": "loop",
+          "text": "for a in [3, 4, 12, 13]:"
+        },
+        {
+          "id": "print",
+          "text": "    print(price(a))"
+        },
+        {
+          "id": "upto4",
+          "text": "    if age <= 4:"
+        },
+        {
+          "id": "upto13",
+          "text": "    if age <= 13:"
+        }
+      ],
+      "answer": {
+        "order": [
+          "def",
+          "if4",
+          "free",
+          "if13",
+          "child",
+          "adult",
+          "loop",
+          "print"
+        ]
+      },
+      "expectedOutput": "0\n5\n5\n10",
+      "marking": {
+        "partial": "longest-run"
+      },
+      "points": 4,
+      "difficulty": 3,
+      "ontology": [
+        "concept.conditionals",
+        "concept.sequences",
+        "practice.testing-debugging.edge-cases"
+      ],
+      "outcomes": [
+        "LO-COND-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code ordering",
+      "qType": "Order the lines",
+      "details": "Which check comes first matters: testing age < 13 first gives a 3-year-old the child price, because 3 is also under 13. The two <= lines are the edge cases: they would let a 4-year-old in free or charge a 13-year-old the child price. Partial credit for the longest run in the right order."
+    },
+    {
+      "id": "TS-CT-12",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "S2",
+      "title": "How many routes?",
+      "prompt": "A robot may only move right or down, one square at a time, and never onto a wall (a dark square). This procedure counts how many different routes the robot has from S to T. \"above + left\" means the number on the square above plus the number on the square to its left; squares outside the grid count as 0. Type the number it says.",
+      "visual": {
+        "kind": "grid",
+        "purpose": "information",
+        "rows": [
+          "S.....",
+          "..#...",
+          "......",
+          ".#..#.",
+          ".....T"
+        ]
+      },
+      "code": {
+        "language": "pseudocode",
+        "source": "for each row, from the top\n    for each square, from left\n        if S, write 1\n        else if wall, write 0\n        else write above + left\n    end\nend\nsay the number written on T"
+      },
+      "answer": {
+        "output": "20"
+      },
+      "points": 4,
+      "difficulty": 4,
+      "ontology": [
+        "concept.data.structures.paths",
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-PATH-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "Counting routes by building on smaller answers: every route into a square comes from above or from the left, so its count is the sum of those two, and a wall passes on 0. T gets 20. Listing routes one by one usually misses some."
+    },
+    {
+      "id": "TS-CT-13",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "S2",
+      "title": "Halving the search",
+      "prompt": "The boxes hold numbers in order, from smallest to largest. This procedure looks for the number 36. Type every number it says, one on each line.",
+      "visual": {
+        "kind": "cells",
+        "purpose": "information",
+        "rows": [
+          {
+            "label": "Boxes",
+            "cells": [
+              "3",
+              "8",
+              "12",
+              "17",
+              "23",
+              "30",
+              "36",
+              "41",
+              "47",
+              "55"
+            ]
+          }
+        ],
+        "numbered": true
+      },
+      "code": {
+        "language": "pseudocode",
+        "source": "set low to 1\nset high to 10\nrepeat\n    mid = (low + high) ÷ 2\n    round mid down\n    say the number in box mid\n    if it is 36 then stop\n    if it is less than 36 then\n        set low to mid + 1\n    else\n        set high to mid - 1\n    end\nend"
+      },
+      "answer": {
+        "output": "23\n41\n30\n36"
+      },
+      "marking": {
+        "partial": "lines"
+      },
+      "points": 4,
+      "difficulty": 4,
+      "ontology": [
+        "concept.data.structures.search-sort",
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-EFF-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "Binary search: each check throws away half of the boxes that are left. It checks 4 of the 10 boxes, where checking from the left would open 7. Rounding (6 + 10) ÷ 2 or (6 + 7) ÷ 2 the wrong way changes the middle lines. One mark per line."
+    },
+    {
+      "id": "TS-CT-14",
+      "type": "code-trace",
+      "audience": "core",
+      "level": "S2",
+      "title": "A shift that grows",
+      "prompt": "A secret word was coded by moving each letter forward in the alphabet by its box number: the first letter forward 1, the second forward 2, and so on. This procedure turns the code in the picture back into the word. Type the word it says.",
+      "visual": {
+        "kind": "cells",
+        "purpose": "information",
+        "rows": [
+          {
+            "label": "Code",
+            "cells": [
+              "A",
+              "G",
+              "E",
+              "V",
+              "F"
+            ]
+          }
+        ],
+        "numbered": true
+      },
+      "code": {
+        "language": "pseudocode",
+        "source": "set word to nothing\nfor each box, from box 1\n    take the letter in the box\n    count back in the alphabet\n        by the box number\n        (before A comes Z)\n    add it to the end of word\nend\nsay word"
+      },
+      "answer": {
+        "output": "ZEBRA",
+        "accepted": [
+          "zebra"
+        ]
+      },
+      "points": 4,
+      "difficulty": 3,
+      "ontology": [
+        "concept.data.representation.encryption",
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-STR-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "communication-networking"
+      },
+      "topic": "Code tracing",
+      "qType": "Type the output",
+      "details": "Undoing a shift that changes with position, and wrapping round the alphabet: A moved back 1 is Z. Moving every letter back by the same amount, as in a plain Caesar shift, gives nonsense."
+    },
+    {
+      "id": "TS-CT-15",
+      "type": "code-trace",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Tap, tap, swipe",
+      "prompt": "A phone game calls one handler for each event, in the order the events happen. Type exactly what the program prints.",
+      "code": {
+        "language": "python",
+        "source": "score = 0\nlives = 3\n\ndef on_tap():\n    global score\n    score += 1\n\ndef on_swipe():\n    global score\n    score = score * 2\n\ndef on_hold():\n    global lives\n    lives -= 1\n\nhandlers = {\n    \"tap\": on_tap,\n    \"swipe\": on_swipe,\n    \"hold\": on_hold\n}\n\nevents = [\"tap\", \"tap\", \"swipe\",\n          \"hold\", \"tap\", \"swipe\"]\nfor event in events:\n    handlers[event]()\n\nprint(score, lives)"
+      },
+      "answer": {
+        "output": "10 2"
+      },
+      "marking": {
+        "collapseSpaces": true
+      },
+      "points": 3,
+      "difficulty": 1,
+      "ontology": [
+        "concept.events",
+        "concept.data.variables",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-EVENTS-1",
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Events",
+      "qType": "Type the output",
+      "details": "Each event runs only its own handler, in the order the events arrive: score goes 1, 2, 4, stays 4 while hold takes a life, then 5 and 10. 7 comes from adding 2 for a swipe; 3 lives means the hold never ran. All or nothing."
+    },
+    {
+      "id": "TS-CT-16",
+      "type": "code-trace",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Taking turns with x",
+      "prompt": "Two scripts share the variable x. Script A doubles x and script B adds 3 to it. A runs twice and B runs once, but the turns can happen in different orders, as the table shows. Type exactly what the program prints, one number on each line.",
+      "visual": {
+        "kind": "table",
+        "purpose": "reading-load",
+        "columns": [
+          "Order",
+          "1st turn",
+          "2nd turn",
+          "3rd turn"
+        ],
+        "rows": [
+          [
+            "AAB",
+            "A: x × 2",
+            "A: x × 2",
+            "B: x + 3"
+          ],
+          [
+            "ABA",
+            "A: x × 2",
+            "B: x + 3",
+            "A: x × 2"
+          ],
+          [
+            "BAA",
+            "B: x + 3",
+            "A: x × 2",
+            "A: x × 2"
+          ]
+        ],
+        "rowHeader": true
+      },
+      "code": {
+        "language": "python",
+        "source": "def run(order):\n    x = 1\n    for who in order:\n        if who == \"A\":\n            x = x * 2\n        else:\n            x = x + 3\n    return x\n\nprint(run(\"AAB\"))\nprint(run(\"ABA\"))\nprint(run(\"BAA\"))"
+      },
+      "answer": {
+        "output": "7\n10\n16"
+      },
+      "marking": {
+        "partial": "lines"
+      },
+      "points": 3,
+      "difficulty": 2,
+      "ontology": [
+        "concept.parallelism",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-PARALLEL-1",
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "computer-processes-hardware"
+      },
+      "topic": "Parallelism",
+      "qType": "Type the output",
+      "details": "The same three steps in a different order give 7, 10 and 16, so when two scripts change the same variable, the order of their turns matters. Compare RGS-S1-05, where each script has its own variable and the order does not matter. One mark per line."
+    },
+    {
+      "id": "TS-CT-17",
+      "type": "code-trace",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Testing a word counter",
+      "prompt": "An AI assistant wrote count_words to count the words in a sentence. Before trusting it, you run it on four test sentences. Type exactly what the program prints, one number on each line.",
+      "code": {
+        "language": "python",
+        "source": "def count_words(text):\n    count = 0\n    for ch in text:\n        if ch == \" \":\n            count += 1\n    return count + 1\n\nprint(count_words(\"I like cats\"))\nprint(count_words(\"hello\"))\nprint(count_words(\"\"))\nprint(count_words(\"two  spaces\"))"
+      },
+      "answer": {
+        "output": "3\n1\n1\n3"
+      },
+      "marking": {
+        "partial": "lines"
+      },
+      "points": 4,
+      "difficulty": 3,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "practice.testing-debugging.edge-cases",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-AI-REVIEW-1",
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reviewing AI code",
+      "qType": "Type the output",
+      "details": "The function counts spaces and adds 1, so it is right for ordinary sentences but gives 1 for an empty string (no words) and 3 for two words with a double space between them. Those are the edge cases worth testing AI code with. One mark per line."
+    },
+    {
+      "id": "TS-PA-07",
+      "type": "parsons",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Same filter, in Python",
+      "prompt": "This Swift loop prints the words that have more than 2 letters, in capitals. Put the Python lines in order so the Python program does exactly the same. Two of the lines are not needed; leave them out.",
+      "code": {
+        "language": "swift",
+        "source": "let words = [\"cat\", \"ox\", \"emu\"]\nfor w in words where w.count > 2 {\n    print(w.uppercased())\n}"
+      },
+      "language": "python",
+      "lines": [
+        {
+          "id": "list",
+          "text": "words = [\"cat\", \"ox\", \"emu\"]"
+        },
+        {
+          "id": "loop",
+          "text": "for w in words:"
+        },
+        {
+          "id": "test",
+          "text": "    if len(w) > 2:"
+        },
+        {
+          "id": "show",
+          "text": "        print(w.upper())"
+        },
+        {
+          "id": "count",
+          "text": "    if w.count > 2:"
+        },
+        {
+          "id": "swiftcase",
+          "text": "        print(w.uppercased())"
+        }
+      ],
+      "answer": {
+        "order": [
+          "list",
+          "loop",
+          "test",
+          "show"
+        ]
+      },
+      "expectedOutput": "CAT\nEMU",
+      "points": 4,
+      "difficulty": 3,
+      "ontology": [
+        "practice.reusing-remixing.translating",
+        "concept.loops",
+        "concept.conditionals"
+      ],
+      "outcomes": [
+        "LO-TRANSLATE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Translating code",
+      "qType": "Order the lines",
+      "details": "Swift's where clause becomes an if inside the loop; w.count is len(w) in Python and uppercased() is upper(). The two distractors are the Swift spellings, which fail in Python. All or nothing."
+    },
+    {
+      "id": "TS-PA-08",
+      "type": "parsons",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "A square from a rectangle",
+      "prompt": "area(w, h) already works out the area of a rectangle. Reuse it: put the lines in order to add a square function that calls area, then print the area of a 5 by 5 square and then of a 2 by 3 rectangle. Two of the lines are not needed; leave them out.",
+      "language": "python",
+      "lines": [
+        {
+          "id": "area",
+          "text": "def area(w, h):"
+        },
+        {
+          "id": "areaBody",
+          "text": "    return w * h"
+        },
+        {
+          "id": "square",
+          "text": "def square(s):"
+        },
+        {
+          "id": "squareBody",
+          "text": "    return area(s, s)"
+        },
+        {
+          "id": "printSquare",
+          "text": "print(square(5))"
+        },
+        {
+          "id": "printArea",
+          "text": "print(area(2, 3))"
+        },
+        {
+          "id": "twoSides",
+          "text": "def square(s, s):"
+        },
+        {
+          "id": "twoArgs",
+          "text": "print(square(5, 5))"
+        }
+      ],
+      "answer": {
+        "order": [
+          "area",
+          "areaBody",
+          "square",
+          "squareBody",
+          "printSquare",
+          "printArea"
+        ],
+        "alternatives": [
+          [
+            "square",
+            "squareBody",
+            "area",
+            "areaBody",
+            "printSquare",
+            "printArea"
+          ]
+        ]
+      },
+      "expectedOutput": "25\n6",
+      "marking": {
+        "partial": "longest-run"
+      },
+      "points": 4,
+      "difficulty": 2,
+      "ontology": [
+        "practice.reusing-remixing",
+        "concept.operators"
+      ],
+      "outcomes": [
+        "LO-REMIX-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reusing a function",
+      "qType": "Order the lines",
+      "details": "A square is a rectangle with equal sides, so square takes one side and passes it to area twice; a function cannot have two parameters with the same name, and square(5, 5) gives it one argument too many. The two functions can be defined in either order, because Python only looks area up when square runs; both orders are accepted. Partial credit for the longest run in the right order."
+    },
+    {
+      "id": "TS-CT-18",
+      "type": "code-trace",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Pass by pass",
+      "prompt": "Each pass of this sort finds the smallest number from position i onwards and swaps it into position i. The picture shows nums before the first pass. Type exactly what the program prints, one list on each line.",
+      "visual": {
+        "kind": "cells",
+        "purpose": "reading-load",
+        "rows": [
+          {
+            "label": "nums",
+            "cells": [
+              "7",
+              "3",
+              "9",
+              "2",
+              "5"
+            ]
+          }
+        ],
+        "numbered": true,
+        "numberFrom": 0
+      },
+      "code": {
+        "language": "python",
+        "source": "nums = [7, 3, 9, 2, 5]\nfor i in range(len(nums) - 1):\n    small = i\n    for j in range(i + 1, len(nums)):\n        if nums[j] < nums[small]:\n            small = j\n    nums[i], nums[small] = nums[small], nums[i]\n    print(nums)"
+      },
+      "answer": {
+        "output": "[2, 3, 9, 7, 5]\n[2, 3, 9, 7, 5]\n[2, 3, 5, 7, 9]\n[2, 3, 5, 7, 9]",
+        "accepted": [
+          "[2,3,9,7,5]\n[2,3,9,7,5]\n[2,3,5,7,9]\n[2,3,5,7,9]"
+        ]
+      },
+      "marking": {
+        "collapseSpaces": true,
+        "partial": "lines"
+      },
+      "points": 4,
+      "difficulty": 4,
+      "ontology": [
+        "concept.data.structures.search-sort",
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-SORT-RGS-1",
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      },
+      "topic": "Sorting",
+      "qType": "Type the output",
+      "details": "Selection sort prints after every pass, even when nothing moves: pass 2 finds 3 already in place and pass 4 finds 7 in place, so those lines repeat the one before. Swapping neighbours (bubble sort) gives different middle lines. Lists typed without spaces are accepted. One mark per line."
+    },
+    {
+      "id": "TS-CT-19",
+      "type": "code-trace",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Visiting the network",
+      "prompt": "This program visits every place in a network, starting from A. The picture draws the same links as the dictionary. Type exactly what it prints, one letter on each line.",
+      "visual": {
+        "kind": "graph",
+        "purpose": "reading-load",
+        "nodes": [
+          {
+            "id": "A",
+            "x": 40,
+            "y": 150
+          },
+          {
+            "id": "B",
+            "x": 140,
+            "y": 50
+          },
+          {
+            "id": "D",
+            "x": 140,
+            "y": 250
+          },
+          {
+            "id": "E",
+            "x": 250,
+            "y": 150
+          },
+          {
+            "id": "C",
+            "x": 250,
+            "y": 260
+          },
+          {
+            "id": "F",
+            "x": 330,
+            "y": 260
+          }
+        ],
+        "edges": [
+          {
+            "from": "A",
+            "to": "D"
+          },
+          {
+            "from": "A",
+            "to": "B"
+          },
+          {
+            "from": "B",
+            "to": "E"
+          },
+          {
+            "from": "C",
+            "to": "F"
+          },
+          {
+            "from": "C",
+            "to": "D"
+          },
+          {
+            "from": "D",
+            "to": "E"
+          }
+        ]
+      },
+      "code": {
+        "language": "python",
+        "source": "links = {\n    \"A\": [\"D\", \"B\"],\n    \"B\": [\"A\", \"E\"],\n    \"C\": [\"F\", \"D\"],\n    \"D\": [\"A\", \"C\", \"E\"],\n    \"E\": [\"B\", \"D\"],\n    \"F\": [\"C\"]\n}\n\nseen = [\"A\"]\nqueue = [\"A\"]\nwhile queue:\n    node = queue.pop(0)\n    print(node)\n    for nxt in links[node]:\n        if nxt not in seen:\n            seen.append(nxt)\n            queue.append(nxt)"
+      },
+      "answer": {
+        "output": "A\nD\nB\nC\nE\nF"
+      },
+      "marking": {
+        "partial": "lines"
+      },
+      "points": 4,
+      "difficulty": 4,
+      "ontology": [
+        "concept.data.structures.paths",
+        "concept.loops",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "communication-networking"
+      },
+      "topic": "Graphs and queues",
+      "qType": "Type the output",
+      "details": "Breadth-first search: the queue visits places in the order they were found, and each place's list is read in its own order, so D comes before B. Alphabetical order gives A, B, D, E, C, F; following one path to its end (depth-first) gives A, D, C, F, E, B. Partial credit per line."
+    },
+    {
+      "id": "TS-CT-20",
+      "type": "code-trace",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "An event queue",
+      "prompt": "This program handles events from a queue, one at a time. A handler can add more events to the queue. Type exactly what the program prints.",
+      "code": {
+        "language": "python",
+        "source": "queue = [\"open\"]\nlog = []\n\ndef on_open():\n    log.append(\"open\")\n    queue.append(\"load\")\n    queue.append(\"draw\")\n\ndef on_load():\n    log.append(\"load\")\n    queue.append(\"save\")\n\ndef on_draw():\n    log.append(\"draw\")\n\ndef on_save():\n    log.append(\"save\")\n\nhandlers = {\n    \"open\": on_open,\n    \"load\": on_load,\n    \"draw\": on_draw,\n    \"save\": on_save\n}\n\nwhile queue:\n    event = queue.pop(0)\n    handlers[event]()\n\nprint(log)"
+      },
+      "answer": {
+        "output": "['open', 'load', 'draw', 'save']",
+        "accepted": [
+          "[\"open\", \"load\", \"draw\", \"save\"]",
+          "['open','load','draw','save']",
+          "[\"open\",\"load\",\"draw\",\"save\"]"
+        ]
+      },
+      "marking": {
+        "collapseSpaces": true
+      },
+      "points": 3,
+      "difficulty": 4,
+      "ontology": [
+        "concept.events",
+        "concept.data.structures",
+        "practice.testing-debugging.tracing"
+      ],
+      "outcomes": [
+        "LO-EVENTS-1",
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Events",
+      "qType": "Type the output",
+      "details": "A queued event waits its turn: open queues load and draw, and save only joins the queue after them, so it runs last. Running each new event straight away, as a direct call would (see RGS-S2-04), gives open, load, save, draw. Double quotes and missing spaces are accepted. All or nothing."
+    },
+    {
+      "id": "TS-CT-21",
+      "type": "code-trace",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Grades at the edges",
+      "prompt": "The table is the spec for grade(score). An AI assistant wrote the function below to meet it. Type exactly what the program prints, one line for each score.",
+      "visual": {
+        "kind": "table",
+        "purpose": "information",
+        "columns": [
+          "Score",
+          "Grade in the spec"
+        ],
+        "rows": [
+          [
+            "80 to 100",
+            "A"
+          ],
+          [
+            "65 to 79",
+            "B"
+          ],
+          [
+            "50 to 64",
+            "C"
+          ],
+          [
+            "0 to 49",
+            "F"
+          ]
+        ]
+      },
+      "code": {
+        "language": "python",
+        "source": "def grade(score):\n    if score > 80:\n        return \"A\"\n    elif score > 65:\n        return \"B\"\n    elif score >= 50:\n        return \"C\"\n    return \"F\"\n\nfor s in [80, 65, 64, 50, 49]:\n    print(s, grade(s))"
+      },
+      "answer": {
+        "output": "80 B\n65 C\n64 C\n50 C\n49 F"
+      },
+      "marking": {
+        "collapseSpaces": true,
+        "partial": "lines"
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "practice.testing-debugging.reviewing-ai-code",
+        "practice.testing-debugging.edge-cases",
+        "perspective.questioning.ai-output"
+      ],
+      "outcomes": [
+        "LO-SPEC-1",
+        "LO-AI-REVIEW-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "interactions-systems-society"
+      },
+      "topic": "Checking AI code against a spec",
+      "qType": "Type the output",
+      "details": "Boundary values: > 80 and > 65 leave out 80 and 65 themselves, so both drop a grade (80 B, 65 C), while 64, 50 and 49 happen to match the spec. Typing the spec's grades instead of tracing the code gives 80 A and 65 B. One mark per line."
+    },
+    {
+      "id": "TS-PA-09",
+      "type": "parsons",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Keeping a list sorted",
+      "prompt": "Build a function, place, that puts x into a sorted list at the right place, so the list stays sorted, and then prints the two results shown. One of the lines is not needed; leave it out.",
+      "language": "python",
+      "lines": [
+        {
+          "id": "def",
+          "text": "def place(nums, x):"
+        },
+        {
+          "id": "start",
+          "text": "    i = 0"
+        },
+        {
+          "id": "loop",
+          "text": "    while i < len(nums) and nums[i] < x:"
+        },
+        {
+          "id": "step",
+          "text": "        i += 1"
+        },
+        {
+          "id": "insert",
+          "text": "    nums.insert(i, x)"
+        },
+        {
+          "id": "return",
+          "text": "    return nums"
+        },
+        {
+          "id": "first",
+          "text": "print(place([2, 5, 8], 6))"
+        },
+        {
+          "id": "second",
+          "text": "print(place([1, 3], 9))"
+        },
+        {
+          "id": "unguarded",
+          "text": "    while nums[i] < x:"
+        }
+      ],
+      "answer": {
+        "order": [
+          "def",
+          "start",
+          "loop",
+          "step",
+          "insert",
+          "return",
+          "first",
+          "second"
+        ]
+      },
+      "expectedOutput": "[2, 5, 6, 8]\n[1, 3, 9]",
+      "marking": {
+        "partial": "longest-run"
+      },
+      "points": 5,
+      "difficulty": 3,
+      "ontology": [
+        "concept.data.structures.search-sort",
+        "concept.loops",
+        "concept.conditionals"
+      ],
+      "outcomes": [
+        "LO-CODE-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "data-structures-representations"
+      },
+      "topic": "Code ordering",
+      "qType": "Order the lines",
+      "details": "The loop has to stop at the end of the list as well as at the first bigger number: the shorter while line reads past the end of [1, 3] when x is 9 and crashes. i = 0 must come before the loop. Partial credit for the longest run in the right order."
     }
   ]
 }

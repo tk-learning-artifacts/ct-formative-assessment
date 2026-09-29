@@ -222,11 +222,28 @@ test("a retired question is left out of previews, presets and events, even when 
   assert.equal((await ctx.entry("P5-02")).overlay.retired, false);
 });
 
+// The ids of the questions a preset matches by default.
+function presetDefaultIds(store, id) {
+  const preset = store.content.presets.find(item => item.id === id);
+  const resolved = selection.resolveSelection({ preset: presets.defaultChoice(preset, store.content) }, store.content);
+  return store.previewQuestions(resolved.filter).map(question => question.id);
+}
+
+// Retires every question "ordering-tracing" matches by default except
+// TS-PA-01, which is left as the preset's last question.
+async function retireAllOrderingButOne(ctx) {
+  const others = presetDefaultIds(ctx.store, "ordering-tracing").filter(id => id !== "TS-PA-01");
+  assert.ok(others.includes("TS-CT-01"));
+  for (const id of others) {
+    assert.equal((await ctx.send("post", `/api/question-bank/${id}/retire`, ctx.admin)).status, 200, id);
+  }
+  assert.deepEqual(presetDefaultIds(ctx.store, "ordering-tracing"), ["TS-PA-01"]);
+}
+
 test("retiring a question that would leave a preset with none is refused", async t => {
   const ctx = await setup(t);
   const { store } = ctx;
-  // "ordering-tracing" matches exactly TS-CT-01 and TS-PA-01 by default.
-  assert.equal((await ctx.send("post", "/api/question-bank/TS-CT-01/retire", ctx.admin)).status, 200);
+  await retireAllOrderingButOne(ctx);
 
   const refused = await ctx.send("post", "/api/question-bank/TS-PA-01/retire", ctx.admin);
   assert.equal(refused.status, 409);
@@ -341,7 +358,7 @@ test("nothing the overlay does writes to backend/content", async t => {
 
 test("a retirement that empties a preset after a content change is logged at boot, not fatal", async t => {
   const ctx = await setup(t);
-  assert.equal((await ctx.send("post", "/api/question-bank/TS-CT-01/retire", ctx.admin)).status, 200);
+  await retireAllOrderingButOne(ctx);
   // The state a later edit to presets.json could leave behind, written past the API guard.
   ctx.store.db.prepare("INSERT INTO question_overrides (question_id, retired_at, retired_by, updated_at) VALUES ('TS-PA-01', 'now', NULL, 'now')").run();
   const { dbPath } = ctx;

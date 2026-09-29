@@ -234,7 +234,7 @@ test("code-reading attempts over HTTP, from start to the released breakdown", as
 
   const created = await request(app).post("/api/events").set(auth).send({ title: "Reading code", filter });
   assert.equal(created.status, 201);
-  assert.equal(created.body.event.question_count, 8);
+  assert.equal(created.body.event.question_count, 14);
 
   const joinCode = created.body.event.join_code;
   const good = await startAttempt(app, { joinCode });
@@ -269,11 +269,11 @@ test("code-reading attempts over HTTP, from start to the released breakdown", as
   await t.test("submitting returns only the totals", async () => {
     const full = await submit(app, good.attempt, right);
     assert.equal(full.status, 200);
-    assert.deepEqual(full.body.result, { score: 24, max: 24, pending: 0, markedSoFar: false, breakdownReleased: false });
+    assert.deepEqual(full.body.result, { score: 42, max: 42, pending: 0, markedSoFar: false, breakdownReleased: false });
 
     const some = await submit(app, mixed.attempt, partial);
     assert.equal(some.status, 200);
-    assert.deepEqual(some.body.result, { score: 7, max: 24, pending: 0, markedSoFar: false, breakdownReleased: false });
+    assert.deepEqual(some.body.result, { score: 7, max: 42, pending: 0, markedSoFar: false, breakdownReleased: false });
 
     const before = await getAttempt(app, mixed.attempt);
     assert.equal(before.body.result.perQuestion, undefined);
@@ -323,7 +323,7 @@ test("the code-reading preset gives the same questions on its card, in the previ
 
   assert.ok(card, "the preset is listed");
   assert.equal(card.aiScored, false);
-  const expected = { core: 4, "core:P5": 1, "core:S2": 1, rgsynapse: 4, "rgsynapse:S1": 2, "rgsynapse:S2": 2 };
+  const expected = { core: 8, "core:P5": 1, "core:S2": 2, rgsynapse: 6, "rgsynapse:S1": 3, "rgsynapse:S2": 3 };
 
   for (const [who, count] of Object.entries(expected)) {
     const choice = { ...card.defaults, who };
