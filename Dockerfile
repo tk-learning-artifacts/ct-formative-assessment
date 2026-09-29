@@ -29,7 +29,10 @@ RUN mkdir -p backend/data && chown -R app:app /app
 USER app
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -qO- http://localhost:3000/api/health || exit 1
+# Follows PORT (a host such as Coolify may set it) and uses 127.0.0.1: busybox
+# wget resolves "localhost" to ::1 first, which nothing listens on if the app
+# is bound to IPv4 only, so the check would fail while the app is fine.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- "http://127.0.0.1:${PORT:-3000}/api/health" || exit 1
 
 CMD ["node", "backend/src/server.js"]

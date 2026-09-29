@@ -367,7 +367,7 @@ Upgrading the image migrates the database in the volume on first start and leave
 | `SEED_TEACHER_EMAIL` | No | `teacher@ctquest.local` | First teacher account, created only in an empty database. |
 | `SEED_TEACHER_PASSWORD` | On first production boot | `changeme123` in development | Password for that account. Production refuses the demo password, and refuses to seed an empty database without it. If that account already exists and still accepts the demo password, this password replaces it on start (at least 10 characters). It never changes an account with any other password. |
 | `SEED_EVENTS` | No | `true` | Create the events in `backend/content/seeded-events.json` on start (see below). `false` leaves them out. |
-| `PORT` | No | `3000` | Port the server listens on. |
+| `PORT` | No | `3000` | Port the server listens on. On a host that sets `PORT` for you (Coolify may), set its "Ports Exposes" to the same number, or remove the variable. The container healthcheck follows `PORT`. |
 | `HOST` | No | all interfaces | Address to bind, e.g. `127.0.0.1` for a local-only run. |
 | `DB_PATH` | No | `backend/data/app.db` | SQLite file location. |
 | `SUBMIT_GRACE_SECONDS` | No | `60` | How long after an attempt's deadline a submission still counts as on time. Later ones are stored and marked late. |
