@@ -228,7 +228,7 @@
     const input = form.querySelector(`[data-bc-input="${key}"]`);
 
     if (key === "points" || key === "difficulty") {
-      return input.value === "" ? null : Number(input.value);
+      return input.value === "" ? undefined : Number(input.value);
     }
 
     return input.value;
@@ -265,7 +265,7 @@
         <div class="bc-row ${overridden ? "bc-row--overridden" : ""}" data-bc-row="${field.key}">
           <div class="bc-row__head">
             ${listLike ? `<span class="bc-row__label" id="bcLabel-${field.key}">${escapeHtml(field.label)}</span>` : `<label class="bc-row__label" for="${inputId}">${escapeHtml(field.label)}</label>`}
-            ${overridden ? `<span class="tag tag--accent">Edited</span>` : ""}
+            ${overridden ? `<span class="tag">Edited</span>` : ""}
           </div>
           <div class="bc-row__control">${control}</div>
           <p class="bc-row__original"><span class="bc-row__original-label">Original:</span> ${escapeHtml(originalText)}</p>
@@ -296,7 +296,7 @@
 
       return `
         <div class="bc-readonly__item">
-          <dt>${escapeHtml(field.label)} ${overridden ? `<span class="tag tag--accent">Edited</span>` : ""}</dt>
+          <dt>${escapeHtml(field.label)} ${overridden ? `<span class="tag">Edited</span>` : ""}</dt>
           <dd>${escapeHtml(text(value))}${overridden ? `<span class="bc-row__original"><span class="bc-row__original-label">Original:</span> ${escapeHtml(text(original))}</span>` : ""}</dd>
         </div>`;
     }).join("")}</dl>`;
@@ -309,7 +309,7 @@
       const overlay = entry.overlay;
       return `
         <section class="bc-section" aria-labelledby="bcRetireHeading">
-          <h3 class="bc-heading" id="bcRetireHeading">Retirement <span class="tag status status--critical">Retired</span></h3>
+          <h3 class="bc-heading" id="bcRetireHeading">Retirement <span class="tag status status--neutral">Retired</span></h3>
           <p class="bc-meta">Retired by ${escapeHtml(overlay.retiredBy || "an admin")}${overlay.retiredAt ? ` on ${escapeHtml(formatTime(overlay.retiredAt))}` : ""}. It stays in the bank but is left out of all new events.</p>
           <div class="bc-actions">
             <button type="button" class="btn btn--secondary btn--sm" data-bc-restore data-bc-key="retire">Restore question</button>
@@ -499,19 +499,25 @@
       });
     }
 
+    let formReady = false;
+
     function applyFocus() {
       if (pendingFocus && pendingFocus.id === id) {
-        const target = slotEl.querySelector(`[data-bc-key="${pendingFocus.key}"]`) || slotEl.querySelector("[data-bc-key]");
+        const target = slotEl.querySelector(`[data-bc-key="${pendingFocus.key}"]`);
 
-        if (target) {
-          target.focus();
+        // The edit form loads after the first call, so a save or reset button
+        // is not there yet: wait for the second call rather than falling back.
+        if (!target && !formReady && /^(save|reset)/.test(pendingFocus.key)) {
+          return;
         }
 
+        (target || slotEl.querySelector("[data-bc-key]") || { focus() {} }).focus();
         pendingFocus = null;
       }
     }
 
     applyFocus();
+    formReady = true;
 
     fillMetadata(entry, slotEl, isAdmin, () => {
       const form = slotEl.querySelector("[data-bc-form]");
@@ -547,14 +553,22 @@
         event.preventDefault();
 
         const patch = {};
+        const blank = [];
 
         FIELDS.forEach(field => {
           const value = readValue(form, field.key);
 
-          if (!valuesEqual(field.key, value, entry.teacher[field.key])) {
+          if (value === undefined) {
+            blank.push(field.label);
+          } else if (!valuesEqual(field.key, value, entry.teacher[field.key] ?? "")) {
             patch[field.key] = value;
           }
         });
+
+        if (blank.length) {
+          showError(slotEl, "save", `${blank.join(" and ")} needs a number. Use "Reset to original" to clear an edit.`);
+          return;
+        }
 
         if (!Object.keys(patch).length) {
           showError(slotEl, "save", "Nothing has changed.");

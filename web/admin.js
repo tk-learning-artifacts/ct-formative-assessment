@@ -2374,17 +2374,23 @@
   }
 
   // J/K and the arrow keys move through the questions in the list, unless
-  // the key is meant for something else: a field, or the pane (a radio
-  // group, the code editor).
+  // the key is meant for something else: a field, or the pane's widgets.
   document.addEventListener("keydown", event => {
-    const down = event.key === "j" || event.key === "ArrowDown";
-    const up = event.key === "k" || event.key === "ArrowUp";
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    const down = key === "j" || key === "ArrowDown";
+    const up = key === "k" || key === "ArrowUp";
 
     if (state.view !== "bank" || !state.bank || (!down && !up) || event.metaKey || event.ctrlKey || event.altKey) {
       return;
     }
 
-    if (event.target.closest && event.target.closest("input, textarea, select, [contenteditable], .qr-pane")) {
+    if (event.target.closest && event.target.closest("input, textarea, select, [contenteditable]")) {
+      return;
+    }
+
+    // Arrow keys belong to the pane's own widgets (the code editor, a radio
+    // group); J and K still move the selection from a button there.
+    if (event.key.startsWith("Arrow") && event.target.closest && event.target.closest(".qr-pane")) {
       return;
     }
 
