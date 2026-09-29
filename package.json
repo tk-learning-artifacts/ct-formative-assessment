@@ -2,16 +2,13 @@
   "name": "ct-ability-test",
   "version": "1.0.0",
   "private": true,
-  "workspaces": [
-    "backend",
-    "web"
-  ],
+  "packageManager": "pnpm@12.4.1",
   "scripts": {
-    "dev": "concurrently -n backend,web -c blue,green \"npm run dev --workspace backend\" \"npm run dev --workspace web\"",
-    "start": "npm start --workspace backend",
-    "test": "npm test --workspace backend",
-    "set-password": "npm run set-password --workspace backend --",
-    "set-role": "npm run set-role --workspace backend --"
+    "dev": "concurrently -n backend,web -c blue,green \"pnpm --filter ct-ability-backend run dev\" \"pnpm --filter ct-ability-web run dev\"",
+    "start": "pnpm --filter ct-ability-backend run start",
+    "test": "pnpm --filter ct-ability-backend run test",
+    "set-password": "pnpm --filter ct-ability-backend run set-password",
+    "set-role": "pnpm --filter ct-ability-backend run set-role"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"

@@ -1,0 +1,10 @@
+packages:
+  - backend
+  - web
+
+# pnpm blocks dependency build scripts unless they are approved here.
+# better-sqlite3 needs its native binding (prebuild-install, else node-gyp).
+# esbuild's postinstall checks its platform binary (used by vite).
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
