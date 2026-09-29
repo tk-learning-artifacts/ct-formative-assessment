@@ -134,7 +134,11 @@ The first install builds better-sqlite3's native binding; pnpm only runs depende
 |---|---|
 | Student app | http://localhost:5173/ |
 | Teacher portal | http://localhost:5173/admin.html |
+| Teacher, signed in (dev) | http://teacher.localhost:5173/ |
+| Student, form filled in (dev) | http://student.localhost:5173/ |
 | API | http://localhost:3000/api/ |
+
+The two `*.localhost` rows sign a tab in for you, so both roles can be open together; see [docs/architecture/LOCAL-DEV.md](docs/architecture/LOCAL-DEV.md).
 
 The backend auto-restarts on file changes (nodemon), including edits to `.env.development`, which `pnpm run dev` loads with Node's `--env-file` flag. The frontend has hot reload (Vite). AI scoring is off in `.env.development` so testing costs nothing; production settings stay in `.env`, which only `docker compose` reads.
 

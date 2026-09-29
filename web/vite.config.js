@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import { resolve } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -20,15 +20,97 @@ const adminShortcut = {
   }
 }
 
+// Dev only: one link per role. A page opened as teacher.localhost or
+// student.localhost gets a small script that signs it in, so both roles can be
+// open at once and neither needs typing. `apply: 'serve'` means the plugin does
+// not exist in a build, and the script is served from memory rather than from a
+// file under web/, so it cannot reach the production image or its allowlist.
+// It uses the ordinary login form's endpoint with the seeded demo account, not
+// a server-side bypass. See docs/architecture/LOCAL-DEV.md.
+const DEV_LOGIN_PATH = '/__dev-login.js'
+
+function devLoginScript({ email, password, joinCode, name, group }) {
+  return `(function () {
+  var host = location.hostname;
+  var role = host.indexOf('teacher.') === 0 ? 'teacher' : host.indexOf('student.') === 0 ? 'student' : null;
+  if (!role) return;
+  var path = location.pathname;
+
+  if (role === 'teacher') {
+    if (path === '/' || path === '/index.html') { location.replace('/admin.html'); return; }
+    if (path !== '/admin.html') return;
+    var KEY = 'ct-quest-token';
+    var call = function (method, url, body, token) {
+      var x = new XMLHttpRequest();
+      x.open(method, url, false); // synchronous, so the token is in place before admin.js runs
+      x.setRequestHeader('Content-Type', 'application/json');
+      if (token) x.setRequestHeader('Authorization', 'Bearer ' + token);
+      x.send(body ? JSON.stringify(body) : null);
+      return x;
+    };
+    try {
+      var saved = localStorage.getItem(KEY);
+      if (saved && call('GET', '/api/auth/me', null, saved).status === 200) return;
+      var res = call('POST', '/api/auth/login', { email: ${JSON.stringify(email)}, password: ${JSON.stringify(password)} });
+      if (res.status === 200) localStorage.setItem(KEY, JSON.parse(res.responseText).token);
+      else console.warn('[dev-login] teacher login failed (' + res.status + '); is the backend up, and are SEED_TEACHER_* the seeded account?');
+    } catch (e) { console.warn('[dev-login]', e); }
+    return;
+  }
+
+  if (path !== '/' && path !== '/index.html') return;
+  var fields = { joinCode: ${JSON.stringify(joinCode)}, name: ${JSON.stringify(name)}, group: ${JSON.stringify(group)} };
+  var fill = function () {
+    Object.keys(fields).forEach(function (id) {
+      var input = document.getElementById(id);
+      if (input && !input.value && !input.dataset.devFilled) { input.value = fields[id]; input.dataset.devFilled = '1'; }
+    });
+    var start = document.getElementById('startBtn');
+    if (start && !start.dataset.devFocused && document.getElementById('joinCode')) { start.dataset.devFocused = '1'; start.focus(); }
+  };
+  new MutationObserver(fill).observe(document, { childList: true, subtree: true });
+})();`
+}
+
+const devRoleLogin = {
+  name: 'dev-role-login',
+  apply: 'serve',
+  configureServer(server) {
+    // The backend's dev seed, from the same file `pnpm run dev` loads. Blank
+    // means the backend's own defaults.
+    const env = loadEnv(server.config.mode, resolve(__dirname, '..'), '')
+    const script = devLoginScript({
+      email: env.SEED_TEACHER_EMAIL || 'teacher@ctquest.local',
+      password: env.SEED_TEACHER_PASSWORD || 'changeme123',
+      joinCode: env.DEV_JOIN_CODE || 'DEMO123',
+      name: env.DEV_STUDENT_NAME || 'Dev Student',
+      group: env.DEV_STUDENT_GROUP || 'Dev Class'
+    })
+
+    server.middlewares.use((req, res, next) => {
+      if (req.url !== DEV_LOGIN_PATH) {
+        next()
+        return
+      }
+      res.setHeader('Content-Type', 'text/javascript')
+      res.setHeader('Cache-Control', 'no-store')
+      res.end(script)
+    })
+  },
+  transformIndexHtml() {
+    return [{ tag: 'script', attrs: { src: DEV_LOGIN_PATH }, injectTo: 'head-prepend' }]
+  }
+}
+
 export default defineConfig({
   root: __dirname,
-  plugins: [adminShortcut],
+  plugins: [adminShortcut, devRoleLogin],
   server: {
     port: 5173,
     proxy: {
       // Forward all /api requests to the backend in dev
       '/api': {
-        target: 'http://localhost:3000',
+        target: process.env.DEV_API_TARGET || 'http://localhost:3000',
         changeOrigin: true
       }
     }
