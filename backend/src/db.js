@@ -491,19 +491,22 @@ function createStore(db, content, { stale, log } = {}) {
     const questions = getEventQuestions(attempt.event_id);
     const index = questions.findIndex(question => question.id === questionId);
 
-    if (index < 0) {
-      throw httpError(404, "That question is not in this test.");
-    }
-
     db.transaction(() => {
       const current = db.prepare("SELECT status, reset_at FROM attempts WHERE id = ?").get(attempt.id);
 
+      // Before the question lookup: after a teacher changes an event's
+      // questions, a reset attempt's old ids are gone, and it should still be
+      // told it was reset.
       if (current.reset_at) {
         throw httpError(409, "Your teacher reset this attempt. Start the test again.", { code: "attempt-reset" });
       }
 
       if (current.status !== "started") {
         throw httpError(409, "This attempt has already been submitted.", { code: "already-submitted" });
+      }
+
+      if (index < 0) {
+        throw httpError(404, "That question is not in this test.");
       }
 
       const done = committedIds(attempt.id);

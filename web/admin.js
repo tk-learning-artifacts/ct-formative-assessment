@@ -243,7 +243,9 @@
     parsons: "Parsons problem",
     "code-reading": "Code reading",
     blocks: "Block program",
-    "open-response-ai": "Open response (AI scored)"
+    "open-response-ai": "Open response (AI scored)",
+    "multi-select": "Multiple select",
+    "short-answer": "Short answer"
   };
 
   const QP_EXPECT_TEXT = {
@@ -912,7 +914,7 @@
     }
 
     const changing = state.view === "questions";
-    const blocked = (changing && !advancedActive() && !quickActive()) ||
+    const blocked = (changing && !advancedActive() && !quickActive() && !document.getElementById("selectionMode")) ||
       ((advancedActive() || quickActive()) && (!state.preview || state.preview.count === 0 || state.previewError));
     btn.disabled = Boolean(blocked);
   }
@@ -2512,7 +2514,7 @@
               ${!canManage || resultsEvent.results_released_at || (resultsEvent.feedback_mode && resultsEvent.feedback_mode !== "release") ? "" : `<button id="releaseBtn" class="btn btn--accent btn--sm">Release results</button>`}
               ${!canManage || state.editingSettings ? "" : `<button id="editSettingsBtn" class="btn btn--secondary btn--sm">Edit settings</button>`}
               ${!canManage ? "" : liveAttempts
-                ? `<button type="button" class="btn btn--secondary btn--sm" disabled title="Reset every attempt to change the questions">Change questions</button>`
+                ? `<button type="button" class="btn btn--secondary btn--sm" disabled>Change questions</button><span class="muted small">Reset every attempt to change the questions.</span>`
                 : `<button type="button" id="editQuestionsBtn" class="btn btn--secondary btn--sm">Change questions</button>`}
             </div>
           </div>
@@ -2615,22 +2617,18 @@
               <h2 id="changeQuestionsHeading">Change questions</h2>
               <p>${escapeHtml(changingEvent.title)} <span class="tag tag--code">${escapeHtml(changingEvent.join_code)}</span></p>
             </div>
-            <p class="notice">Now: ${escapeHtml(changingEvent.filter_summary || changingEvent.selection_mode)} (${changingEvent.question_count ?? (state.eventQuestions || []).length} questions). The new selection replaces all of them. Attempts that were reset stay in the results as history.</p>
+            <p class="notice">Now: ${escapeHtml(changingEvent.filter_summary || changingEvent.selection_mode)} (${(state.eventQuestions || []).length} questions). The new selection replaces all of them. Attempts that were reset stay in the results as history.${changingEvent.filter && changingEvent.filter.questionIds && changingEvent.filter.questionIds.length ? " This event uses a fixed list of chosen questions, which the picker cannot recreate: the picker below builds a new selection instead." : ""}</p>
             <div class="form-grid">
               ${state.presets ? renderQuickSetup() : `
                 <div class="field field--full">
                   <label for="selectionMode">Question set</label>
                   <select id="selectionMode">
-                    <option value="ALL">All levels</option>
-                    <option value="P5">P5 only</option>
-                    <option value="P6">P6 only</option>
-                    <option value="S1">S1 only</option>
-                    <option value="S2">S2 only</option>
+                    ${["ALL", "P5", "P6", "S1", "S2"].map(mode => `<option value="${mode}" ${changingEvent.selection_mode === mode ? "selected" : ""}>${mode === "ALL" ? "All levels" : `${mode} only`}</option>`).join("")}
                   </select>
                 </div>
               `}
 
-              <details id="advancedPicker">
+              <details id="advancedPicker" ${state.quick ? "" : "open"}>
                 <summary>${state.presets ? "Customise" : "Choose what to test"}</summary>
                 <div id="advancedPickerBody">${renderAdvancedPicker()}</div>
               </details>
@@ -2726,7 +2724,14 @@
         ? { filter: pickerFilter(), ...(state.presets && state.quick ? { basedOnPreset: state.quick } : {}) }
         : quickActive()
           ? { preset: state.quick }
-          : { selectionMode: document.getElementById("selectionMode").value };
+          : document.getElementById("selectionMode")
+            ? { selectionMode: document.getElementById("selectionMode").value }
+            : null;
+
+      if (!selection) {
+        alert("Choose the questions first.");
+        return;
+      }
 
       try {
         const created = await api("/api/events", {
@@ -2764,7 +2769,7 @@
     if (createBtn && state.view === "questions") {
       createBtn.addEventListener("click", saveQuestions);
       document.getElementById("cancelQuestionsBtn").addEventListener("click", () => {
-        state.pickerEdited = false;
+        resetPickerState();
         state.view = "event";
         renderDashboard();
       });
@@ -2897,6 +2902,8 @@
 
   // Opens the new-event form in the main area, with a fresh preview.
   function openCreate() {
+    // Change questions borrows the same picker state, so start from a clean one.
+    resetPickerState();
     state.view = "create";
     state.editingSettings = false;
     renderDashboard();
@@ -2904,6 +2911,16 @@
     window.scrollTo({ top: 0 });
     const title = document.getElementById("title");
     if (title) title.focus({ preventScroll: true });
+  }
+
+  // The New event screen's starting picker state: the first preset card, an
+  // empty Customise, nothing edited, no preview.
+  function resetPickerState() {
+    state.quick = state.presets && state.presets.presets.length ? { ...state.presets.presets[0].defaults } : null;
+    state.picker = { audience: "core", levels: [], outcomes: [], nodes: [], types: [], difficultyMin: "", difficultyMax: "", limit: "" };
+    state.pickerEdited = false;
+    state.preview = null;
+    state.previewError = null;
   }
 
   // Opens the picker on an event's questions. The picker starts on the
@@ -2947,7 +2964,7 @@
         alert(changed.warning);
       }
 
-      state.pickerEdited = false;
+      resetPickerState();
       state.view = "event";
       await loadDashboard();
       await loadResults(eventId);

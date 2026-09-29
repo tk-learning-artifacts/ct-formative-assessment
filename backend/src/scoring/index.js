@@ -50,7 +50,10 @@ const TYPES_DIR = path.join(__dirname, "types");
 // teacher-only "details" note are never in this list. "visual" is here on
 // purpose (ADR 0007 §5), and is itself projected through its kind's
 // allowlist, so its purpose and an illustration's provenance stay behind.
-const BASE_PUBLIC_FIELDS = ["id", "type", "audience", "level", "title", "prompt", "art", "code", "visual", "points", "topic", "qType"];
+// level, topic and qType are not here: their values name the technique (an
+// "Invariant", "Trace a procedure" or "Edge case" question), which is a hint.
+// The results breakdown reads them from the stored question, after the answer.
+const BASE_PUBLIC_FIELDS = ["id", "type", "audience", "title", "prompt", "art", "code", "visual", "points"];
 
 const ACTIVE_KEYS = ["type", "label", "publicFields", "sample", "validate", "normalizeResponse", "recordResponse", "score"];
 

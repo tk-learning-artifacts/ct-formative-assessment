@@ -23,9 +23,9 @@ async function setup(t) {
   ctx.other = await login(ctx.app, OTHER);
   let n = 0;
 
-  ctx.event = async (token = ctx.owner, filter = { levels: ["P5"] }) => {
+  ctx.event = async (token = ctx.owner, filter = { levels: ["P5"] }, extra = {}) => {
     n += 1;
-    const res = await request(ctx.app).post("/api/events").set(auth(token)).send({ title: `Change ${n}`, joinCode: `CHG${n}`, filter: { audiences: ["core"], ...filter } });
+    const res = await request(ctx.app).post("/api/events").set(auth(token)).send({ title: `Change ${n}`, joinCode: `CHG${n}`, filter: { audiences: ["core"], ...filter }, ...extra });
     assert.equal(res.status, 201, JSON.stringify(res.body));
     return { id: res.body.event.id, joinCode: `CHG${n}`, count: res.body.event.question_count };
   };
@@ -52,8 +52,8 @@ test("an event with no attempts can have its questions replaced", async t => {
 
   // Students who join afterwards get the new questions.
   const attempt = await startAttempt(ctx.app, { joinCode: event.joinCode });
-  assert.equal(attempt.questions.length, after.length);
-  assert.ok(attempt.questions.every(question => question.level === "P6"));
+  assert.deepEqual(attempt.questions.map(question => question.id).sort(), after.map(question => question.id).sort());
+  assert.deepEqual(["level", "topic", "qType"].filter(key => attempt.questions.some(question => key in question)), []);
 });
 
 test("the change is recorded in the settings history", async t => {
@@ -71,7 +71,8 @@ test("the change is recorded in the settings history", async t => {
 
 test("a live attempt blocks the change, and a reset lifts it", async t => {
   const ctx = await setup(t);
-  const event = await ctx.event();
+  // "each" lets a student commit per question, which is what a stale token would try.
+  const event = await ctx.event(ctx.owner, { levels: ["P5"] }, { feedbackMode: "each" });
   const attempt = await startAttempt(ctx.app, { joinCode: event.joinCode });
   const before = await ctx.questions(event.id);
 
@@ -93,7 +94,15 @@ test("a live attempt blocks the change, and a reset lifts it", async t => {
 
   // A student may start again, on the new questions.
   const again = await startAttempt(ctx.app, { joinCode: event.joinCode, studentName: "Second Student" });
-  assert.ok(again.questions.every(question => question.level === "P6"));
+  const now = await ctx.questions(event.id);
+  assert.deepEqual(again.questions.map(question => question.id).sort(), now.map(question => question.id).sort());
+  assert.ok(now.every(question => question.level === "P6"));
+
+  // The reset attempt's token is told it was reset, even for an old question id.
+  const late = await request(ctx.app).post(`/api/attempts/${attempt.attempt.id}/answers/${encodeURIComponent(before[0].id)}/commit`)
+    .set("X-Attempt-Token", attempt.attempt.token).send({ response: { index: 0 } });
+  assert.equal(late.status, 409);
+  assert.equal(late.body.code, "attempt-reset");
 });
 
 test("only the owner may change the questions", async t => {

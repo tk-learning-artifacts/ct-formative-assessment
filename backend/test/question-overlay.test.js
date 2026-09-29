@@ -94,7 +94,9 @@ test("the bank lists merged questions with their original values, overlay and co
   assert.equal(after.teacher.qType, "Spot the rule");
   assert.deepEqual(after.teacher.outcomes, ["LO-PAT-1", "LO-SEQ-1"]);
   assert.equal(after.public.points, 5);
-  assert.equal(after.public.topic, "Number patterns");
+  assert.equal(after.teacher.topic, "Number patterns");
+  // The student's view carries no level, topic or type: their values are hints.
+  assert.deepEqual(["level", "topic", "qType"].filter(key => key in after.public), []);
   assert.equal(after.overlay.points, 5);
   assert.equal(after.overlay.updatedBy, DEMO_TEACHER.email);
   assert.equal(after.overlay.retired, false);
