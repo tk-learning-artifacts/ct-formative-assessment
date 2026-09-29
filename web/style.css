@@ -2223,3 +2223,122 @@ textarea.open-response {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---------- Question bank review workbench ---------- */
+
+/* The index of every question beside the review pane; stacked on a narrow
+   screen. The list scrolls on its own so the pane stays in reach. */
+.qr {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+.qr-index,
+.qr-pane {
+  min-width: 0;
+}
+
+/* Stacked, the list is capped so the pane is not a long scroll away. */
+.qr-index {
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.qr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qr-row {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  background: var(--color-surface-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.qr-row:hover {
+  border-color: var(--color-line-strong);
+}
+
+.qr-row[aria-current="true"] {
+  border-color: var(--color-accent-deep);
+  background: var(--color-accent-soft);
+  box-shadow: inset 3px 0 0 var(--color-accent-deep);
+}
+
+/* A retired question stays in the list, dimmed; its badge says why. */
+.qr-row--retired .qr-row__title {
+  color: var(--color-muted);
+  text-decoration: line-through;
+}
+
+.qr-row__title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.qr-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.qr-pane {
+  display: grid;
+  gap: 12px;
+}
+
+.qr-student {
+  display: grid;
+  gap: 12px;
+}
+
+.qr-practice {
+  margin-bottom: 8px;
+}
+
+.qr-key__body {
+  margin-top: 8px;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  background: var(--color-surface-2);
+}
+
+.qr-key__body[hidden] {
+  display: none;
+}
+
+.qr-empty {
+  padding: 24px 8px;
+  text-align: center;
+}
+
+@media (min-width: 1000px) {
+  .qr {
+    grid-template-columns: 17rem minmax(0, 1fr);
+  }
+
+  .qr-index {
+    position: sticky;
+    top: 12px;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+  }
+}

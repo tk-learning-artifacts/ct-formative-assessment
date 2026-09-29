@@ -73,12 +73,17 @@
     // The chosen event's frozen question snapshot (full teacher views), or
     // null until GET /api/events/:id/questions has loaded.
     eventQuestions: null,
-    // The whole question bank as full teacher views (view "bank"), loaded
-    // once on first open, and the teacher's filters over it. Filtering runs
-    // in the page, since the bank is small.
+    // The whole question bank as entries from GET /api/question-bank (view
+    // "bank"), loaded once on first open and again after a change, and the
+    // teacher's filters over it. Filtering runs in the page, since the bank
+    // is small. bankSelected is the id shown in the review pane (also kept
+    // in the URL hash); bankShowAnswer keeps the answer key open across
+    // questions.
     bank: null,
     bankError: null,
-    bankFilter: { audience: "", level: "", type: "", outcome: "", q: "" }
+    bankSelected: null,
+    bankShowAnswer: false,
+    bankFilter: { audience: "", level: "", type: "", status: "", outcome: "", q: "" }
   };
 
   const FEEDBACK_LABELS = {
@@ -1983,24 +1988,42 @@
   }
 
   // ---------- Question bank ----------
+  // A review workbench: the list of every question on the left, and for the
+  // selected one a pane with the question as a student sees it (answerable,
+  // nothing saved or sent), the answer key behind a toggle, and a slot for
+  // the controls in bank-controls.js. The bank is fetched once from
+  // GET /api/question-bank as entries ({ teacher, public, overlay, original,
+  // comments }) and fetched again after a change (refresh).
 
-  // Every audience and active question type, so the preview returns the
-  // whole bank (AI-scored questions only come back when named).
-  function bankRequestFilter() {
-    const audiences = state.catalog ? state.catalog.audiences.map(audience => audience.id) : Object.keys(AUDIENCE_SHORT);
-    const types = state.catalog
-      ? state.catalog.questionTypes.filter(type => type.status === "active").map(type => type.type)
-      : Object.keys(QP_TYPE_LABELS);
+  const BANK_OVERRIDE_FIELDS = ["level", "points", "topic", "qType", "difficulty", "ontology", "outcomes", "details"];
 
-    return { audiences, types };
+  const BANK_STATUS_CHOICES = [
+    ["flagged", "Flagged"],
+    ["retired", "Retired"],
+    ["comments", "Has comments"],
+    ["edited", "Has an override"]
+  ];
+
+  // The student renderers are registered by CTQuestTypes.load(), which must
+  // finish before any card is drawn. Kept so it runs once; a failure clears
+  // it so opening the bank again retries.
+  let bankTypesReady = null;
+
+  function loadBankTypes() {
+    if (!bankTypesReady) {
+      bankTypesReady = window.CTQuestTypes.load().catch(error => {
+        bankTypesReady = null;
+        throw error;
+      });
+    }
+
+    return bankTypesReady;
   }
 
   async function loadBank() {
     try {
-      const payload = await api("/api/question-bank/preview", {
-        method: "POST",
-        body: JSON.stringify({ filter: bankRequestFilter(), include: "questions" })
-      });
+      await loadBankTypes();
+      const payload = await api("/api/question-bank");
       state.bank = payload.questions;
       state.bankError = null;
     } catch (error) {
@@ -2009,14 +2032,34 @@
     }
   }
 
-  function bankMatches(question) {
+  function bankIsEdited(entry) {
+    return Boolean(entry.overlay) && BANK_OVERRIDE_FIELDS.some(key => entry.overlay[key] !== null && entry.overlay[key] !== undefined);
+  }
+
+  function bankIsFlagged(entry) {
+    return Boolean(entry.overlay && entry.overlay.flagged);
+  }
+
+  function bankIsRetired(entry) {
+    return Boolean(entry.overlay && entry.overlay.retired);
+  }
+
+  function bankMatches(entry) {
     const f = state.bankFilter;
+    const question = entry.teacher;
     const text = f.q.trim().toLowerCase();
+    const status = {
+      flagged: bankIsFlagged,
+      retired: bankIsRetired,
+      comments: item => item.comments.length > 0,
+      edited: bankIsEdited
+    }[f.status];
 
     return (!f.audience || question.audience === f.audience)
       && (!f.level || question.level === f.level)
       && (!f.type || question.type === f.type)
       && (!f.outcome || (question.outcomes || []).includes(f.outcome))
+      && (!status || status(entry))
       && (!text || [question.id, question.title, question.prompt, question.topic]
         .some(value => value && String(value).toLowerCase().includes(text)));
   }
@@ -2033,6 +2076,55 @@
     `;
   }
 
+  // The status badges on a row: a word for each, in the tone it means.
+  // Flagged is a warning, retired is neutral (out of use, not a problem),
+  // an edit or comments are facts, so they are plain tags.
+  function bankBadges(entry) {
+    const badges = [];
+
+    if (bankIsFlagged(entry)) {
+      badges.push(`<span class="tag status status--warning">Flagged</span>`);
+    }
+
+    if (bankIsRetired(entry)) {
+      badges.push(`<span class="tag status status--neutral">Retired</span>`);
+    }
+
+    if (entry.overlay && entry.overlay.stale) {
+      badges.push(`<span class="tag status status--warning">Edit out of date</span>`);
+    }
+
+    if (bankIsEdited(entry)) {
+      badges.push(`<span class="tag">Edited</span>`);
+    }
+
+    if (entry.comments.length) {
+      badges.push(`<span class="tag">${entry.comments.length} comment${entry.comments.length === 1 ? "" : "s"}</span>`);
+    }
+
+    return badges.join("");
+  }
+
+  function bankRow(entry) {
+    const question = entry.teacher;
+    const selected = question.id === state.bankSelected;
+
+    return `
+      <li>
+        <button type="button" class="qr-row ${bankIsRetired(entry) ? "qr-row--retired" : ""}" data-qr-id="${escapeHtml(question.id)}" ${selected ? `aria-current="true"` : ""}>
+          <span class="qr-row__title">${escapeHtml(question.title)}</span>
+          <span class="qr-row__meta">
+            <span class="muted small mono">${escapeHtml(question.id)}</span>
+            <span class="tag">${escapeHtml(QP_TYPE_LABELS[question.type] || question.type)}</span>
+            <span class="concept-tag">${escapeHtml(question.level)}</span>
+            <span class="muted small">${question.points} pt${question.points === 1 ? "" : "s"}</span>
+          </span>
+          ${bankBadges(entry) ? `<span class="qr-row__meta">${bankBadges(entry)}</span>` : ""}
+        </button>
+      </li>
+    `;
+  }
+
   function renderBankList() {
     if (state.bankError) {
       return `<p class="notice notice--critical">${escapeHtml(state.bankError)}</p>`;
@@ -2045,14 +2137,14 @@
     const shown = state.bank.filter(bankMatches);
 
     return `
-      <p class="muted small bank__count" aria-live="polite">Showing ${shown.length} of ${state.bank.length} question${state.bank.length === 1 ? "" : "s"}</p>
-      ${shown.length ? renderQuestionPreview(shown, { showId: true }) : `<p class="muted small">No questions match these filters.</p>`}
+      <p class="muted small bank__count" aria-live="polite">${shown.length} of ${state.bank.length} question${state.bank.length === 1 ? "" : "s"}</p>
+      ${shown.length ? `<ol class="qr-list">${shown.map(bankRow).join("")}</ol>` : `<p class="muted small">No questions match these filters.</p>`}
     `;
   }
 
-  function renderBank() {
+  function renderBankFilters() {
     const f = state.bankFilter;
-    const bank = state.bank || [];
+    const bank = (state.bank || []).map(entry => entry.teacher);
     const distinct = key => Array.from(new Set(bank.map(question => question[key]).filter(Boolean)));
     const levelOrder = state.catalog ? state.catalog.levels.map(level => level.id) : [];
     const levels = distinct("level").sort((a, b) => levelOrder.indexOf(a) - levelOrder.indexOf(b));
@@ -2060,24 +2152,115 @@
     const outcomes = (state.outcomes || []).filter(outcome => usedOutcomes.has(outcome.id));
 
     return `
+      ${bankSelect("bankAudience", "Audience", f.audience, distinct("audience").map(id => [id, AUDIENCE_SHORT[id] || id]))}
+      ${bankSelect("bankType", "Type", f.type, distinct("type").map(id => [id, QP_TYPE_LABELS[id] || id]))}
+      ${bankSelect("bankLevel", "Level", f.level, levels.map(id => [id, id]))}
+      ${bankSelect("bankStatus", "Status", f.status, BANK_STATUS_CHOICES)}
+      ${bankSelect("bankOutcome", "Learning outcome", f.outcome, outcomes.map(outcome => [outcome.id, truncate(outcome.statement, 70)]))}
+      <div class="field">
+        <label for="bankSearch">Search</label>
+        <input id="bankSearch" type="search" placeholder="Id, title or prompt" value="${escapeHtml(f.q)}" />
+      </div>
+    `;
+  }
+
+  function renderBank() {
+    return `
       <section class="card" aria-labelledby="bankHeading">
         <div class="section-heading">
           <h2 id="bankHeading">Question bank</h2>
-          <p>Every question students can be given, with its answer key and teacher notes. Expand a row to see it as students do.</p>
+          <p>Every question students can be given. Pick one to try it as a student would, then show its answer key. Use J and K, or the arrow keys, to move between questions.</p>
         </div>
-        <div class="bank__filters">
-          ${bankSelect("bankAudience", "Audience", f.audience, distinct("audience").map(id => [id, AUDIENCE_SHORT[id] || id]))}
-          ${bankSelect("bankLevel", "Level", f.level, levels.map(id => [id, id]))}
-          ${bankSelect("bankType", "Type", f.type, distinct("type").map(id => [id, QP_TYPE_LABELS[id] || id]))}
-          ${bankSelect("bankOutcome", "Learning outcome", f.outcome, outcomes.map(outcome => [outcome.id, truncate(outcome.statement, 70)]))}
-          <div class="field">
-            <label for="bankSearch">Search</label>
-            <input id="bankSearch" type="search" placeholder="Id, title or prompt" value="${escapeHtml(f.q)}" />
-          </div>
+        <div class="bank__filters" id="bankFilters">${renderBankFilters()}</div>
+        <div class="qr">
+          <div class="qr-index" id="bankList">${renderBankList()}</div>
+          <div class="qr-pane" id="bankPane" aria-label="Selected question"></div>
         </div>
-        <div id="bankList">${renderBankList()}</div>
       </section>
     `;
+  }
+
+  function bankEntry(id) {
+    return (state.bank || []).find(entry => entry.teacher.id === id) || null;
+  }
+
+  // What the pane shows for the selected question. Only one student card is
+  // ever in the page: the renderers use fixed element ids (answerArea,
+  // openResponse...), and this replaces the whole pane, so the previous card
+  // is gone before the next is built.
+  //
+  // The student page saves and submits from listeners on its answer area;
+  // this pane attaches none, so an answer typed here goes nowhere. The type
+  // renderers wire their own behaviour (dragging, run buttons, code
+  // reading notes) from document-level listeners and need nothing more.
+  function renderBankPane() {
+    const entry = state.bank && bankEntry(state.bankSelected);
+
+    if (!entry) {
+      return `<p class="muted qr-empty">${state.bank ? "Select a question to review it." : ""}</p>`;
+    }
+
+    const h = { escapeHtml };
+    const question = entry.public;
+    let student;
+
+    try {
+      student = `
+        ${window.CTQuestView.questionCard(question, h)}
+        <section class="card" aria-label="Try an answer">
+          <p class="muted small qr-practice">Try it: nothing you enter here is saved or sent.</p>
+          ${window.CTQuestView.answerCard(question, null, { locked: false, h })}
+        </section>
+      `;
+    } catch (error) {
+      student = `<p class="notice notice--critical">${escapeHtml(error.message)}</p>`;
+    }
+
+    return `
+      <div class="qr-student">${student}</div>
+      <div class="qr-key">
+        <button type="button" class="btn btn--secondary btn--sm" data-qr-key-toggle aria-expanded="${state.bankShowAnswer}" aria-controls="bankKey">${state.bankShowAnswer ? "Hide answer" : "Show answer"}</button>
+        <div id="bankKey" class="qp-row__body qr-key__body" ${state.bankShowAnswer ? "" : "hidden"}>${state.bankShowAnswer ? bankKeyBody(entry.teacher) : ""}</div>
+      </div>
+      <div class="qr-controls" data-qr-controls></div>
+    `;
+  }
+
+  // The answer key and teacher notes, drawn only while shown so the page
+  // holds one copy of a question's content at a time.
+  function bankKeyBody(question) {
+    return `${qpTypeBody(question)}${qpTeacherOnly(question)}`;
+  }
+
+  function mountBankPane() {
+    const pane = document.getElementById("bankPane");
+    const entry = state.bank && bankEntry(state.bankSelected);
+
+    if (!pane) {
+      return;
+    }
+
+    pane.innerHTML = renderBankPane();
+
+    const toggle = pane.querySelector("[data-qr-key-toggle]");
+
+    if (toggle) {
+      toggle.addEventListener("click", () => {
+        state.bankShowAnswer = !state.bankShowAnswer;
+        const key = pane.querySelector("#bankKey");
+        key.hidden = !state.bankShowAnswer;
+        key.innerHTML = state.bankShowAnswer ? bankKeyBody(entry.teacher) : "";
+        toggle.textContent = state.bankShowAnswer ? "Hide answer" : "Show answer";
+        toggle.setAttribute("aria-expanded", String(state.bankShowAnswer));
+      });
+    }
+
+    const slot = pane.querySelector("[data-qr-controls]");
+
+    // bank-controls.js is loaded by its own script tag and may be absent.
+    if (entry && slot && window.QuestBankControls) {
+      window.QuestBankControls.render(entry, slot, { refresh: refreshBank, isAdmin: isAdmin() });
+    }
   }
 
   function refreshBankList() {
@@ -2085,12 +2268,60 @@
 
     if (el) {
       el.innerHTML = renderBankList();
-      bindQuestionPreviewEvents(el);
     }
   }
 
-  function bindBankEvents() {
-    [["bankAudience", "audience"], ["bankLevel", "level"], ["bankType", "type"], ["bankOutcome", "outcome"]].forEach(([id, key]) => {
+  // Re-fetches the bank after a change and redraws the list, filters and
+  // pane, keeping the selection.
+  async function refreshBank() {
+    await loadBank();
+
+    if (state.view !== "bank") {
+      return;
+    }
+
+    const filters = document.getElementById("bankFilters");
+
+    if (filters) {
+      filters.innerHTML = renderBankFilters();
+      bindBankFilters();
+    }
+
+    refreshBankList();
+    mountBankPane();
+  }
+
+  function selectBankQuestion(id, { scroll = false } = {}) {
+    if (id === state.bankSelected || !bankEntry(id)) {
+      return;
+    }
+
+    state.bankSelected = id;
+    history.replaceState(null, "", `#q=${encodeURIComponent(id)}`);
+
+    document.querySelectorAll("#bankList [data-qr-id]").forEach(row => {
+      const current = row.dataset.qrId === id;
+
+      if (current) {
+        row.setAttribute("aria-current", "true");
+        if (scroll) {
+          row.scrollIntoView({ block: "nearest" });
+        }
+      } else {
+        row.removeAttribute("aria-current");
+      }
+    });
+
+    mountBankPane();
+  }
+
+  function bankHashId() {
+    const match = /^#q=(.+)$/.exec(location.hash);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  function bindBankFilters() {
+    [["bankAudience", "audience"], ["bankType", "type"], ["bankLevel", "level"], ["bankStatus", "status"], ["bankOutcome", "outcome"]].forEach(([id, key]) => {
       const select = document.getElementById(id);
       if (select) {
         select.addEventListener("change", () => {
@@ -2108,9 +2339,74 @@
         refreshBankList();
       });
     }
-
-    bindQuestionPreviewEvents(document.getElementById("bankList"));
   }
+
+  function bindBankEvents() {
+    bindBankFilters();
+
+    const list = document.getElementById("bankList");
+
+    if (list) {
+      list.addEventListener("click", event => {
+        const row = event.target.closest("[data-qr-id]");
+
+        if (row) {
+          selectBankQuestion(row.dataset.qrId);
+
+          // Stacked on a narrow screen, the pane is below the list.
+          if (getComputedStyle(list).position !== "sticky") {
+            document.getElementById("bankPane").scrollIntoView({ block: "start" });
+          }
+        }
+      });
+    }
+
+    // The pane is filled here, once the page around it exists. The first
+    // draw of the dashboard clears the hash, so a selection restored from
+    // it is written back.
+    if (state.bank) {
+      if (state.bankSelected && bankEntry(state.bankSelected)) {
+        history.replaceState(null, "", `#q=${encodeURIComponent(state.bankSelected)}`);
+      }
+
+      mountBankPane();
+    }
+  }
+
+  // J/K and the arrow keys move through the questions in the list, unless
+  // the key is meant for something else: a field, or the pane (a radio
+  // group, the code editor).
+  document.addEventListener("keydown", event => {
+    const down = event.key === "j" || event.key === "ArrowDown";
+    const up = event.key === "k" || event.key === "ArrowUp";
+
+    if (state.view !== "bank" || !state.bank || (!down && !up) || event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
+
+    if (event.target.closest && event.target.closest("input, textarea, select, [contenteditable], .qr-pane")) {
+      return;
+    }
+
+    const shown = state.bank.filter(bankMatches);
+
+    if (!shown.length) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const index = shown.findIndex(entry => entry.teacher.id === state.bankSelected);
+    const next = index === -1 ? 0 : Math.min(shown.length - 1, Math.max(0, index + (down ? 1 : -1)));
+
+    selectBankQuestion(shown[next].teacher.id, { scroll: true });
+
+    const row = document.querySelector(`#bankList [data-qr-id="${CSS.escape(shown[next].teacher.id)}"]`);
+
+    if (row && document.activeElement !== row) {
+      row.focus({ preventScroll: true });
+    }
+  });
 
   async function openBank() {
     state.view = "bank";
@@ -2129,6 +2425,11 @@
   // ---------- Dashboard ----------
 
   function renderDashboard() {
+    // The hash names a question only while the bank is open.
+    if (state.view !== "bank" && bankHashId()) {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
+
     const attemptStatus = attempt => attempt.reset_at
       ? `<span class="tag status status--neutral">Reset</span>`
       : attempt.status === "submitted"
@@ -2584,8 +2885,16 @@
       return;
     }
 
+    // A reload with #q=ID goes back to the bank; the first dashboard draw
+    // would clear the hash, so it is read first.
+    state.bankSelected = bankHashId();
+
     try {
       await loadDashboard();
+
+      if (state.bankSelected) {
+        await openBank();
+      }
     } catch (_error) {
       state.token = null;
       localStorage.removeItem(TOKEN_KEY);
