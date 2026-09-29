@@ -205,7 +205,7 @@ function parseSettingsEdit(body, event) {
   const keys = Object.keys(body || {});
 
   if (keys.some(key => QUESTION_SET_KEYS.includes(key))) {
-    return { error: "The questions are not changed here. Use PUT /api/events/:id/questions, which works while no attempt is live, or create a new event." };
+    return { error: "The questions cannot be changed here. Use PUT /api/events/:id/questions, which works while no attempt is live, or create a new event." };
   }
 
   if (keys.includes("joinCode")) {

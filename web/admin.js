@@ -1780,7 +1780,7 @@
             <div class="setting__options">${radios("navigationMode", { free: "Free: back, next and skip", linear: "In order: forward only" })}</div>
           </fieldset>
         </div>
-        <p class="muted small mt-s">The questions can't be changed, because students' answers refer to them. For a different set, create a new event.</p>
+        <p class="muted small mt-s">The questions can't be changed here. Use Change questions on the event, which is available while no student has a live attempt.</p>
         <div class="form-actions">
           <button type="button" class="btn btn--secondary" id="cancelEditBtn">Cancel</button>
           <button type="submit" class="btn btn--accent" id="saveEditBtn">Save changes</button>
