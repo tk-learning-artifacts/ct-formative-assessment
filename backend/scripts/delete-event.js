@@ -26,7 +26,8 @@ function main() {
   const joinCode = codes[0].trim().toUpperCase();
   // As in set-role.js, the seed and production checks are not relevant.
   const config = loadConfig({ ...process.env, NODE_ENV: "development" });
-  const store = openDatabase({ dbPath: config.dbPath, seedTeacher: null, isProduction: false });
+  // Opening the file must not create events (the seeded ones) while deleting one.
+  const store = openDatabase({ dbPath: config.dbPath, seedTeacher: null, seedEvents: false, isProduction: false });
 
   try {
     const event = store.db.prepare(`
