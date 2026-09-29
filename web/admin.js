@@ -1912,6 +1912,45 @@
     return audiences.map(id => AUDIENCE_SHORT[id] || id).join(" + ");
   }
 
+  // What an event is made of, from its frozen question snapshot: the count by
+  // response type, and how many questions sit at each difficulty (1 easiest to
+  // 5 hardest, ADR 0001). Every difficulty is shown, empty ones as 0, so two
+  // events can be compared at a glance.
+  function renderEventComposition(questions) {
+    if (!questions || !questions.length) {
+      return "";
+    }
+
+    const labelOrder = Object.keys(QP_TYPE_LABELS);
+    const typeCounts = questions.reduce((acc, question) => ({ ...acc, [question.type]: (acc[question.type] || 0) + 1 }), {});
+    const types = Object.keys(typeCounts)
+      .sort((a, b) => typeCounts[b] - typeCounts[a] || labelOrder.indexOf(a) - labelOrder.indexOf(b))
+      .map(type => `${typeCounts[type]} ${QP_TYPE_LABELS[type] || type}`);
+
+    const levels = [1, 2, 3, 4, 5];
+    const counts = levels.map(level => questions.filter(question => question.difficulty === level).length);
+    const most = Math.max(...counts);
+    const columns = levels.map((level, i) => {
+      const label = `Difficulty ${level}: ${counts[i]} question${counts[i] === 1 ? "" : "s"}`;
+
+      return `
+        <li class="dh__col" aria-label="${label}" title="${label}">
+          <span class="dh__count">${counts[i]}</span>
+          <span class="dh__slot">${counts[i] ? `<span class="dh__bar" style="height:${Math.round((counts[i] / most) * 100)}%"></span>` : ""}</span>
+          <span class="dh__level">${level}</span>
+        </li>`;
+    }).join("");
+
+    return `
+      <div class="composition">
+        <p class="composition__types"><strong>${questions.length} question${questions.length === 1 ? "" : "s"}:</strong> ${escapeHtml(types.join(", "))}</p>
+        <figure class="dh" role="group" aria-label="Questions by difficulty">
+          <figcaption class="dh__caption">Questions by difficulty <span class="muted">(1 easiest, 5 hardest)</span></figcaption>
+          <ul class="dh__cols">${columns}</ul>
+        </figure>
+      </div>`;
+  }
+
   // One compact row per event: title and join code, then the facts a teacher
   // scans for. The full summary and settings are on the event's own view.
   function renderEventList() {
@@ -2475,6 +2514,7 @@
           </p>
           ${canManage ? "" : `<p class="notice read-only">Read only: this is ${escapeHtml(resultsEvent.owner_email || "another teacher")}'s event. Only they can reset attempts, release results, edit settings or mark answers.</p>`}
           ${canManage && state.editingSettings ? renderEditSettings(resultsEvent) : ""}
+          ${renderEventComposition(state.eventQuestions)}
           <details class="history" id="eventQuestionsSection">
             <summary>Questions${state.eventQuestions ? ` (${state.eventQuestions.length})` : ""}</summary>
             ${state.eventQuestions ? renderQuestionPreview(state.eventQuestions) : `<p class="muted small">Could not load the questions.</p>`}
