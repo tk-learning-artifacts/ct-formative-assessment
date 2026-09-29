@@ -210,7 +210,9 @@ function aiScoredTypes() {
 }
 
 function selectQuestions(db, filter) {
-  const where = [];
+  // Retired questions (the overlay) are never selected, not even by id.
+  // Only the bank endpoint reads them, through its own query.
+  const where = ["q.retired = 0"];
   const params = [];
   const aiTypes = aiScoredTypes();
   const named = key => Boolean(filter[key] && filter[key].length);

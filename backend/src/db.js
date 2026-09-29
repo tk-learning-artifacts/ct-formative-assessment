@@ -10,6 +10,8 @@ const scoring = require("./scoring");
 const selection = require("./selection");
 const presets = require("./presets");
 const policy = require("./policy");
+const overlay = require("./overlay");
+const { questionContext } = require("./content");
 const { studentKey } = policy;
 
 function nowIso() {
@@ -63,7 +65,11 @@ function httpError(status, message, extra = {}) {
 // Replaces the content tables with what is in backend/content/. Content files
 // are the source of truth; the tables exist so filters run as indexed SQL.
 // Event snapshots in event_questions are separate and never touched here.
-function syncContent(db, content) {
+//
+// Each question is stored as the JSON plus its row in question_overrides
+// (overlay.js). An override the JSON has since made invalid is skipped and
+// logged, and returned in a Map (id -> errors) so the bank view can say so.
+function syncContent(db, content, log = () => {}) {
   const insertNode = db.prepare(`
     INSERT INTO ontology_nodes (id, kind, label, description, parent_id, sources_json, position)
     VALUES (@id, @kind, @label, @description, @parent_id, @sources_json, @position)
@@ -74,13 +80,15 @@ function syncContent(db, content) {
   const insertOutcomeLevel = db.prepare("INSERT OR IGNORE INTO outcome_levels (outcome_id, level) VALUES (?, ?)");
   const insertOutcomeAudience = db.prepare("INSERT OR IGNORE INTO outcome_audiences (outcome_id, audience) VALUES (?, ?)");
   const insertQuestion = db.prepare(`
-    INSERT INTO bank_questions (id, bank, type, audience, level, difficulty, points, position, question_json)
-    VALUES (@id, @bank, @type, @audience, @level, @difficulty, @points, @position, @question_json)
+    INSERT INTO bank_questions (id, bank, type, audience, level, difficulty, points, position, question_json, retired)
+    VALUES (@id, @bank, @type, @audience, @level, @difficulty, @points, @position, @question_json, @retired)
   `);
-  const insertQuestionNode = db.prepare("INSERT OR IGNORE INTO question_nodes (question_id, node_id) VALUES (?, ?)");
-  const insertQuestionOutcome = db.prepare("INSERT OR IGNORE INTO question_outcomes (question_id, outcome_id) VALUES (?, ?)");
+  const stale = new Map();
 
   db.transaction(() => {
+    const overrides = overlay.loadOverrides(db);
+    const context = questionContext(content);
+
     db.exec(`
       DELETE FROM ontology_nodes;
       DELETE FROM ontology_edges;
@@ -118,7 +126,15 @@ function syncContent(db, content) {
       (outcome.audiences || []).forEach(audience => insertOutcomeAudience.run(outcome.id, audience));
     });
 
-    content.questions.forEach((question, position) => {
+    content.questions.forEach((original, position) => {
+      const row = overrides.get(original.id) || null;
+      const { question, errors } = overlay.effectiveQuestion(original, row, content, context);
+
+      if (errors.length) {
+        stale.set(original.id, errors);
+        log(`Override for question ${original.id} skipped, it no longer passes validation: ${errors.join("; ")}`);
+      }
+
       insertQuestion.run({
         id: question.id,
         bank: question.bank,
@@ -128,22 +144,21 @@ function syncContent(db, content) {
         difficulty: question.difficulty,
         points: question.points,
         position,
-        question_json: JSON.stringify(question)
+        question_json: JSON.stringify(question),
+        retired: row && row.retired_at ? 1 : 0
       });
-      question.ontology.forEach(nodeId => insertQuestionNode.run(question.id, nodeId));
-      question.outcomes.forEach(outcomeId => insertQuestionOutcome.run(question.id, outcomeId));
+      overlay.writeTags(db, question);
     });
   })();
+
+  return stale;
 }
 
 // Every preset must match at least one question with its default settings,
 // or its card would offer an event that cannot be created. Checked at boot,
 // after the content tables are filled, because matching runs as SQL.
 function assertPresetsMatch(db, content) {
-  const empty = content.presets.filter(preset => {
-    const resolved = selection.resolveSelection({ preset: presets.defaultChoice(preset, content) }, content);
-    return resolved.errors.length || !selection.selectQuestions(db, resolved.filter).length;
-  });
+  const empty = overlay.presetsWithoutQuestions(db, content);
 
   if (empty.length) {
     throw new Error(`Content is invalid:\n- presets.json: ${empty.map(preset => `preset "${preset.id}" matches no questions with its default settings`).join("\n- ")}`);
@@ -178,10 +193,10 @@ function openDatabase({
 
   try {
     const migration = migrate(db, { dbPath: resolvedPath, ctx: { content, log }, log });
-    syncContent(db, content);
+    const stale = syncContent(db, content, log);
     assertPresetsMatch(db, content);
 
-    store = createStore(db, content);
+    store = createStore(db, content, { stale, log });
     store.migration = migration;
     store.seed(seedTeacher);
 
@@ -196,7 +211,9 @@ function openDatabase({
   return store;
 }
 
-function createStore(db, content) {
+function createStore(db, content, { stale, log } = {}) {
+  const bank = overlay.createOverlay(db, content, { stale, log });
+
   function createUniqueJoinCode() {
     let code = generateJoinCode();
 
@@ -1023,6 +1040,7 @@ function createStore(db, content) {
     setRole,
     setPassword,
     assertNoDefaultPasswords,
+    bank,
     listOntology,
     listOntologyEdges,
     listOutcomes,

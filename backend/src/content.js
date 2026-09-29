@@ -303,6 +303,21 @@ function validateQuestion(question, where, ctx, errors) {
   });
 }
 
+// What validateQuestion needs to know about the rest of the content, built
+// from loaded content: the overlay validates one edited question at a time
+// against it, without reloading the files. questionIds starts empty, so the
+// duplicate-id check passes for a lone question.
+function questionContext(content, { imageDir } = {}) {
+  return {
+    questionIds: new Set(),
+    audiences: new Map(content.audiences.map(audience => [audience.id, audience])),
+    nodes: new Map(content.nodes.map(node => [node.id, node])),
+    outcomes: new Map(content.outcomes.map(outcome => [outcome.id, outcome])),
+    crosswalks: (content.framework && content.framework.crosswalks) || {},
+    imageDir
+  };
+}
+
 // imageDir is where illustration files are checked (web/visuals/img/ unless
 // a test points it elsewhere).
 function loadContent(contentDir = DEFAULT_CONTENT_DIR, { imageDir } = {}) {
@@ -398,5 +413,7 @@ function loadContent(contentDir = DEFAULT_CONTENT_DIR, { imageDir } = {}) {
 
 module.exports = {
   loadContent,
+  validateQuestion,
+  questionContext,
   DEFAULT_CONTENT_DIR
 };

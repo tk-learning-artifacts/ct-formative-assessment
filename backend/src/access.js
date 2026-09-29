@@ -41,9 +41,16 @@ function eventAccess(user, event) {
   return canRead(user, event) ? "read" : null;
 }
 
+// Editing the shared question bank (its metadata, retiring questions) is for
+// admins. Reading it, flagging and commenting are open to every teacher.
+function canEditBank(user) {
+  return isAdmin(user);
+}
+
 module.exports = {
   ROLES,
   isAdmin,
+  canEditBank,
   owns,
   canRead,
   canManage,

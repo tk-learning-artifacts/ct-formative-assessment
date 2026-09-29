@@ -10,6 +10,7 @@ const selection = require("./selection");
 const policy = require("./policy");
 const access = require("./access");
 const presets = require("./presets");
+const overlay = require("./overlay");
 const { createAiProvider } = require("./ai");
 const { buildOutcomesSummary } = require("./outcomes-summary");
 const { createScoringQueue } = require("./ai/jobs");
@@ -628,6 +629,71 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
           outcomes: question.outcomes
         }))
     });
+  });
+
+  // ---------- Teacher: the question bank overlay (overlay.js) ----------
+
+  // Runs a bank write and answers with the question's fresh entry. A refused
+  // write carries its status (400 with the list of validation errors, 404,
+  // 409); anything else goes to the error handler.
+  function bankWrite(req, res, next, write) {
+    try {
+      write();
+      res.json({ question: db.bank.getBankEntry(req.params.id) });
+    } catch (error) {
+      if (error.status) {
+        res.status(error.status).json({ error: error.message, ...(error.errors ? { errors: error.errors } : {}) });
+        return;
+      }
+
+      next(error);
+    }
+  }
+
+  function requireBankEditor(req, res, next) {
+    if (!access.canEditBank(req.user)) {
+      res.status(403).json({ error: "Only an admin can edit the question bank." });
+      return;
+    }
+
+    next();
+  }
+
+  // Every question, retired ones included: { teacher, public, overlay,
+  // original, comments } each. `public` is what a student sees.
+  app.get("/api/question-bank", requireAuth, (_req, res) => {
+    res.json({ questions: db.bank.listBank() });
+  });
+
+  app.patch("/api/question-bank/:id", requireAuth, requireBankEditor, (req, res, next) => {
+    const { patch, errors } = overlay.parsePatch(req.body);
+
+    if (errors.length) {
+      res.status(400).json({ error: errors.join("; "), errors });
+      return;
+    }
+
+    bankWrite(req, res, next, () => db.bank.patchQuestion(req.params.id, patch, req.user.sub));
+  });
+
+  app.post("/api/question-bank/:id/flag", requireAuth, (req, res, next) => {
+    bankWrite(req, res, next, () => db.bank.flagQuestion(req.params.id, req.body && req.body.note, req.user.sub));
+  });
+
+  app.delete("/api/question-bank/:id/flag", requireAuth, (req, res, next) => {
+    bankWrite(req, res, next, () => db.bank.unflagQuestion(req.params.id, req.user.sub));
+  });
+
+  app.post("/api/question-bank/:id/comments", requireAuth, (req, res, next) => {
+    bankWrite(req, res, next, () => db.bank.addComment(req.params.id, req.body && req.body.body, req.user.sub));
+  });
+
+  app.post("/api/question-bank/:id/retire", requireAuth, requireBankEditor, (req, res, next) => {
+    bankWrite(req, res, next, () => db.bank.setRetired(req.params.id, true, req.user.sub));
+  });
+
+  app.post("/api/question-bank/:id/restore", requireAuth, requireBankEditor, (req, res, next) => {
+    bankWrite(req, res, next, () => db.bank.setRetired(req.params.id, false, req.user.sub));
   });
 
   // ---------- Teacher: events and results (scoped by access.js) ----------
