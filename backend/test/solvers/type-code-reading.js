@@ -25,9 +25,16 @@
 // exactly one option to match and that it is the key. An option with no
 // claim (its text was edited) throws, so the claim is written again.
 //
+// A question with a figure (ADR 0007) reads its follow-up's input from the
+// figure (the list drawn, the rows to pick from, the bar to snap) or checks
+// the figure against the code (a flowchart of the same steps, a table of
+// examples), so the answer-key test's stripped figure makes it throw.
+//
 // The open-response-ai questions in the same bank are checked like those in
 // ai-samples.js: their solvers return the facts the full-credit criterion
 // names.
+
+const { must, agree } = require("./lib");
 
 function lines(...parts) {
   return parts.join("\n");
@@ -334,8 +341,291 @@ const SPECS = {
       const text = JSON.parse(option);
       return run(text).length > text.length;
     }
+  },
+  // ---------- Questions with figures ----------
+
+  // The follow-up reads the heights from the figure.
+  "CR-P6-02": {
+    source: lines(
+      "set ups to 0",
+      "for each number after the first",
+      "    if it > the one before then",
+      "        change ups by 1",
+      "    end",
+      "end",
+      "say ups"
+    ),
+    run: numbers => numbers.filter((n, i) => i > 0 && n > numbers[i - 1]).length,
+    inputs: [[3, 5, 5, 2, 6, 7, 1], [1, 2, 3], [5, 4, 3], [2, 2, 2], [4, 9, 1, 8], [7]],
+    claims: {
+      "How many numbers are bigger than the first number": (xs, out) => out === xs.filter(n => n > xs[0]).length,
+      "The biggest number in the list": (xs, out) => out === Math.max(...xs),
+      "How many times a number is bigger than the one just before it": (xs, out) => {
+        let ups = 0;
+        for (let i = 1; i < xs.length; i += 1) {
+          if (xs[i] > xs[i - 1]) ups += 1;
+        }
+        return out === ups;
+      },
+      "How many numbers there are, not counting the first": (xs, out) => out === xs.length - 1
+    },
+    followUp: (q, run) => {
+      const heights = figureCells(q, "cells")[0].map(Number);
+      return option => run(heights) === Number(option);
+    }
+  },
+
+  // The follow-up's rows are drawn in the figure, one per option.
+  "CR-S1-02": {
+    source: lines(
+      "set in_order to true",
+      "for each i from 1 to length - 1",
+      "    if item i ≥ item i + 1 then",
+      "        set in_order to false",
+      "    end",
+      "end",
+      "say in_order"
+    ),
+    run: xs => xs.every((x, i) => i === xs.length - 1 || !(x >= xs[i + 1])),
+    inputs: [[2, 4, 4, 9], [1, 3, 6, 8], [1, 5, 3, 9], [3, 7, 9, 2], [5], [4, 4], [9, 1, 5]],
+    claims: {
+      "When the first item is the smallest": (xs, out) => out === xs.every(x => x >= xs[0]),
+      "When the items never go down, even if two next to each other are equal": (xs, out) => out === xs.every((x, i) => i === 0 || x >= xs[i - 1]),
+      "When the last item is the biggest": (xs, out) => out === xs.every(x => x <= xs[xs.length - 1]),
+      "When every item is smaller than the one after it": (xs, out) => out === xs.every((x, i) => i === 0 || xs[i - 1] < x)
+    },
+    followUp: (q, run) => {
+      const rows = new Map(must(q.visual && q.visual.kind === "cells" && q.visual.rows, "the rows in the figure")
+        .map(row => [row.label, row.cells.map(Number)]));
+      return option => run(must(rows.get(option), `the figure's ${option}`)) === true;
+    }
+  },
+
+  // The figure is the same procedure drawn as a flowchart; the solver runs
+  // the flowchart and requires it to agree with the pseudocode.
+  "CR-S1-03": {
+    source: lines(
+      "set r to 0",
+      "repeat until n is 0",
+      "    d = the last digit of n",
+"    r = r × 10 + d",
+      "    remove the last digit of n",
+      "end",
+      "say r"
+    ),
+    run: n => {
+      let r = 0;
+      let rest = n;
+      while (rest !== 0) {
+        const d = rest % 10;
+        r = r * 10 + d;
+        rest = Math.floor(rest / 10);
+      }
+      return r;
+    },
+    inputs: [472, 50, 7, 1200, 9051, 11, 0],
+    claims: {
+      "The sum of the digits of n": (n, out) => out === Array.from(String(n), Number).reduce((a, b) => a + b, 0),
+      "The digits of n in reverse order, as a number": (n, out) => out === Number(Array.from(String(n)).reverse().join("")),
+      "The last digit of n": (n, out) => out === n % 10,
+      "n multiplied by 10": (n, out) => out === n * 10
+    },
+    followUp: (q, run) => {
+      const flow = runDigitFlowchart(q);
+      [472, 50, 1200, 9051].forEach(n => agree(flow(n) === run(n), `the flowchart and the procedure for ${n}`));
+      const target = Number(q.followUp.prompt.match(/say (\d+)/)[1]);
+      return option => run(Number(option)) === target;
+    }
+  },
+
+  // The follow-up's bar is the figure: its rows and columns of squares.
+  "CR-S2-02": {
+    source: lines(
+      "set pieces to 1",
+      "set breaks to 0",
+      "repeat until each piece is 1×1",
+      "    pick a piece that isn't 1×1",
+      "    snap it in two along a line",
+      "    change pieces by 1",
+      "    change breaks by 1",
+      "end",
+      "say breaks"
+    ),
+    // input: { rows, cols, seed }. The seed decides which piece is picked
+    // and where it is broken, so different inputs make different choices.
+    run: ({ rows, cols, seed }) => {
+      let state = seed;
+      const random = n => {
+        state = (state * 1103515245 + 12345) % 2147483648;
+        return state % n;
+      };
+      const pieces = [[rows, cols]];
+      let breaks = 0;
+      while (pieces.some(([r, c]) => r * c > 1)) {
+        const big = pieces.map((piece, i) => i).filter(i => pieces[i][0] * pieces[i][1] > 1);
+        const [r, c] = pieces.splice(big[random(big.length)], 1)[0];
+        const alongRows = r > 1 && (c === 1 || random(2) === 0);
+        const cut = 1 + random((alongRows ? r : c) - 1);
+        pieces.push(alongRows ? [cut, c] : [r, cut], alongRows ? [r - cut, c] : [r, c - cut]);
+        breaks += 1;
+      }
+      must(pieces.length === rows * cols, "every square apart");
+      return breaks;
+    },
+    inputs: [
+      { rows: 3, cols: 4, seed: 1 },
+      { rows: 3, cols: 4, seed: 7 },
+      { rows: 3, cols: 4, seed: 99 },
+      { rows: 1, cols: 1, seed: 3 },
+      { rows: 1, cols: 6, seed: 5 },
+      { rows: 5, cols: 5, seed: 11 },
+      { rows: 2, cols: 7, seed: 42 }
+    ],
+    claims: {
+      "It is always one less than the number of squares": (bar, out) => out === bar.rows * bar.cols - 1,
+      "It is always half the number of squares": (bar, out) => out === bar.rows * bar.cols / 2,
+      "It is always the number of rows plus the number of columns": (bar, out) => out === bar.rows + bar.cols,
+      "It is always the number of squares": (bar, out) => out === bar.rows * bar.cols
+    },
+    followUp: (q, run) => {
+      const rows = figureCells(q, "cells");
+      agree(rows.every(row => row.length === rows[0].length && row.every(cell => cell === "dark")), "a whole bar of squares");
+      return option => [1, 2, 3].every(seed => run({ rows: rows.length, cols: rows[0].length, seed }) === Number(option));
+    }
+  },
+
+  "CR-RGS-S1-03": {
+    source: lines(
+      "def first_drop(temps):",
+      "    for i in range(1, len(temps)):",
+      "        if temps[i] < temps[i - 1]:",
+      "            return i",
+      "    return -1"
+    ),
+    run: temps => {
+      for (let i = 1; i < temps.length; i += 1) {
+        if (temps[i] < temps[i - 1]) return i;
+      }
+      return -1;
+    },
+    inputs: [[21, 23, 23, 20, 25, 19], [5, 4], [1, 2, 3], [3, 3, 3], [9], [], [10, 12, 7, 15, 2]],
+    call: temps => `first_drop(${JSON.stringify(temps)})`,
+    claims: {
+      "The position of the first reading that is lower than the one just before it, or -1 if there is none": (t, out) => (
+        out === t.findIndex((x, i) => i > 0 && x < t[i - 1])
+      ),
+      "The position of the lowest reading": (t, out) => out === (t.length ? t.indexOf(Math.min(...t)) : -1),
+      "How many readings are lower than the one just before them": (t, out) => out === t.filter((x, i) => i > 0 && x < t[i - 1]).length,
+      "The first reading that is lower than the one just before it, or -1 if there is none": (t, out) => (
+        out === (t.find((x, i) => i > 0 && x < t[i - 1]) ?? -1)
+      )
+    },
+    followUp: (q, run) => {
+      agree(q.visual && q.visual.numberFrom === 0, "positions starting at 0");
+      const temps = figureCells(q, "cells")[0].map(Number);
+      return option => run(temps) === Number(option);
+    }
+  },
+
+  // The table's examples must be what the code gives back.
+  "CR-RGS-S2-03": {
+    source: lines(
+      "func shrink(_ n: Int) -> Int {",
+      "    var x = n",
+      "    while x >= 10 {",
+      "        var sum = 0",
+      "        var y = x",
+      "        while y > 0 {",
+      "            sum += y % 10",
+      "            y /= 10",
+      "        }",
+      "        x = sum",
+      "    }",
+      "    return x",
+      "}"
+    ),
+    run: n => {
+      let x = n;
+      while (x >= 10) {
+        let sum = 0;
+        let y = x;
+        while (y > 0) {
+          sum += y % 10;
+          y = Math.floor(y / 10);
+        }
+        x = sum;
+      }
+      return x;
+    },
+    inputs: [7, 38, 405, 9999, 0, 10, 19, 29, 1234567],
+    call: n => `shrink(${n})`,
+    claims: {
+      "It adds up the digits of n once": (n, out) => out === digitSum(n),
+      "It gives back the last digit of n": (n, out) => out === n % 10,
+      "It gives back how many digits n has": (n, out) => out === String(n).length,
+      "It adds up the digits, then the digits of that, and so on until one digit is left": (n, out) => {
+        let x = n;
+        while (String(x).length > 1) x = digitSum(x);
+        return out === x;
+      }
+    },
+    followUp: (q, run) => {
+      const visual = must(q.visual && q.visual.kind === "table" && q.visual, "the table of examples");
+      agree(visual.columns.join("|") === "Call|Gives back", "the table's columns");
+      must(visual.rows, "the examples").forEach(([call, result]) => {
+        const n = Number(must(call.match(/^shrink\((\d+)\)$/), "a call in the table")[1]);
+        agree(run(n) === Number(result), `shrink(${n})`);
+      });
+      const result = option => run(Number(must(option.match(/^shrink\((\d+)\)$/), "a call")[1]));
+      return option => q.followUp.options.filter(other => other !== option).every(other => result(other) !== result(option));
+    }
   }
 };
+
+function digitSum(n) {
+  return Array.from(String(n), Number).reduce((a, b) => a + b, 0);
+}
+
+// The value rows of a cells figure, as the text in each box (or its fill).
+function figureCells(q, kind) {
+  must(q.visual && q.visual.kind === kind && Array.isArray(q.visual.rows), `the ${kind} figure`);
+  return q.visual.rows.map(row => row.cells.map(cell => (typeof cell === "string" ? cell : cell.text !== undefined ? cell.text : cell.fill)));
+}
+
+// CR-S1-03's flowchart, run box by box from the start: each process box's
+// text is one of the procedure's steps, and the decision's arrows are
+// followed by their labels.
+function runDigitFlowchart(q) {
+  must(q.visual && q.visual.kind === "flowchart", "the flowchart");
+  const nodes = new Map(must(q.visual.nodes, "the flowchart's boxes").map(node => [node.id, node]));
+  const out = (id, label) => must(q.visual.edges.find(edge => edge.from === id && (label === undefined || edge.label === label)), `the arrow out of ${id}`).to;
+  const steps = {
+    "Set r to 0": s => { s.r = 0; },
+    "d = the last digit of n": s => { s.d = s.n % 10; },
+    "r = r × 10 + d": s => { s.r = s.r * 10 + s.d; },
+    "Remove the last digit of n": s => { s.n = Math.floor(s.n / 10); }
+  };
+
+  return n => {
+    const s = { n };
+    let id = q.visual.nodes.find(node => node.type === "start").id;
+    for (let guard = 0; guard < 1000; guard += 1) {
+      const node = nodes.get(id);
+      if (node.type === "end") {
+        agree(node.text === "Say r", "what the flowchart says");
+        return s.r;
+      }
+      if (node.type === "decision") {
+        agree(node.text === "Is n 0?", "the flowchart's question");
+        id = out(id, s.n === 0 ? "Yes" : "No");
+      } else {
+        if (node.type === "process") must(steps[node.text], `a known step (${node.text})`)(s);
+        id = out(id);
+      }
+    }
+    throw new Error(`${q.id}: the flowchart never ends`);
+  };
+}
 
 // A line follow-up's fixes, one or several.
 function lineFixes(spec) {

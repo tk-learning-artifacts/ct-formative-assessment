@@ -81,5 +81,7 @@ module.exports = {
     say: String(spots(stage, "*").length)
   })),
 
-  "BLK-RGS-S2-01": reachEverything
+  "BLK-RGS-S2-01": reachEverything,
+  "BLK-P5-02": reachEverything,
+  "BLK-P6-02": reachEverything
 };

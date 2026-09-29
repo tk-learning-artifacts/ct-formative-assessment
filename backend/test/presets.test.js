@@ -61,18 +61,19 @@ test("GET /api/presets: teacher only, every preset with knobs, defaults and a co
   assert.deepEqual(core.whoOptions.map(option => option.value), ["core", "core:P5", "core:P6", "core:S1", "core:S2"]);
 
   // Every option a card offers matches something: the core bank has no
-  // perspectives questions, so the core card does not offer that emphasis,
-  // and levels with no code-ordering questions are left out. (Every core
-  // level has a loop or conditional question since the code-reading and
-  // block programming questions arrived, so the loops card offers them all.)
+  // perspectives questions, so the core card does not offer that emphasis.
+  // (Every core level has a loop or conditional question since the
+  // code-reading and block programming questions arrived, so the loops card
+  // offers them all, and every core level has code-ordering questions since
+  // the figure questions arrived, so the ordering card does too.)
   assert.deepEqual(core.emphasisOptions.map(item => item.id), ["all", "concepts", "practices"]);
   const loops = res.body.presets.find(preset => preset.id === "loops-conditionals");
   assert.deepEqual(loops.whoOptions.filter(option => option.value.startsWith("core")).map(option => option.value), ["core", "core:P5", "core:P6", "core:S1", "core:S2"]);
   const blocks = res.body.presets.find(preset => preset.id === "block-programming");
-  assert.equal(blocks.count, 4);
+  assert.equal(blocks.count, 6);
   assert.ok(["core:P5", "core:S2", "rgsynapse:S1", "rgsynapse:S2"].every(value => blocks.whoOptions.some(option => option.value === value)));
   const ordering = res.body.presets.find(preset => preset.id === "ordering-tracing");
-  assert.equal(ordering.whoOptions.some(option => ["core:P5", "core:P6", "core:S2"].includes(option.value)), false);
+  assert.deepEqual(ordering.whoOptions.filter(option => option.value.startsWith("core")).map(option => option.value), ["core", "core:P5", "core:P6", "core:S1", "core:S2"]);
   const rgsS1 = res.body.presets.find(preset => preset.id === "rgs-s1-starter");
   assert.deepEqual(rgsS1.emphasisOptions.map(item => item.id), ["all", "concepts", "practices", "perspectives"]);
 

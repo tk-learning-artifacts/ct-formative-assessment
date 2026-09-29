@@ -585,6 +585,603 @@
         }
       ],
       "details": "current counts the run in progress and resets on a false; best keeps the largest current seen. [true, true, false, true] gives 2, not 3."
+    },
+    {
+      "id": "CR-P6-02",
+      "type": "code-reading",
+      "audience": "core",
+      "level": "P6",
+      "title": "Going through a list",
+      "prompt": "This script looks at a list of numbers. Which sentence says what it works out, for any list?",
+      "visual": {
+        "kind": "cells",
+        "purpose": "information",
+        "caption": "The heights Sam reached on a walk, in order",
+        "rows": [
+          {
+            "label": "Heights",
+            "cells": [
+              "3",
+              "5",
+              "5",
+              "2",
+              "6",
+              "7",
+              "1"
+            ]
+          }
+        ]
+      },
+      "code": {
+        "language": "scratch-style",
+        "source": "set ups to 0\nfor each number after the first\n    if it > the one before then\n        change ups by 1\n    end\nend\nsay ups"
+      },
+      "options": [
+        "How many numbers are bigger than the first number",
+        "The biggest number in the list",
+        "How many times a number is bigger than the one just before it",
+        "How many numbers there are, not counting the first"
+      ],
+      "answer": {
+        "index": 2,
+        "followUp": 0
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "What does the script say for the heights in the picture?",
+        "options": [
+          "3",
+          "4",
+          "7",
+          "6"
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "change ups by 1",
+          "note": "Adds 1 to ups."
+        }
+      ],
+      "points": 3,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "concept.data.variables",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-1",
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "Each number is compared with the one just before it, not with the first one: the heights go up three times (3 to 5, 2 to 6, 6 to 7), and 5 to 5 is not a climb. In the follow-up, 4 compares with the first height, 7 is the biggest and 6 counts every number after the first."
+    },
+    {
+      "id": "CR-S1-02",
+      "type": "code-reading",
+      "audience": "core",
+      "level": "S1",
+      "title": "In order or not?",
+      "prompt": "This procedure checks a list of numbers and says true or false. Which sentence says when it says true, for any list?",
+      "visual": {
+        "kind": "cells",
+        "purpose": "information",
+        "rows": [
+          {
+            "label": "Row A",
+            "cells": [
+              "2",
+              "4",
+              "4",
+              "9"
+            ]
+          },
+          {
+            "label": "Row B",
+            "cells": [
+              "1",
+              "3",
+              "6",
+              "8"
+            ]
+          },
+          {
+            "label": "Row C",
+            "cells": [
+              "1",
+              "5",
+              "3",
+              "9"
+            ]
+          },
+          {
+            "label": "Row D",
+            "cells": [
+              "3",
+              "7",
+              "9",
+              "2"
+            ]
+          }
+        ]
+      },
+      "code": {
+        "language": "pseudocode",
+        "source": "set in_order to true\nfor each i from 1 to length - 1\n    if item i ≥ item i + 1 then\n        set in_order to false\n    end\nend\nsay in_order"
+      },
+      "options": [
+        "When the first item is the smallest",
+        "When the items never go down, even if two next to each other are equal",
+        "When the last item is the biggest",
+        "When every item is smaller than the one after it"
+      ],
+      "answer": {
+        "index": 3,
+        "followUp": 1
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "Which row in the picture makes it say true?",
+        "options": [
+          "Row A",
+          "Row B",
+          "Row C",
+          "Row D"
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "≥",
+          "note": "Bigger than or equal to."
+        }
+      ],
+      "points": 3,
+      "difficulty": 3,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "practice.testing-debugging.edge-cases",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-1",
+        "LO-DEBUG-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "Equal neighbours are the edge case: \"bigger than or equal to\" makes 4, 4 count as out of order, so row A says false and only row B says true. Rows A and C catch the descriptions that check only the ends or allow equal items."
+    },
+    {
+      "id": "CR-S1-03",
+      "type": "code-reading",
+      "audience": "core",
+      "level": "S1",
+      "title": "A digit machine",
+      "prompt": "This procedure takes a whole number n. The flowchart shows the same steps. Which sentence says what it says, for any n?",
+      "visual": {
+        "kind": "flowchart",
+        "purpose": "reading-load",
+        "nodes": [
+          {
+            "id": "start",
+            "type": "start",
+            "text": "Start with n",
+            "col": 0,
+            "row": 0
+          },
+          {
+            "id": "zero",
+            "type": "process",
+            "text": "Set r to 0",
+            "col": 0,
+            "row": 1
+          },
+          {
+            "id": "check",
+            "type": "decision",
+            "text": "Is n 0?",
+            "col": 0,
+            "row": 2
+          },
+          {
+            "id": "last",
+            "type": "process",
+            "text": "d = the last digit of n",
+            "col": 0,
+            "row": 3
+          },
+          {
+            "id": "grow",
+            "type": "process",
+            "text": "r = r × 10 + d",
+            "col": 0,
+            "row": 4
+          },
+          {
+            "id": "cut",
+            "type": "process",
+            "text": "Remove the last digit of n",
+            "col": 0,
+            "row": 5
+          },
+          {
+            "id": "say",
+            "type": "end",
+            "text": "Say r",
+            "col": 1,
+            "row": 3
+          }
+        ],
+        "edges": [
+          {
+            "from": "start",
+            "to": "zero"
+          },
+          {
+            "from": "zero",
+            "to": "check"
+          },
+          {
+            "from": "check",
+            "to": "say",
+            "label": "Yes",
+            "exit": "right"
+          },
+          {
+            "from": "check",
+            "to": "last",
+            "label": "No"
+          },
+          {
+            "from": "last",
+            "to": "grow"
+          },
+          {
+            "from": "grow",
+            "to": "cut"
+          },
+          {
+            "from": "cut",
+            "to": "check",
+            "exit": "left",
+            "enter": "left"
+          }
+        ]
+      },
+      "code": {
+        "language": "pseudocode",
+        "source": "set r to 0\nrepeat until n is 0\n    d = the last digit of n\n    r = r × 10 + d\n    remove the last digit of n\nend\nsay r"
+      },
+      "options": [
+        "The sum of the digits of n",
+        "The digits of n in reverse order, as a number",
+        "The last digit of n",
+        "n multiplied by 10"
+      ],
+      "answer": {
+        "index": 1,
+        "followUp": 2
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "Which starting number makes it say 5?",
+        "options": [
+          "15",
+          "51",
+          "50",
+          "105"
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "the last digit of n",
+          "note": "The ones digit: the last digit of 472 is 2."
+        },
+        {
+          "term": "remove the last digit",
+          "note": "472 becomes 47."
+        }
+      ],
+      "points": 3,
+      "difficulty": 3,
+      "ontology": [
+        "concept.loops",
+        "concept.data.variables",
+        "concept.operators",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-1",
+        "LO-TRACE-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "r collects the digits of n from the right, so 472 gives 274. A 0 at the end of n becomes a 0 at the front of r, which disappears, so 50 gives 5; 15 gives 51 and 105 gives 501."
+    },
+    {
+      "id": "CR-S2-02",
+      "type": "code-reading",
+      "audience": "core",
+      "level": "S2",
+      "title": "Snapping a chocolate bar",
+      "prompt": "This procedure snaps a chocolate bar into single squares. It may pick the pieces and the lines to break along in any way it likes. Which sentence is true of the number it says, for any bar and any choices?",
+      "visual": {
+        "kind": "cells",
+        "purpose": "information",
+        "caption": "A bar of chocolate squares",
+        "rows": [
+          {
+            "cells": [
+              {
+                "fill": "dark"
+              },
+              {
+                "fill": "dark"
+              },
+              {
+                "fill": "dark"
+              },
+              {
+                "fill": "dark"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "fill": "dark"
+              },
+              {
+                "fill": "dark"
+              },
+              {
+                "fill": "dark"
+              },
+              {
+                "fill": "dark"
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "fill": "dark"
+              },
+              {
+                "fill": "dark"
+              },
+              {
+                "fill": "dark"
+              },
+              {
+                "fill": "dark"
+              }
+            ]
+          }
+        ],
+        "fillWords": {
+          "light": "empty",
+          "dark": "chocolate"
+        }
+      },
+      "code": {
+        "language": "pseudocode",
+        "source": "set pieces to 1\nset breaks to 0\nrepeat until each piece is 1×1\n    pick a piece that isn't 1×1\n    snap it in two along a line\n    change pieces by 1\n    change breaks by 1\nend\nsay breaks"
+      },
+      "options": [
+        "It is always one less than the number of squares",
+        "It is always half the number of squares",
+        "It is always the number of rows plus the number of columns",
+        "It is always the number of squares"
+      ],
+      "answer": {
+        "index": 0,
+        "followUp": 1
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "What does it say for the bar in the picture?",
+        "options": [
+          "7",
+          "11",
+          "12",
+          "6"
+        ],
+        "points": 1
+      },
+      "points": 3,
+      "difficulty": 4,
+      "ontology": [
+        "practice.abstracting-modularizing.invariants",
+        "practice.abstracting-modularizing.generalisation",
+        "concept.loops"
+      ],
+      "outcomes": [
+        "LO-INV-1",
+        "LO-READ-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "The invariant: every break turns one piece into two, so pieces minus breaks is always 1. A bar of 12 squares ends as 12 pieces after exactly 11 breaks, whichever pieces and lines are chosen. 7 is rows plus columns and 6 is half the squares."
+    },
+    {
+      "id": "CR-RGS-S1-03",
+      "type": "code-reading",
+      "audience": "rgsynapse",
+      "level": "S1",
+      "title": "Watching the temperature",
+      "prompt": "What does first_drop give back, for any list of temperature readings?",
+      "visual": {
+        "kind": "cells",
+        "purpose": "information",
+        "caption": "One day's readings, with their positions",
+        "rows": [
+          {
+            "label": "temps",
+            "cells": [
+              "21",
+              "23",
+              "23",
+              "20",
+              "25",
+              "19"
+            ]
+          }
+        ],
+        "numbered": true,
+        "numberFrom": 0
+      },
+      "code": {
+        "language": "python",
+        "source": "def first_drop(temps):\n    for i in range(1, len(temps)):\n        if temps[i] < temps[i - 1]:\n            return i\n    return -1"
+      },
+      "options": [
+        "The position of the first reading that is lower than the one just before it, or -1 if there is none",
+        "The position of the lowest reading",
+        "How many readings are lower than the one just before them",
+        "The first reading that is lower than the one just before it, or -1 if there is none"
+      ],
+      "answer": {
+        "index": 0,
+        "followUp": 3
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "What does first_drop give back for the readings in the picture?",
+        "options": [
+          "5",
+          "20",
+          "2",
+          "3"
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "range(1, len(temps))",
+          "note": "The positions 1, 2, and so on up to the last one: every reading after the first."
+        }
+      ],
+      "points": 3,
+      "difficulty": 2,
+      "ontology": [
+        "concept.loops",
+        "concept.conditionals",
+        "concept.data.structures",
+        "practice.abstracting-modularizing.generalisation"
+      ],
+      "outcomes": [
+        "LO-READ-RGS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "A loop that returns early: it gives back the position i, not the reading, and stops at the first drop. For the pictured readings that is position 3 (23 to 20); 23 then 23 is not a drop. 5 is the lowest reading's position, 20 the reading itself and 2 the number of drops."
+    },
+    {
+      "id": "CR-RGS-S2-03",
+      "type": "code-reading",
+      "audience": "rgsynapse",
+      "level": "S2",
+      "title": "Shrinking a number",
+      "prompt": "The table shows what shrink gives back for a few numbers. Read the code as well. Which sentence says what shrink does, for any whole number that is 0 or more?",
+      "visual": {
+        "kind": "table",
+        "purpose": "information",
+        "columns": [
+          "Call",
+          "Gives back"
+        ],
+        "rows": [
+          [
+            "shrink(7)",
+            "7"
+          ],
+          [
+            "shrink(38)",
+            "2"
+          ],
+          [
+            "shrink(405)",
+            "9"
+          ],
+          [
+            "shrink(9999)",
+            "9"
+          ]
+        ]
+      },
+      "code": {
+        "language": "swift",
+        "source": "func shrink(_ n: Int) -> Int {\n    var x = n\n    while x >= 10 {\n        var sum = 0\n        var y = x\n        while y > 0 {\n            sum += y % 10\n            y /= 10\n        }\n        x = sum\n    }\n    return x\n}"
+      },
+      "options": [
+        "It adds up the digits of n once",
+        "It gives back the last digit of n",
+        "It gives back how many digits n has",
+        "It adds up the digits, then the digits of that, and so on until one digit is left"
+      ],
+      "answer": {
+        "index": 3,
+        "followUp": 3
+      },
+      "followUp": {
+        "kind": "choice",
+        "prompt": "Which call gives back a different number from the other three?",
+        "options": [
+          "shrink(19)",
+          "shrink(64)",
+          "shrink(100)",
+          "shrink(29)"
+        ],
+        "points": 1
+      },
+      "glossary": [
+        {
+          "term": "y % 10",
+          "note": "The last digit of y: the remainder after dividing by 10."
+        },
+        {
+          "term": "y /= 10",
+          "note": "Divides y by 10 and drops the remainder, which removes its last digit."
+        }
+      ],
+      "points": 3,
+      "difficulty": 3,
+      "ontology": [
+        "practice.abstracting-modularizing.generalisation",
+        "concept.loops",
+        "concept.operators"
+      ],
+      "outcomes": [
+        "LO-GENERALISE-1",
+        "LO-READ-RGS-1"
+      ],
+      "crosswalk": {
+        "bebrasCategory": "algorithms-programming"
+      },
+      "topic": "Reading code",
+      "qType": "What does it do?",
+      "details": "Nested loops: the inner loop adds up the digits and the outer one repeats that until one digit is left. shrink(38) is 2, not 11, which rules out adding the digits once. In the follow-up, 29 gives 11 and then 2; 19, 64 and 100 all end at 1."
     }
   ]
 }
