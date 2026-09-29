@@ -205,7 +205,7 @@ function parseSettingsEdit(body, event) {
   const keys = Object.keys(body || {});
 
   if (keys.some(key => QUESTION_SET_KEYS.includes(key))) {
-    return { error: "The questions cannot be changed after an event is created, because students' answers refer to them. Create a new event instead." };
+    return { error: "The questions are not changed here. Use PUT /api/events/:id/questions, which works while no attempt is live, or create a new event." };
   }
 
   if (keys.includes("joinCode")) {
@@ -809,7 +809,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
   });
 
   // Changes an event's settings, even while students are taking it (ADR 0003
-  // §10). Owner only (ADR 0004). The question set cannot change. policy.js reads the
+  // §10). Owner only (ADR 0004). The question set has its own route, below. policy.js reads the
   // event's current settings on every request, so a student's next request
   // follows the new rules; attempts in progress get their deadline
   // recomputed in the store.
@@ -832,6 +832,55 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     updated.question_count = db.getEventQuestions(event.id).length;
 
     res.json({ event: updated, changes, attemptsUpdated });
+  });
+
+  // Replaces the event's questions with a new selection, chosen the way a new
+  // event's are (a preset card, or a filter with an optional basedOnPreset).
+  // Owner only (ADR 0004), and only while no attempt is live (ADR 0003 §10):
+  // the store refuses with 409 otherwise.
+  app.put("/api/events/:id/questions", requireAuth, (req, res) => {
+    const event = eventForRequest(req, res, { manage: true });
+
+    if (!event) {
+      return;
+    }
+
+    // Unlike creating an event, an empty body must not fall back to "all questions".
+    if (!["filter", "preset", "selectionMode"].some(key => req.body && req.body[key] !== undefined && req.body[key] !== null)) {
+      res.status(400).json({ error: "Choose the questions: a preset, a filter or a question set." });
+      return;
+    }
+
+    const resolved = selection.resolveSelection(req.body, db.content);
+
+    if (resolved.errors.length) {
+      res.status(400).json({ error: resolved.errors.join("; "), errors: resolved.errors });
+      return;
+    }
+
+    const provenance = presetProvenance(req.body, resolved.filter, db.content);
+
+    if (provenance.error) {
+      res.status(400).json({ error: provenance.error });
+      return;
+    }
+
+    try {
+      db.replaceEventQuestions(event.id, req.user.sub, {
+        selectionMode: resolved.selectionMode,
+        filter: resolved.filter,
+        preset: provenance.preset
+      });
+    } catch (error) {
+      res.status(error.status || 400).json({ error: error.message || "Could not change the questions." });
+      return;
+    }
+
+    const updated = teacherEvent(db.getEventById(event.id), req.user);
+    const questions = db.getEventQuestions(event.id);
+    updated.question_count = questions.length;
+
+    res.json({ event: updated, ...aiStatus(questions, ai) });
   });
 
   // Per-learning-outcome and per-ontology-node results, for the teacher's

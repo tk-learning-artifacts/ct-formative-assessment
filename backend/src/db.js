@@ -850,6 +850,70 @@ function createStore(db, content, { stale, log } = {}) {
     })();
   }
 
+  // Replaces an event's questions with a new selection, but only while no
+  // attempt is live: none at all, or every one reset. Reset attempts stay in
+  // the results as history with their old answers, and the outcome summaries
+  // already leave them out. The check and the write share one transaction, and
+  // better-sqlite3 runs it without yielding, so a student cannot start in
+  // between. The change is recorded in the settings history as 'questions'.
+  function replaceEventQuestions(eventId, userId, { selectionMode = "ALL", filter = null, preset = null }) {
+    const resolvedFilter = filter || selection.legacyModeToFilter(selectionMode, content);
+    const questions = previewQuestions(resolvedFilter);
+
+    if (!questions.length) {
+      throw httpError(400, "No questions match that selection.");
+    }
+
+    return db.transaction(() => {
+      const live = db.prepare("SELECT COUNT(*) AS n FROM attempts WHERE event_id = ? AND reset_at IS NULL").get(eventId).n;
+
+      if (live) {
+        throw httpError(409, "Students have attempts on this event. Reset them all before changing its questions.");
+      }
+
+      const current = db.prepare("SELECT filter_json, selection_mode FROM events WHERE id = ?").get(eventId);
+      const oldFilter = current.filter_json ? JSON.parse(current.filter_json) : selection.legacyModeToFilter(current.selection_mode, content);
+      const oldCount = db.prepare("SELECT COUNT(*) AS n FROM event_questions WHERE event_id = ?").get(eventId).n;
+      const describe = (filterValue, count) => `${count} question${count === 1 ? "" : "s"}: ${selection.summarizeFilter(filterValue)}`;
+
+      db.prepare("DELETE FROM event_questions WHERE event_id = ?").run(eventId);
+      const insertQuestion = db.prepare(`
+        INSERT INTO event_questions (event_id, question_id, question_order, question_json)
+        VALUES (@event_id, @question_id, @question_order, @question_json)
+      `);
+
+      questions.forEach((question, index) => {
+        insertQuestion.run({
+          event_id: eventId,
+          question_id: question.id,
+          question_order: index,
+          question_json: JSON.stringify(question)
+        });
+      });
+
+      db.prepare(`
+        UPDATE events
+        SET selection_mode = ?, filter_json = ?, preset_id = ?, preset_options_json = ?, preset_customised = ?, preset_label = ?
+        WHERE id = ?
+      `).run(
+        selectionMode,
+        JSON.stringify(resolvedFilter),
+        preset ? preset.id : null,
+        preset ? JSON.stringify(preset.options) : null,
+        preset && preset.customised ? 1 : 0,
+        preset ? preset.label : null,
+        eventId
+      );
+
+      db.prepare(`
+        INSERT INTO event_setting_changes (event_id, changed_by, field, old_value, new_value, changed_at)
+        VALUES (?, ?, 'questions', ?, ?, ?)
+      `).run(eventId, userId, describe(oldFilter, oldCount), describe(resolvedFilter, questions.length), nowIso());
+
+      return questions.length;
+    })();
+  }
+
   function listSettingChanges(eventId) {
     return db.prepare(`
       SELECT c.id, c.field, c.old_value, c.new_value, c.changed_at, u.email AS changed_by_email
@@ -1040,6 +1104,7 @@ function createStore(db, content, { stale, log } = {}) {
     resetAttempt,
     releaseResults,
     updateEventSettings,
+    replaceEventQuestions,
     listSettingChanges,
     findUserByEmail,
     findUserById,

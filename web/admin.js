@@ -911,7 +911,9 @@
       return;
     }
 
-    const blocked = (advancedActive() || quickActive()) && (!state.preview || state.preview.count === 0 || state.previewError);
+    const changing = state.view === "questions";
+    const blocked = (changing && !advancedActive() && !quickActive()) ||
+      ((advancedActive() || quickActive()) && (!state.preview || state.preview.count === 0 || state.previewError));
     btn.disabled = Boolean(blocked);
   }
 
@@ -1645,7 +1647,8 @@
     navigation_mode: "Navigation",
     duration_minutes: "Time limit",
     start_at: "Opens",
-    end_at: "Deadline"
+    end_at: "Deadline",
+    questions: "Questions"
   };
 
   function formatTime(iso) {
@@ -1956,7 +1959,7 @@
   function renderEventList() {
     const events = visibleEvents();
     const cards = events.map(event => {
-      const active = state.view === "event" && state.selectedEventId === event.id;
+      const active = (state.view === "event" || state.view === "questions") && state.selectedEventId === event.id;
       const facts = [
         audienceText(event),
         `${event.question_count} question${event.question_count === 1 ? "" : "s"}`,
@@ -2486,6 +2489,8 @@
     // An admin reading another teacher's event sees everything but cannot
     // change it (ADR 0004); the server refuses those changes with 403 too.
     const canManage = Boolean(resultsEvent && resultsEvent.can_manage);
+    // Attempts that are not reset block a change of questions (ADR 0003 §10).
+    const liveAttempts = Boolean(state.results && state.results.attempts.some(attempt => !attempt.reset_at));
     const resultsBlock = state.results
       ? `
         <section class="card">
@@ -2506,6 +2511,9 @@
                     : `<span class="tag status status--neutral">Breakdown hidden from students</span>`}
               ${!canManage || resultsEvent.results_released_at || (resultsEvent.feedback_mode && resultsEvent.feedback_mode !== "release") ? "" : `<button id="releaseBtn" class="btn btn--accent btn--sm">Release results</button>`}
               ${!canManage || state.editingSettings ? "" : `<button id="editSettingsBtn" class="btn btn--secondary btn--sm">Edit settings</button>`}
+              ${!canManage ? "" : liveAttempts
+                ? `<button type="button" class="btn btn--secondary btn--sm" disabled title="Reset every attempt to change the questions">Change questions</button>`
+                : `<button type="button" id="editQuestionsBtn" class="btn btn--secondary btn--sm">Change questions</button>`}
             </div>
           </div>
           <p class="muted small results-facts">
@@ -2598,6 +2606,43 @@
           </section>
     `;
 
+    // The New event screen's question picker, on its own, for an event that
+    // has no live attempt. It starts from the event's current selection.
+    const changingEvent = state.view === "questions" && state.results ? state.results.event : null;
+    const questionsBlock = changingEvent ? `
+          <section class="card" aria-labelledby="changeQuestionsHeading">
+            <div class="section-heading">
+              <h2 id="changeQuestionsHeading">Change questions</h2>
+              <p>${escapeHtml(changingEvent.title)} <span class="tag tag--code">${escapeHtml(changingEvent.join_code)}</span></p>
+            </div>
+            <p class="notice">Now: ${escapeHtml(changingEvent.filter_summary || changingEvent.selection_mode)} (${changingEvent.question_count ?? (state.eventQuestions || []).length} questions). The new selection replaces all of them. Attempts that were reset stay in the results as history.</p>
+            <div class="form-grid">
+              ${state.presets ? renderQuickSetup() : `
+                <div class="field field--full">
+                  <label for="selectionMode">Question set</label>
+                  <select id="selectionMode">
+                    <option value="ALL">All levels</option>
+                    <option value="P5">P5 only</option>
+                    <option value="P6">P6 only</option>
+                    <option value="S1">S1 only</option>
+                    <option value="S2">S2 only</option>
+                  </select>
+                </div>
+              `}
+
+              <details id="advancedPicker">
+                <summary>${state.presets ? "Customise" : "Choose what to test"}</summary>
+                <div id="advancedPickerBody">${renderAdvancedPicker()}</div>
+              </details>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" id="cancelQuestionsBtn" class="btn btn--secondary">Cancel</button>
+              <button id="createEventBtn" class="btn btn--accent">Save questions</button>
+            </div>
+          </section>
+    ` : "";
+
     const emptyBlock = `
           <section class="card card--raised">
             <div class="section-heading">
@@ -2612,12 +2657,14 @@
 
     const mainBlock = state.view === "create"
       ? createBlock
+      : state.view === "questions" && questionsBlock
+        ? questionsBlock
       : state.view === "bank"
         ? renderBank()
         : state.view === "event" && state.results
         ? resultsBlock
         : emptyBlock;
-    const viewOpen = state.view === "create" || state.view === "bank" || (state.view === "event" && Boolean(state.results));
+    const viewOpen = state.view === "create" || (state.view === "questions" && Boolean(questionsBlock)) || state.view === "bank" || (state.view === "event" && Boolean(state.results));
 
     screen.innerHTML = `
       <div class="toolbar">
@@ -2664,7 +2711,7 @@
 
     const createBtn = document.getElementById("createEventBtn");
 
-    if (createBtn) createBtn.addEventListener("click", async () => {
+    if (createBtn && state.view === "create") createBtn.addEventListener("click", async () => {
       const title = document.getElementById("title").value.trim();
       const joinCode = document.getElementById("joinCode").value.trim();
       const durationMinutes = document.getElementById("durationMinutes").value;
@@ -2714,6 +2761,21 @@
       }
     });
 
+    if (createBtn && state.view === "questions") {
+      createBtn.addEventListener("click", saveQuestions);
+      document.getElementById("cancelQuestionsBtn").addEventListener("click", () => {
+        state.pickerEdited = false;
+        state.view = "event";
+        renderDashboard();
+      });
+    }
+
+    const editQuestionsBtn = document.getElementById("editQuestionsBtn");
+
+    if (editQuestionsBtn) {
+      editQuestionsBtn.addEventListener("click", openChangeQuestions);
+    }
+
     Array.from(screen.querySelectorAll("[data-new-event]")).forEach(button => {
       button.addEventListener("click", openCreate);
     });
@@ -2739,7 +2801,7 @@
       });
     }
 
-    if (state.view === "create") {
+    if (state.view === "create" || (state.view === "questions" && questionsBlock)) {
       bindQuickSetupEvents();
       renderQuickSummary();
       bindAdvancedPickerEvents();
@@ -2842,6 +2904,56 @@
     window.scrollTo({ top: 0 });
     const title = document.getElementById("title");
     if (title) title.focus({ preventScroll: true });
+  }
+
+  // Opens the picker on an event's questions. The picker starts on the
+  // event's current filter (and its preset card, if it came from one); Customise
+  // stays closed until asked for, and a choice is required before saving.
+  function openChangeQuestions() {
+    const event = state.results.event;
+
+    fillPickerFromFilter(event.filter || {});
+    state.pickerEdited = true;
+    state.quick = event.preset ? { id: event.preset.id, ...event.preset.options } : null;
+    state.preview = null;
+    state.view = "questions";
+    renderDashboard();
+    schedulePreview();
+    window.scrollTo({ top: 0 });
+  }
+
+  async function saveQuestions() {
+    const eventId = state.selectedEventId;
+    const selection = advancedActive()
+      ? { filter: pickerFilter(), ...(state.presets && state.quick ? { basedOnPreset: state.quick } : {}) }
+      : quickActive()
+        ? { preset: state.quick }
+        : document.getElementById("selectionMode")
+          ? { selectionMode: document.getElementById("selectionMode").value }
+          : null;
+
+    if (!selection) {
+      alert("Choose the questions first.");
+      return;
+    }
+
+    try {
+      const changed = await api(`/api/events/${eventId}/questions`, {
+        method: "PUT",
+        body: JSON.stringify(selection)
+      });
+
+      if (changed.warning) {
+        alert(changed.warning);
+      }
+
+      state.pickerEdited = false;
+      state.view = "event";
+      await loadDashboard();
+      await loadResults(eventId);
+    } catch (error) {
+      alert(error.message);
+    }
   }
 
   async function loadResults(eventId) {
