@@ -66,6 +66,10 @@ For an admin only, the event list is titled "Events" and has a compact filter ab
 
 The admin role adds no path to the AI provider. The only teacher route that touches AI-scored answers is marking by hand, which is a change and therefore owner-only. Reading results never calls the provider.
 
+### 9. The question bank is shared content, so its edits are admin-only (added 2026-09-29)
+
+The question bank is not owned by any teacher, so the owner rules above do not apply to it. `access.js` gains `canEditBank(user)`, true for an admin. Admins alone change a question's metadata or retire and restore it (ADR 0008), because each such edit changes every teacher's future events. Any signed-in teacher may read the bank, flag a question and add a comment. The audit table `question_override_changes` records who changed what.
+
 ## Consequences
 
 - Teachers see no difference, except that a token for a deleted account now gets 401 everywhere.
