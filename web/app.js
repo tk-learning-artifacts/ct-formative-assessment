@@ -3,6 +3,7 @@
   const ATTEMPT_KEY = "ct-quest-attempt";
   const Types = window.CTQuestTypes;
   const Visuals = window.CTQuestVisuals;
+  const QuestView = window.CTQuestView;
   const h = { escapeHtml };
 
   // Waits before each retry of a failed submission, in seconds.
@@ -1047,15 +1048,11 @@
 
   function renderQuestion() {
     const q = ACTIVE_BANK[state.i];
-    const renderer = Types.get(q.type);
     const currentNumber = state.i + 1;
     const isLast = state.i === state.questionCount - 1;
     const answered = answeredCount();
     const skipped = skippedCount();
     const locked = Boolean(state.committed[q.id]);
-
-    const meta = [q.level, q.topic, q.qType].filter(Boolean)
-      .map(label => `<span class="concept-tag">${escapeHtml(label)}</span>`).join("");
 
     // One dot per question in the test: filled once answered, dashed when
     // skipped, square once locked, ringed for this one. In order, the ones
@@ -1096,15 +1093,6 @@
         : `<li>${dot}</li>`;
     }).join("");
 
-    const art = q.art ? `<pre>${escapeHtml(q.art)}</pre>` : "";
-    // A visual (ADR 0007): a figure after the prompt, or a small scene
-    // floated beside it; whatever follows the prompt starts below the scene.
-    const figure = q.visual ? Visuals.figure(q.visual, { id: `qv-${q.id}` }) : "";
-    const aside = Boolean(figure) && Visuals.placement(q.visual) === "aside";
-    const code = !q.code ? "" : renderer.renderCode
-      ? renderer.renderCode(q.code, h, q)
-      : `<p class="code-label">${escapeHtml(q.code.language)}</p><pre><code>${escapeHtml(q.code.source)}</code></pre>`;
-
     screen.innerHTML = `
       <div class="q-strip">
         <span class="q-strip__count">Question ${currentNumber} of ${state.questionCount}</span>
@@ -1117,25 +1105,10 @@
       </div>
 
       <div class="q-layout">
-        <section class="card" aria-labelledby="questionTitle">
-          <div class="q-head">
-            <h2 id="questionTitle">${escapeHtml(q.title)}</h2>
-            <span class="q-points">${q.points} point${q.points === 1 ? "" : "s"}</span>
-          </div>
-          <div class="concept-tags q-meta">${meta}</div>
-
-          ${aside ? figure : ""}
-          <p class="prompt-text">${escapeHtml(q.prompt)}</p>
-          ${aside ? `<div class="qv-clear"></div>` : figure}
-          ${art}
-          ${code}
-          ${renderer.renderContext ? renderer.renderContext(q, h) : ""}
-        </section>
+        ${QuestView.questionCard(q, h)}
 
         <section class="card" aria-label="Your answer">
-          <div id="answerArea">${locked
-            ? `<fieldset class="answer-locked" disabled data-locked>${renderer.renderInput(q, state.answers[q.id], h)}</fieldset>`
-            : renderer.renderInput(q, state.answers[q.id], h)}</div>
+          ${QuestView.answerCard(q, state.answers[q.id], { locked, h })}
 
           ${committedPanel(q)}
           ${state.notice ? `<p class="notice notice--warning q-change" role="status">${escapeHtml(state.notice)}</p>` : ""}
