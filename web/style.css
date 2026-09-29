@@ -2073,15 +2073,6 @@ textarea.open-response {
   color: var(--color-ink);
 }
 
-.qp-row__answer {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-}
-
 .qp-row__body {
   padding: 4px 10px 12px;
   border-top: 1px solid var(--color-line);

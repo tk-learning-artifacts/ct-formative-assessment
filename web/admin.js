@@ -289,20 +289,6 @@
     return note.join("");
   }
 
-  function qpCountBlocks(block) {
-    if (!block || typeof block !== "object") {
-      return 0;
-    }
-    const inputs = block.inputs || {};
-    return 1 + qpCountBlocks(block.next) + Object.keys(inputs).reduce((sum, name) => sum + qpCountBlocks(inputs[name]), 0);
-  }
-
-  // The blocks under "when Run clicked" (the hat block itself not counted).
-  function qpScriptSize(workspace) {
-    const main = (workspace && workspace.scripts || []).find(script => script && script.type === "when_run");
-    return main ? qpCountBlocks(main) - 1 : 0;
-  }
-
   // A code-reading follow-up key: one option index, or one or more lines.
   function qpFollowUpKeys(question) {
     return [].concat(question.answer.followUp);
@@ -315,53 +301,6 @@
   function truncate(text, max) {
     const flat = String(text).replace(/\s+/g, " ").trim();
     return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
-  }
-
-  // The correct answer, in short form, for a collapsed row. Only a genuine
-  // correctness statement gets the positive tone (ADR 0002: a status tone is
-  // paired with a word, and reserved for what it actually means); the AI
-  // rubric line is neutral, since it names a criterion count, not a result.
-  function qpCompactAnswer(question) {
-    if (question.type === "mcq") {
-      const letter = String.fromCharCode(65 + question.answer.index);
-      return `<span class="tone-positive">✓ ${letter}: ${escapeHtml(truncate(question.options[question.answer.index], 40))}</span>`;
-    }
-
-    if (question.type === "code-trace") {
-      return `<span class="tone-positive">✓ output: ${escapeHtml(truncate(question.answer.output, 40))}</span>`;
-    }
-
-    if (question.type === "parsons") {
-      const n = question.answer.order.length;
-      return `<span class="tone-positive">✓ order: ${n} line${n === 1 ? "" : "s"}</span>`;
-    }
-
-    if (question.type === "code-reading") {
-      const letter = String.fromCharCode(65 + question.answer.index);
-      let text = `✓ ${letter}: ${truncate(question.options[question.answer.index], 32)}`;
-
-      if (question.followUp && question.followUp.kind === "choice") {
-        text += ` · then ${String.fromCharCode(65 + question.answer.followUp)}`;
-      } else if (question.followUp) {
-        const lines = qpFollowUpKeys(question);
-        text += ` · then line${lines.length === 1 ? "" : "s"} ${lines.join(" or ")}`;
-      }
-
-      return `<span class="tone-positive">${escapeHtml(text)}</span>`;
-    }
-
-    if (question.type === "blocks") {
-      const size = qpScriptSize(question.solution);
-      const grids = 1 + (question.cases || []).length;
-      return `<span class="tone-positive">✓ solution: ${size} block${size === 1 ? "" : "s"}, ${grids} grid${grids === 1 ? "" : "s"}</span>`;
-    }
-
-    if (question.type === "open-response-ai") {
-      const n = question.rubric.length;
-      return `<span class="tone-neutral">AI rubric: ${n} level${n === 1 ? "" : "s"}</span>`;
-    }
-
-    return "";
   }
 
   // marking flags in words, for code-trace and parsons.
@@ -646,7 +585,6 @@
             <span class="tag">${escapeHtml(QP_TYPE_LABELS[question.type] || question.type)}</span>
             <span class="concept-tag">${escapeHtml(question.level)}</span>
             <span class="muted small">${question.points} pt${question.points === 1 ? "" : "s"}</span>
-            <span class="qp-row__answer">${qpCompactAnswer(question)}</span>
           </summary>
           <div class="qp-row__body">${qpQuestionBody(question)}</div>
         </details>
