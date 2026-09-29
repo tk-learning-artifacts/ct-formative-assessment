@@ -51,26 +51,39 @@ There is no server-side bypass and no `?role=` parameter. Slate ADR 0020 rules
 those out because they put an authentication hole beside the real one. The
 teacher path is the same request the login form sends.
 
-Credentials come from the file `pnpm run dev` already loads: the plugin reads
-`SEED_TEACHER_EMAIL` and `SEED_TEACHER_PASSWORD` from `.env.development` (blank
-means `teacher@ctquest.local` / `changeme123`). Optional overrides, also read
-from that file or the environment: `DEV_JOIN_CODE` (default `DEMO123`),
-`DEV_STUDENT_NAME` (`Dev Student`), `DEV_STUDENT_GROUP` (`Dev Class`), and
-`DEV_API_TARGET` (the backend the dev server proxies to, default
-`http://localhost:3000`).
+Credentials come from `.env.development`, the file `pnpm run dev` loads: the
+plugin reads `SEED_TEACHER_EMAIL` and `SEED_TEACHER_PASSWORD` from it (blank
+means `teacher@ctquest.local` / `changeme123`). It reads only that file, never
+the repo-root `.env`, which is the production file. A variable exported in the
+shell wins over the file, as it does for the backend. Optional overrides, set the
+same way: `DEV_JOIN_CODE` (default `DEMO123`), `DEV_STUDENT_NAME` (`Dev
+Student`), `DEV_STUDENT_GROUP` (`Dev Class`). `DEV_API_TARGET` (the backend the
+dev server proxies to, default `http://localhost:3000`) is read from the
+environment only.
 
-Three things that go wrong quietly:
+The script contains the dev password, so the dev server hands it out only to a
+loopback connection with a `localhost` or `*.localhost` Host header. Vite's own
+host check runs after plugin middleware, so the plugin does this check itself.
+
+Things that go wrong quietly:
 
 - The seed only applies to an empty database. If your dev database was created
   with another password, the teacher tab shows the normal login form and the
   console says `[dev-login] teacher login failed (401)`. Sign in once by hand, or
   set `SEED_TEACHER_*` to that account.
-- `loadEnv` also reads variables exported in your shell. A stray
-  `SEED_TEACHER_*` in the shell overrides the file, exactly as it does for the
-  backend, so both sides agree, but the values may not be what you expect. The
-  same stray variables break the backend tests (`SEED_TEACHER_*` breaks the
+- Vite reads `.env.development` once, at start, and does not watch it (nodemon
+  restarts the backend on a change, so the two can disagree until you restart
+  Vite). A variable exported in the shell overrides the file for both sides, and
+  the same stray variables break the backend tests (`SEED_TEACHER_*` breaks the
   seeded logins, `AI_*` switches the AI on), so run `pnpm test` with them unset.
 - The demo event `DEMO123` is created only when the database has no events.
+- The student name is fixed, and a student can only start an event once. A
+  second browser profile, a private window or cleared storage gets "You already
+  started this test". Set `DEV_STUDENT_NAME` to something else, or reset the
+  attempt from the teacher page. Clearing the name field and pressing Start
+  refills it from the script.
+- A teacher token from a hand sign-in is kept as it is (the check is only that
+  the token works), so the tab is the admin only if the token belonged to one.
 
 ## It cannot reach production
 

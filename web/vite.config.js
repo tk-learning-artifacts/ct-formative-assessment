@@ -1,4 +1,6 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
+import { readFileSync } from 'fs'
+import { parseEnv } from 'util'
 import { resolve } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -37,7 +39,7 @@ function devLoginScript({ email, password, joinCode, name, group }) {
   var path = location.pathname;
 
   if (role === 'teacher') {
-    if (path === '/' || path === '/index.html') { location.replace('/admin.html'); return; }
+    if (path === '/' || path === '/index.html') { location.replace('/admin.html' + location.search + location.hash); return; }
     if (path !== '/admin.html') return;
     var KEY = 'ct-quest-token';
     var call = function (method, url, body, token) {
@@ -76,20 +78,42 @@ const devRoleLogin = {
   name: 'dev-role-login',
   apply: 'serve',
   configureServer(server) {
-    // The backend's dev seed, from the same file `pnpm run dev` loads. Blank
-    // means the backend's own defaults.
-    const env = loadEnv(server.config.mode, resolve(__dirname, '..'), '')
+    // The backend's dev seed, from the one file `pnpm run dev` loads. Not
+    // loadEnv: it would also read the repo-root .env, the production file. A
+    // variable exported in the shell wins, as it does for the backend. Blank
+    // means the backend's own defaults. Read once, so a change to the file
+    // needs a Vite restart.
+    let fromFile = {}
+    try {
+      fromFile = parseEnv(readFileSync(resolve(__dirname, '../.env.development'), 'utf8'))
+    } catch (_error) {
+      // no file: defaults
+    }
+    const setting = key => process.env[key] || fromFile[key]
     const script = devLoginScript({
-      email: env.SEED_TEACHER_EMAIL || 'teacher@ctquest.local',
-      password: env.SEED_TEACHER_PASSWORD || 'changeme123',
-      joinCode: env.DEV_JOIN_CODE || 'DEMO123',
-      name: env.DEV_STUDENT_NAME || 'Dev Student',
-      group: env.DEV_STUDENT_GROUP || 'Dev Class'
+      email: setting('SEED_TEACHER_EMAIL') || 'teacher@ctquest.local',
+      password: setting('SEED_TEACHER_PASSWORD') || 'changeme123',
+      joinCode: setting('DEV_JOIN_CODE') || 'DEMO123',
+      name: setting('DEV_STUDENT_NAME') || 'Dev Student',
+      group: setting('DEV_STUDENT_GROUP') || 'Dev Class'
     })
 
+    // Registered before Vite's own middleware (after it, the SPA fallback
+    // answers this path with index.html), which also means it runs before
+    // Vite's host check. So it does its own: the script carries the dev
+    // password, and a page on another origin that rebinds its DNS to loopback,
+    // or a machine on the LAN under `vite --host`, must not be able to read it.
+    // Only a loopback socket with a localhost or *.localhost Host gets it.
     server.middlewares.use((req, res, next) => {
       if (req.url !== DEV_LOGIN_PATH) {
         next()
+        return
+      }
+      const local = /^(::1|::ffff:127\.0\.0\.1|127\.0\.0\.1)$/.test(req.socket.remoteAddress || '')
+      const host = String(req.headers.host || '').replace(/:\d+$/, '')
+      if (!local || !/(^|\.)localhost$/.test(host)) {
+        res.statusCode = 403
+        res.end()
         return
       }
       res.setHeader('Content-Type', 'text/javascript')
