@@ -1920,6 +1920,7 @@
       const active = state.view === "event" && state.selectedEventId === event.id;
       const facts = [
         audienceText(event),
+        `${event.question_count} question${event.question_count === 1 ? "" : "s"}`,
         `${event.attempt_count} attempt${event.attempt_count === 1 ? "" : "s"}`,
         event.duration_minutes ? `${event.duration_minutes} min` : "No time limit"
       ];
