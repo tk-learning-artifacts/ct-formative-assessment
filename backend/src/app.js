@@ -350,6 +350,11 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
 
   app.use(express.json({ limit: "1mb" }));
 
+  // /admin is the teacher portal's short address.
+  app.get(["/admin", "/admin/"], (_req, res) => {
+    res.redirect("/admin.html");
+  });
+
   app.use((req, res, next) => {
     if (req.method !== "GET" && req.method !== "HEAD") {
       next();
