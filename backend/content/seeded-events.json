@@ -1,0 +1,37 @@
+{
+  "description": "Events every server has from its first boot. Each is created once, if no event with its join code exists yet (src/db.js, ensureSeededEvents), by the first admin account, and is then an ordinary event: its settings can be edited and its questions changed while no attempt is live. The questions are listed in the order students see them. An event is never recreated once it exists, so removing one (scripts/delete-event.js) and restarting brings it back only if its join code is free.",
+  "events": [
+    {
+      "id": "rgsynapse-challenge",
+      "title": "RGSynapse challenge",
+      "joinCode": "RGSYN2",
+      "note": "20 harder RGSynapse questions for Sec 1 and Sec 2, difficulty 3 and 4. Half are multiple choice; the other half are code tracing, ordering lines, reading code and one block program. Nothing is AI scored, so every answer is marked as soon as it is submitted.",
+      "audience": "rgsynapse",
+      "questionIds": [
+        "RGS-S1-01",
+        "TS-CT-17",
+        "RGS-S1-02",
+        "TS-PA-07",
+        "RGS-S1-06",
+        "TS-PA-02",
+        "RGS-S2-03",
+        "CR-RGS-S2-01",
+        "RGS-S2-04",
+        "TS-PA-09",
+        "RGS-S2-12",
+        "TS-CT-18",
+        "RGS-S2-01",
+        "CR-RGS-S2-02",
+        "RGS-S2-02",
+        "TS-CT-19",
+        "RGS-S2-05",
+        "TS-PA-03",
+        "RGS-S2-10",
+        "BLK-RGS-S2-01"
+      ],
+      "durationMinutes": null,
+      "feedbackMode": "release",
+      "navigationMode": "free"
+    }
+  ]
+}

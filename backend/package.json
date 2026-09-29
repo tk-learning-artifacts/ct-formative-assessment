@@ -8,7 +8,8 @@
     "dev": "nodemon --watch src --watch content --watch ../.env.development --ext js,json --exec \"node --env-file=../.env.development src/server.js\"",
     "test": "node --test --test-timeout=30000 --test-force-exit test/*.test.js",
     "set-password": "node scripts/set-password.js",
-    "set-role": "node scripts/set-role.js"
+    "set-role": "node scripts/set-role.js",
+    "delete-event": "node scripts/delete-event.js"
   },
   "dependencies": {
     "better-sqlite3": "~12.9.0",

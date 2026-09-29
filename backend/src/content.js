@@ -320,6 +320,77 @@ function questionContext(content, { imageDir } = {}) {
 
 // imageDir is where illustration files are checked (web/visuals/img/ unless
 // a test points it elsewhere).
+// seeded-events.json: events created on every server's first boot (db.js).
+// The join code uses the alphabet generateJoinCode uses, so it cannot be
+// confused with a random one; the questions must exist, be listed once, and
+// belong to the event's audience.
+const JOIN_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4,12}$/;
+const FEEDBACK_VALUES = ["each", "end", "release"];
+const NAVIGATION_VALUES = ["free", "linear"];
+
+function validateSeededEvents(events, questionsById, audiences, errors) {
+  const seenCodes = new Set();
+  const seenIds = new Set();
+
+  events.forEach((event, index) => {
+    const label = `seeded-events.json: event ${index + 1} (${event && event.id ? event.id : "no id"})`;
+
+    if (!event || typeof event !== "object") {
+      errors.push(`${label} must be an object`);
+      return;
+    }
+
+    if (!event.id || seenIds.has(event.id)) {
+      errors.push(`${label} needs a unique id`);
+    }
+    seenIds.add(event.id);
+
+    if (typeof event.title !== "string" || !event.title.trim()) {
+      errors.push(`${label} needs a title`);
+    }
+
+    if (!JOIN_CODE_PATTERN.test(event.joinCode || "") || seenCodes.has(event.joinCode)) {
+      errors.push(`${label} needs a unique join code of 4 to 12 letters and digits (no I, O, 0 or 1)`);
+    }
+    seenCodes.add(event.joinCode);
+
+    if (!audiences.has(event.audience)) {
+      errors.push(`${label} names an unknown audience "${event.audience}"`);
+    }
+
+    if (!Array.isArray(event.questionIds) || !event.questionIds.length) {
+      errors.push(`${label} needs a non-empty list of question ids`);
+    } else {
+      const listed = new Set();
+      event.questionIds.forEach(id => {
+        const question = questionsById.get(id);
+
+        if (!question) {
+          errors.push(`${label} lists unknown question "${id}"`);
+        } else if (question.audience !== event.audience) {
+          errors.push(`${label} lists "${id}", which is a ${question.audience} question, not ${event.audience}`);
+        }
+        if (listed.has(id)) {
+          errors.push(`${label} lists "${id}" twice`);
+        }
+        listed.add(id);
+      });
+    }
+
+    if (event.durationMinutes !== null && event.durationMinutes !== undefined && !(Number.isInteger(event.durationMinutes) && event.durationMinutes > 0)) {
+      errors.push(`${label} durationMinutes must be null or a positive whole number`);
+    }
+
+    if (event.feedbackMode !== undefined && !FEEDBACK_VALUES.includes(event.feedbackMode)) {
+      errors.push(`${label} feedbackMode must be one of ${FEEDBACK_VALUES.join(", ")}`);
+    }
+
+    if (event.navigationMode !== undefined && !NAVIGATION_VALUES.includes(event.navigationMode)) {
+      errors.push(`${label} navigationMode must be one of ${NAVIGATION_VALUES.join(", ")}`);
+    }
+  });
+}
+
 function loadContent(contentDir = DEFAULT_CONTENT_DIR, { imageDir } = {}) {
   const catalog = readJson(path.join(contentDir, "audiences.json"));
   const ontology = readJson(path.join(contentDir, "ontology.json"));
@@ -384,6 +455,12 @@ function loadContent(contentDir = DEFAULT_CONTENT_DIR, { imageDir } = {}) {
 
   // Quick setup presets, checked against everything above. Each preset's
   // filter is validated like an event filter and stored normalised.
+  const seededFile = fs.existsSync(path.join(contentDir, "seeded-events.json"))
+    ? readJson(path.join(contentDir, "seeded-events.json"))
+    : { events: [] };
+  const seededEvents = Array.isArray(seededFile.events) ? seededFile.events : [];
+  validateSeededEvents(seededEvents, new Map(questions.map(question => [question.id, question])), ctx.audiences, errors);
+
   const presetFile = readJson(path.join(contentDir, "presets.json"));
   const presetContent = { levels: catalog.levels, audiences: catalog.audiences, nodes, outcomes, questions };
   validatePresets(presetFile, presetContent, {
@@ -406,6 +483,7 @@ function loadContent(contentDir = DEFAULT_CONTENT_DIR, { imageDir } = {}) {
     outcomes,
     questions,
     legacyModes,
+    seededEvents,
     presets: Array.isArray(presetFile.presets) ? presetFile.presets : [],
     presetShortLength: presetFile.shortLength
   };

@@ -178,6 +178,9 @@ function openDatabase({
   contentDir = DEFAULT_CONTENT_DIR,
   seedTeacher = { email: DEFAULT_TEACHER_EMAIL, password: DEFAULT_TEACHER_PASSWORD },
   isProduction = false,
+  // Create the events in content/seeded-events.json. The migration tests turn
+  // this off: they open old databases to check the upgrade, not the seed.
+  seedEvents = true,
   log = () => {}
 } = {}) {
   const resolvedPath = dbPath === ":memory:" ? dbPath : path.resolve(dbPath);
@@ -206,7 +209,7 @@ function openDatabase({
 
     store = createStore(db, content, { stale, log });
     store.migration = migration;
-    store.seed(seedTeacher);
+    store.seed(seedTeacher, { events: seedEvents });
 
     if (isProduction) {
       store.assertNoDefaultPasswords();
@@ -247,10 +250,18 @@ function createStore(db, content, { stale, log } = {}) {
     feedbackMode = policy.DEFAULT_FEEDBACK_MODE,
     navigationMode = policy.DEFAULT_NAVIGATION_MODE,
     preset = null,
+    questionOrder = null,
     createdBy
   }) {
     const resolvedFilter = filter || selection.legacyModeToFilter(selectionMode, content);
-    const questions = previewQuestions(resolvedFilter);
+    let questions = previewQuestions(resolvedFilter);
+
+    // Selection lists questions in bank order. A seeded event may set its own
+    // order, which is the order students see.
+    if (questionOrder) {
+      const rank = new Map(questionOrder.map((id, index) => [id, index]));
+      questions = questions.slice().sort((a, b) => (rank.has(a.id) ? rank.get(a.id) : Infinity) - (rank.has(b.id) ? rank.get(b.id) : Infinity));
+    }
 
     if (!questions.length) {
       throw httpError(400, "No questions match that selection.");
@@ -1047,7 +1058,53 @@ function createStore(db, content, { stale, log } = {}) {
     }));
   }
 
-  function seed(seedTeacher) {
+  // Creates each event in content/seeded-events.json that does not exist yet,
+  // by join code, owned by the first admin (or the first account). Runs on
+  // every start, so a server that is deployed later gets an event added to
+  // the content. An event that exists is never touched, so a teacher's edits
+  // survive, and nothing is created before there is an account to own it.
+  // Questions retired in the bank are left out rather than stopping start-up.
+  function ensureSeededEvents() {
+    const owner = db.prepare("SELECT id FROM users ORDER BY (role = 'admin') DESC, id ASC LIMIT 1").get();
+
+    if (!owner) {
+      return [];
+    }
+
+    return (content.seededEvents || [])
+      .filter(seeded => !db.prepare("SELECT 1 FROM events WHERE join_code = ?").get(seeded.joinCode))
+      .map(seeded => {
+        const eventId = createEventWithQuestions({
+          title: seeded.title,
+          joinCode: seeded.joinCode,
+          filter: { audiences: [seeded.audience], questionIds: seeded.questionIds.slice() },
+          questionOrder: seeded.questionIds,
+          durationMinutes: seeded.durationMinutes || null,
+          feedbackMode: seeded.feedbackMode || policy.DEFAULT_FEEDBACK_MODE,
+          navigationMode: seeded.navigationMode || policy.DEFAULT_NAVIGATION_MODE,
+          createdBy: owner.id
+        });
+        if (log) {
+          log(`Seeded event ${seeded.joinCode}: ${seeded.title}`);
+        }
+        return eventId;
+      });
+  }
+
+  // Deletes an event with its questions, attempts, answers and settings
+  // history. There is no route for this: it is for scripts/delete-event.js,
+  // because a teacher's results are not something to lose by a click.
+  function deleteEvent(eventId) {
+    return db.transaction(() => {
+      const attempts = db.prepare("SELECT COUNT(*) AS n FROM attempts WHERE event_id = ?").get(eventId).n;
+      db.prepare("DELETE FROM event_setting_changes WHERE event_id = ?").run(eventId);
+      // Answers, attempts and the question snapshot cascade from the event.
+      const removed = db.prepare("DELETE FROM events WHERE id = ?").run(eventId).changes;
+      return { removed, attempts };
+    })();
+  }
+
+  function seed(seedTeacher, { events = true } = {}) {
     const userCount = db.prepare("SELECT COUNT(*) AS count FROM users").get().count;
 
     if (userCount === 0 && seedTeacher) {
@@ -1077,6 +1134,11 @@ function createStore(db, content, { stale, log } = {}) {
         });
       }
     }
+
+    // After the demo event, whose "no events yet" check it would otherwise fill.
+    if (events) {
+      ensureSeededEvents();
+    }
   }
 
   return {
@@ -1086,6 +1148,8 @@ function createStore(db, content, { stale, log } = {}) {
     createUniqueJoinCode,
     previewQuestions,
     createEventWithQuestions,
+    ensureSeededEvents,
+    deleteEvent,
     getEventById,
     listEvents,
     getEventQuestions,

@@ -337,6 +337,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     dbPath: config.dbPath,
     seedTeacher: config.seedTeacher,
     isProduction: config.isProduction,
+    seedEvents: config.seedEvents,
     log
   });
   const ai = createAiProvider(config.ai);

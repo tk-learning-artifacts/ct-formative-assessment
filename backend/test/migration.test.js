@@ -14,6 +14,10 @@ const assert = require("node:assert/strict");
 const request = require("supertest");
 const Database = require("better-sqlite3");
 const { buildApp, makeTempDir, login, startAttempt, submit } = require("./helpers");
+
+// These tests open old databases to check the upgrade and count their events,
+// so the events every server seeds (content/seeded-events.json) are left out.
+const NO_SEEDED_EVENTS = { SEED_EVENTS: "false" };
 const { migrate, MIGRATIONS } = require("../src/migrations");
 
 const FIXTURE = path.join(__dirname, "fixtures/v1-app.sql");
@@ -40,7 +44,7 @@ function schemaSummary(db) {
 test("migrating a v1 database", async t => {
   const dir = makeTempDir();
   const dbPath = writeV1Database(dir);
-  let ctx = await buildApp({ dbPath });
+  let ctx = await buildApp({ dbPath, env: NO_SEEDED_EVENTS });
   t.after(() => {
     ctx.close();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -165,7 +169,7 @@ test("migrating a v1 database", async t => {
   await t.test("reopening is a no-op", async () => {
     ctx.close();
     const backupsBefore = fs.readdirSync(dir).filter(name => name.includes(".pre-")).length;
-    ctx = await buildApp({ dbPath });
+    ctx = await buildApp({ dbPath, env: NO_SEEDED_EVENTS });
     assert.deepEqual(ctx.store.migration.applied, []);
     assert.equal(ctx.store.migration.backupPath, null);
     assert.equal(fs.readdirSync(dir).filter(name => name.includes(".pre-")).length, backupsBefore);
@@ -175,11 +179,11 @@ test("migrating a v1 database", async t => {
 
 test("a database with migrations this code does not know is refused", async () => {
   const dir = makeTempDir();
-  const first = await buildApp({ dbPath: path.join(dir, "app.db") });
+  const first = await buildApp({ dbPath: path.join(dir, "app.db"), env: NO_SEEDED_EVENTS });
   first.store.db.prepare("INSERT INTO schema_migrations (id, applied_at) VALUES ('209912312359-from-the-future', 'x')").run();
   first.close();
 
-  await assert.rejects(() => buildApp({ dbPath: path.join(dir, "app.db") }), /does not know/);
+  await assert.rejects(() => buildApp({ dbPath: path.join(dir, "app.db"), env: NO_SEEDED_EVENTS }), /does not know/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -191,7 +195,7 @@ test("an intermediate pre-review database (user_version 1 or 2) is refused with 
     db.pragma(`user_version = ${version}`);
     db.close();
 
-    await assert.rejects(() => buildApp({ dbPath }), new RegExp(`user_version ${version}`));
+    await assert.rejects(() => buildApp({ dbPath, env: NO_SEEDED_EVENTS }), new RegExp(`user_version ${version}`));
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -210,7 +214,7 @@ test("a first-review-round database (user_version 3) is bridged onto schema_migr
   const answerCount = raw.prepare("SELECT COUNT(*) AS c FROM answers").get().c;
   raw.close();
 
-  const ctx = await buildApp({ dbPath });
+  const ctx = await buildApp({ dbPath, env: NO_SEEDED_EVENTS });
   t.after(() => {
     ctx.close();
     fs.rmSync(dir, { recursive: true, force: true });

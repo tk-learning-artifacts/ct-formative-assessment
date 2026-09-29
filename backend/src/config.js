@@ -48,6 +48,9 @@ function loadConfig(env = process.env) {
     dbPath: env.DB_PATH ? path.resolve(env.DB_PATH) : DEFAULT_DB_PATH,
     jwtSecret: env.JWT_SECRET || DEV_JWT_SECRET,
     submitGraceMs: graceSeconds * 1000,
+    // The events in content/seeded-events.json are created on start. Set
+    // SEED_EVENTS=false to leave them out.
+    seedEvents: !["0", "false", "no", "off"].includes(String(env.SEED_EVENTS || "").trim().toLowerCase()),
     seedTeacher: {
       email: String(env.SEED_TEACHER_EMAIL || DEFAULT_TEACHER_EMAIL).trim().toLowerCase(),
       // Null in production when unset: seeding an empty database then fails,

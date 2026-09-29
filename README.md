@@ -39,6 +39,7 @@ ct-formative-assessment/
 │   ├── scripts/
 │   │   ├── set-password.js   Set or create a teacher's password
 │   │   ├── set-role.js       Make an account an admin or a teacher
+│   │   ├── delete-event.js   Delete an event, its attempts and its answers
 │   │   └── ai-smoke.js       One live AI scoring request, run by hand
 │   ├── test/                 node:test + supertest suite, answer-key solvers, v1 fixture
 │   └── data/
@@ -163,6 +164,19 @@ echo '…' | pnpm run set-password teacher@school.edu.sg
 Leave out the `--` npm needed: pnpm passes it to the script, which then rejects it.
 
 The account is created if it does not exist. The password is never accepted as a command-line argument. It must be at least 10 characters and not the demo password.
+
+### Seeded events and removing an event
+
+`backend/content/seeded-events.json` lists events every server has: today the **RGSynapse challenge**, join code `RGSYN2`, 20 questions in a fixed order (10 multiple choice; 10 code tracing, ordering lines, code reading and one block program; difficulty 3 and 4; nothing AI scored). On every start the server creates any listed event whose join code does not exist yet, owned by the first admin, so deploying a build that adds an event to the file adds it to the running server on its next start. An event that exists is never touched again, so teachers' edits to it are kept. `SEED_EVENTS=false` turns this off. Its questions come from the bank by id, so they can be swapped by editing the file before the event is first created, or by "Change questions" on the teacher page afterwards, while no attempt is live.
+
+There is no button to delete an event, because its results go with it. To remove one, copy the database file, then:
+
+```bash
+pnpm run delete-event RGSYN2          # shows what would be deleted
+pnpm run delete-event RGSYN2 --yes    # deletes it, its attempts and its answers
+```
+
+In Docker: `docker compose run --rm app node backend/scripts/delete-event.js RGSYN2 --yes`. A seeded event comes back on the next start if its join code is free, so also remove it from `seeded-events.json` if it should stay gone.
 
 ### Making an account an admin
 
@@ -348,6 +362,7 @@ Upgrading the image migrates the database in the volume on first start and leave
 | `JWT_SECRET` | Yes | — | Secret used to sign JWTs. Use a long random string. The server refuses to start without it when `NODE_ENV=production`. |
 | `SEED_TEACHER_EMAIL` | No | `teacher@ctquest.local` | First teacher account, created only in an empty database. |
 | `SEED_TEACHER_PASSWORD` | On first production boot | `changeme123` in development | Password for that account. Production refuses the demo password, and refuses to seed an empty database without it. |
+| `SEED_EVENTS` | No | `true` | Create the events in `backend/content/seeded-events.json` on start (see below). `false` leaves them out. |
 | `PORT` | No | `3000` | Port the server listens on. |
 | `HOST` | No | all interfaces | Address to bind, e.g. `127.0.0.1` for a local-only run. |
 | `DB_PATH` | No | `backend/data/app.db` | SQLite file location. |

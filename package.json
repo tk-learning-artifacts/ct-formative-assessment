@@ -8,7 +8,8 @@
     "start": "pnpm --filter ct-ability-backend run start",
     "test": "pnpm --filter ct-ability-backend run test",
     "set-password": "pnpm --filter ct-ability-backend run set-password",
-    "set-role": "pnpm --filter ct-ability-backend run set-role"
+    "set-role": "pnpm --filter ct-ability-backend run set-role",
+    "delete-event": "pnpm --filter ct-ability-backend run delete-event"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"
