@@ -14,9 +14,6 @@
     const Visuals = window.CTQuestVisuals;
     const { escapeHtml } = h;
 
-    const meta = [q.level, q.topic, q.qType].filter(Boolean)
-      .map(label => `<span class="concept-tag">${escapeHtml(label)}</span>`).join("");
-
     const art = q.art ? `<pre>${escapeHtml(q.art)}</pre>` : "";
     // A visual (ADR 0007): a figure after the prompt, or a small scene
     // floated beside it; whatever follows the prompt starts below the scene.
@@ -32,7 +29,6 @@
             <h2 id="questionTitle">${escapeHtml(q.title)}</h2>
             <span class="q-points">${q.points} point${q.points === 1 ? "" : "s"}</span>
           </div>
-          <div class="concept-tags q-meta">${meta}</div>
 
           ${aside ? figure : ""}
           <p class="prompt-text">${escapeHtml(q.prompt)}</p>

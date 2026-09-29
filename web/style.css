@@ -759,10 +759,6 @@ legend {
   gap: 12px;
 }
 
-.q-meta {
-  margin-top: 6px;
-}
-
 .q-points {
   flex: none;
   font-size: 0.8125rem;
