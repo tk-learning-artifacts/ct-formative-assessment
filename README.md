@@ -50,7 +50,7 @@ ct-formative-assessment/
 │   ├── lib/                  Files shared with the server: blocks-engine.js (the block language, run by both sides) and blocks.css
 │   ├── visuals/              Question visuals (ADR 0007): visuals.js (registry, projection, <figure> markup), visuals.css, kinds/ (one file per kind, shared with the server) and img/ (the reviewed illustrations, WebP)
 │   ├── vendor/               Vendored libraries, never packaged: blockly-13.3.0/ (Apache-2.0, with its licence and provenance)
-│   ├── admin.html / admin.js Teacher portal: an event list in the sidebar; the main area shows the chosen event (results, questions, settings, per-outcome summary, AI marking) or the new-event form (quick setup, Customise picker, live and question previews)
+│   ├── admin.html / admin.js Teacher portal: an event list and a Question bank link in the sidebar; the main area shows the chosen event (results, questions, settings, per-outcome summary, AI marking), the new-event form (quick setup, Customise picker, live and question previews), or the whole question bank with answer keys, filterable by audience, level, type, outcome and text
 │   ├── style.css             Shared styles on Slate's theme contract (light only)
 │   └── vite.config.js        Dev server config (proxy + multi-page build)
 ├── docs/adr/                 Architecture decision records
@@ -64,7 +64,7 @@ ct-formative-assessment/
 
 **Production:** Express serves the `.html`, `.css` and `.js` files in `web/` (except build config such as `vite.config.js`), the renderers in `web/types/`, the `.js` and `.css` files in `web/lib/` and in each folder of `web/vendor/`, and the question visuals (`web/visuals/*.js` and `*.css`, `web/visuals/kinds/*.js`, `web/visuals/img/*.webp`), and handles all `/api/*` routes in a single process on port 3000. The list is derived from the folder at startup. Nothing else in `web/` or `backend/` is reachable over HTTP. Unknown `/api/*` routes return a JSON 404.
 
-**Development:** Vite runs a dev server on port 5173 with hot reload and proxies all `/api/*` requests to the Express backend on port 3000. The two processes run concurrently via `npm run dev`.
+**Development:** Vite runs a dev server on port 5173 with hot reload and proxies all `/api/*` requests to the Express backend on port 3000. The two processes run concurrently via `pnpm run dev`.
 
 **Content:** On boot the backend validates everything in `backend/content/` (a bad tag or answer key stops the server with a list of problems) and copies it into indexed SQLite tables, so event filters run as SQL. When an event is created its questions are snapshotted into `event_questions`, so editing content never changes a running event.
 
@@ -111,7 +111,7 @@ To change the schema, add a new file with the current date and time in its name.
 
 - **Teachers:** JWT. The backend issues a 7-day token on login; protected routes need `Authorization: Bearer <token>`. The secret comes from `JWT_SECRET`, which is required when `NODE_ENV=production`. Teachers only see events they created; another teacher's event answers 404, like a missing one. Passwords created by the original code (one fixed salt) still work and are rehashed with a random salt on the next login.
 - **Admins (heads of department):** an account with the `admin` role also sees every teacher's events, with each owner's email, and can open their results, outcomes summary, settings history, attempt details and questions. On events it did not create it is read-only: reset, release, Edit settings and marking answer 403 and are hidden on the page. Its own events work as a teacher's do. The role is read from the database on every request, so a change applies at once. See ADR 0004, which also describes the full-control alternative and how to switch to it.
-- **First account:** `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` create the first account in an empty database. That first account is an admin (ADR 0004); later accounts are teachers. In production the server refuses to start with the demo password `changeme123`, without `SEED_TEACHER_PASSWORD` when the database has no teacher yet, or while any stored account still accepts the demo password. Fix an account with `npm run set-password -- <email>`, described below.
+- **First account:** `SEED_TEACHER_EMAIL` / `SEED_TEACHER_PASSWORD` create the first account in an empty database. That first account is an admin (ADR 0004); later accounts are teachers. In production the server refuses to start with the demo password `changeme123`, without `SEED_TEACHER_PASSWORD` when the database has no teacher yet, or while any stored account still accepts the demo password. Fix an account with `pnpm run set-password <email>`, described below.
 - **Students:** no account. Starting an attempt returns a one-off attempt token. The page keeps it in `sessionStorage` and sends it as `X-Attempt-Token` to resume (`GET /api/attempts/:id`) and to submit. Only a hash is stored.
 - **Deadlines:** an attempt's deadline is the earlier of start + duration and the event's `end_at`. A submission up to `SUBMIT_GRACE_SECONDS` after it counts as on time; a later one is stored and marked late. The page counts down, auto-submits at zero and retries if the network fails.
 
@@ -119,14 +119,16 @@ To change the schema, add a new file with the current date and time in its name.
 
 ## Local development (no Docker)
 
-**Requirements:** Node.js 20.14+
+**Requirements:** Node.js 20.14+ and pnpm 12 (`npm install -g pnpm@12.4.1`)
 
 ```bash
-npm install       # installs all workspace deps (backend + web)
+pnpm install      # installs all workspace deps (backend + web)
 cp .env.development.example .env.development   # once; dev settings, gitignored
-npm run dev       # starts both servers concurrently
-npm test          # runs the backend test suite
+pnpm run dev      # starts both servers concurrently
+pnpm test         # runs the backend test suite
 ```
+
+The first install builds better-sqlite3's native binding; pnpm only runs dependency build scripts listed under `allowBuilds` in `pnpm-workspace.yaml`.
 
 | Service | URL |
 |---|---|
@@ -134,7 +136,7 @@ npm test          # runs the backend test suite
 | Teacher portal | http://localhost:5173/admin.html |
 | API | http://localhost:3000/api/ |
 
-The backend auto-restarts on file changes (nodemon), including edits to `.env.development`, which `npm run dev` loads with Node's `--env-file` flag. The frontend has hot reload (Vite). AI scoring is off in `.env.development` so testing costs nothing; production settings stay in `.env`, which only `docker compose` reads.
+The backend auto-restarts on file changes (nodemon), including edits to `.env.development`, which `pnpm run dev` loads with Node's `--env-file` flag. The frontend has hot reload (Vite). AI scoring is off in `.env.development` so testing costs nothing; production settings stay in `.env`, which only `docker compose` reads.
 
 ### Default credentials (development only)
 
@@ -149,18 +151,20 @@ These are seeded into a fresh database when `SEED_TEACHER_*` are not set. The lo
 ### Setting a teacher's password
 
 ```bash
-npm run set-password -- teacher@school.edu.sg          # prompts twice, input hidden
-NEW_PASSWORD='…' npm run set-password -- teacher@school.edu.sg
-echo '…' | npm run set-password -- teacher@school.edu.sg
+pnpm run set-password teacher@school.edu.sg          # prompts twice, input hidden
+NEW_PASSWORD='…' pnpm run set-password teacher@school.edu.sg
+echo '…' | pnpm run set-password teacher@school.edu.sg
 ```
+
+Leave out the `--` npm needed: pnpm passes it to the script, which then rejects it.
 
 The account is created if it does not exist. The password is never accepted as a command-line argument. It must be at least 10 characters and not the demo password.
 
 ### Making an account an admin
 
 ```bash
-npm run set-role -- head@school.edu.sg admin      # can read every teacher's events
-npm run set-role -- head@school.edu.sg teacher    # back to their own events only
+pnpm run set-role head@school.edu.sg admin      # can read every teacher's events
+pnpm run set-role head@school.edu.sg teacher    # back to their own events only
 ```
 
 The account must already exist (create it with `set-password` first). The change applies on the account's next request, without signing in again. The first account seeded into an empty database is already an admin. In Docker: `docker compose run --rm app node backend/scripts/set-role.js head@school.edu.sg admin`.
@@ -170,8 +174,8 @@ The account must already exist (create it with `set-password` first). The change
 ## Tests
 
 ```bash
-npm test                          # from the repo root
-npm test --workspace backend      # same thing
+pnpm test                          # from the repo root
+pnpm --filter ct-ability-backend test   # same thing
 ```
 
 The suite uses Node's built-in test runner (`node:test`) with `supertest` for HTTP requests. Every test builds its app on a fresh database in a temporary directory, passed through `DB_PATH`, and serves it on `127.0.0.1` on a random port (see the comment in `test/helpers.js` for why supertest is not handed the bare Express app). With `NODE_ENV=test`, opening `backend/data/app.db` throws, so tests can never touch real data.
@@ -224,7 +228,7 @@ AI is off unless you set `AI_PROVIDER`. With it off, everything else works as be
 AI_API_KEY=… node backend/scripts/ai-smoke.js            # or pass AIS-S2-01 / AIS-S2-02
 ```
 
-It prints the model and whether the reply passed validation. `npm test` never calls the network.
+It prints the model and whether the reply passed validation. `pnpm test` never calls the network.
 
 **Cost.** Each answer is one request of roughly 1,000 input tokens and under 300 output tokens: about $0.003 with the default model at $2 / $10 per million input / output tokens (September 2026). A class of 40 answering three AI questions costs about 40 cents. Failed requests are retried at most twice. `anthropic/claude-haiku-4.5` costs half as much if its marking is good enough for you.
 
@@ -232,7 +236,7 @@ It prints the model and whether the reply passed validation. `npm test` never ca
 
 ## Authoring content
 
-All content is JSON under `backend/content/`. Restart the server (nodemon does this in dev) and run `npm test` after any edit.
+All content is JSON under `backend/content/`. Restart the server (nodemon does this in dev) and run `pnpm test` after any edit.
 
 **Add a question** to a bank in `questions/` (or add a new `questions/<bank>.json` with `{ "bank": "...", "questions": [...] }`):
 
@@ -266,7 +270,7 @@ All content is JSON under `backend/content/`. Restart the server (nodemon does t
 - Spread correct answers across positions; the 44 shipped multiple-choice questions have eleven keys at each of positions 0 to 3.
 - Adding a core question does not change the legacy `ALL` or single-level modes. They are pinned in `legacy-modes.json`, and only an edit there changes them.
 
-Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question id. It gets the question and returns either the answer value (matched against option text or its leading number) or `{ pick: optionText => boolean }`. Parse the numbers from the question's text where you can. For code, either parse what you need or pin the exact source and translate it to JavaScript. Code-reading solvers are specs in `solvers/type-code-reading.js`: the pinned source, a JavaScript translation, inputs, and one claim per option saying what output that description promises; exactly one description's claim must hold on every input. A `line` follow-up gives the replacement line and the behaviour it should produce, and the original code must fail it. Code-trace solvers return the program's output; Parsons solvers get the program built from each accepted order and return what it prints, which must equal `expectedOutput`. Block solvers work out each grid's expectation from the grid alone (the flag and stars reachable, the number of stars to say); the test also runs the question's reference solution through the scorer on every grid, and, when `python3` is installed, runs its Python view on every grid. When `python3` or `swift` is installed, the answer-key test also runs these programs for real. A question that genuinely cannot be computed goes in `NOT_COMPUTABLE` in `test/solvers/index.js` with a reason. `npm test` fails if a question has neither.
+Then **add a solver** in `backend/test/solvers/<bank>.js` keyed by the question id. It gets the question and returns either the answer value (matched against option text or its leading number) or `{ pick: optionText => boolean }`. Parse the numbers from the question's text where you can. For code, either parse what you need or pin the exact source and translate it to JavaScript. Code-reading solvers are specs in `solvers/type-code-reading.js`: the pinned source, a JavaScript translation, inputs, and one claim per option saying what output that description promises; exactly one description's claim must hold on every input. A `line` follow-up gives the replacement line and the behaviour it should produce, and the original code must fail it. Code-trace solvers return the program's output; Parsons solvers get the program built from each accepted order and return what it prints, which must equal `expectedOutput`. Block solvers work out each grid's expectation from the grid alone (the flag and stars reachable, the number of stars to say); the test also runs the question's reference solution through the scorer on every grid, and, when `python3` is installed, runs its Python view on every grid. When `python3` or `swift` is installed, the answer-key test also runs these programs for real. A question that genuinely cannot be computed goes in `NOT_COMPUTABLE` in `test/solvers/index.js` with a reason. `pnpm test` fails if a question has neither.
 
 **Add a visual** (ADR 0007 §7): pick a `purpose` (`information`, `reading-load`, or `context` for an illustration only), then a kind: `grid`, `cells`, `graph`, `flowchart`, `table` or `illustration`. Each kind's fields are listed at the top of its file in `web/visuals/kinds/`. A visual must never show the answer or a step towards it, and must agree with the prompt: update the question's solver to read the visual's data (`visualOf` and `agree` in `solvers/lib.js`). An illustration is a WebP of at most 100 KB and 640 pixels, named after the question (`p5-01.webp`), with no metadata (`cwebp -q 70 -resize 640 0 -metadata none`), an `alt`, and `source: { generator, prompt, date, reviewed: true }`. The server will not start on an unknown kind, a missing alt text or a missing file. A new kind is a new file in `web/visuals/kinds/`; no shared file changes.
 
@@ -357,9 +361,9 @@ Upgrading the image migrates the database in the volume on first start and leave
 ## Production without Docker
 
 ```bash
-npm install
-npm run set-password -- teacher@school.edu.sg      # if the database already has the demo account
-NODE_ENV=production JWT_SECRET=your-secret SEED_TEACHER_PASSWORD='…' npm start
+pnpm install
+pnpm run set-password teacher@school.edu.sg      # if the database already has the demo account
+NODE_ENV=production JWT_SECRET=your-secret SEED_TEACHER_PASSWORD='…' pnpm start
 ```
 
 The backend serves `web/` as static files on port 3000.
