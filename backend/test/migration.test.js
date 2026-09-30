@@ -151,7 +151,7 @@ test("migrating a v1 database", async t => {
     const grace = attemptByName("Grace");
     const res = await submit(ctx.app, { id: grace.id }, {}, null);
     assert.equal(res.status, 403);
-    assert.match(res.body.error, /start the activity again/);
+    assert.match(res.body.error, /start the challenge again/);
 
     const again = await request(ctx.app).post("/api/attempts").send({ joinCode: "DEMO123", studentName: "Grace", studentGroup: "S2-1" });
     assert.equal(again.status, 201);

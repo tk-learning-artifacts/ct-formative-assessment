@@ -85,7 +85,7 @@ function ensureEventAccessible(event) {
   const now = Date.now();
 
   if (!event) {
-    return "That join code does not match any open activity.";
+    return "That join code does not match any open challenge.";
   }
 
   if (event.status !== "active") {
@@ -93,11 +93,11 @@ function ensureEventAccessible(event) {
   }
 
   if (event.start_at && now < Date.parse(event.start_at)) {
-    return "This activity has not opened yet.";
+    return "This challenge has not opened yet.";
   }
 
   if (event.end_at && now > Date.parse(event.end_at)) {
-    return "This activity is already closed.";
+    return "This challenge is already closed.";
   }
 
   return null;
@@ -451,7 +451,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     const token = req.get("X-Attempt-Token");
 
     if (attempt && !attempt.token_hash) {
-      res.status(403).json({ error: "This attempt was started before an upgrade and cannot be continued. Please start the activity again." });
+      res.status(403).json({ error: "This attempt was started before an upgrade and cannot be continued. Please start the challenge again." });
       return null;
     }
 
@@ -1125,7 +1125,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     const event = db.attemptEvent(attempt);
 
     if (!policy.locksAnswers(event)) {
-      res.status(409).json({ error: "This activity takes all its answers when you submit.", code: "commit-not-used" });
+      res.status(409).json({ error: "This challenge takes all its answers when you submit.", code: "commit-not-used" });
       return;
     }
 
@@ -1176,7 +1176,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     }
 
     if (attempt.reset_at) {
-      res.status(409).json({ error: "Your teacher reset this attempt. Start the activity again." });
+      res.status(409).json({ error: "Your teacher reset this attempt. Start the challenge again." });
       return;
     }
 

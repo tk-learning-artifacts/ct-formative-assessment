@@ -57,7 +57,7 @@ test("attempt tokens and deadlines", async t => {
 
     const res = await submit(app, attempt, {}, null);
     assert.equal(res.status, 403);
-    assert.match(res.body.error, /start the activity again/);
+    assert.match(res.body.error, /start the challenge again/);
   });
 
   await t.test("a submitted attempt cannot be submitted again", async () => {

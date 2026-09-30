@@ -419,10 +419,10 @@ function createStore(db, content, { stale, log } = {}) {
         const inProgress = existing.status === "started" && (!existing.deadline_at || Date.now() <= Date.parse(existing.deadline_at));
 
         throw httpError(409, existing.status === "submitted"
-          ? "You have already submitted this activity. Ask your teacher if you need another try."
+          ? "You have already submitted this challenge. Ask your teacher if you need another try."
           : inProgress
-            ? "You already started this activity. Continue on the device where you started, or ask your teacher to reset your attempt."
-            : "Your time for this activity has run out. Ask your teacher if you need another try.", {
+            ? "You already started this challenge. Continue on the device where you started, or ask your teacher to reset your attempt."
+            : "Your time for this challenge has run out. Ask your teacher if you need another try.", {
           code: existing.status === "submitted" ? "already-submitted" : inProgress ? "attempt-in-progress" : "attempt-expired",
           attemptId: existing.id
         });
@@ -509,7 +509,7 @@ function createStore(db, content, { stale, log } = {}) {
       // questions, a reset attempt's old ids are gone, and it should still be
       // told it was reset.
       if (current.reset_at) {
-        throw httpError(409, "Your teacher reset this attempt. Start the activity again.", { code: "attempt-reset" });
+        throw httpError(409, "Your teacher reset this attempt. Start the challenge again.", { code: "attempt-reset" });
       }
 
       if (current.status !== "started") {
@@ -517,7 +517,7 @@ function createStore(db, content, { stale, log } = {}) {
       }
 
       if (index < 0) {
-        throw httpError(404, "That question is not in this activity.");
+        throw httpError(404, "That question is not in this challenge.");
       }
 
       const done = committedIds(attempt.id);
@@ -530,7 +530,7 @@ function createStore(db, content, { stale, log } = {}) {
         const next = questions.findIndex(question => !done.has(question.id));
 
         if (index !== next) {
-          throw httpError(409, "This activity goes in order. Answer or skip the current question first; earlier ones cannot be changed.", { code: "out-of-order" });
+          throw httpError(409, "This challenge goes in order. Answer or skip the current question first; earlier ones cannot be changed.", { code: "out-of-order" });
         }
       }
 
