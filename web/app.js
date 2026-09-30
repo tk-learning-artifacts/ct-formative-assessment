@@ -4,6 +4,7 @@
   const Types = window.CTQuestTypes;
   const Visuals = window.CTQuestVisuals;
   const QuestView = window.CTQuestView;
+  const Review = window.CTQuestReview;
   const h = { escapeHtml };
 
   // Waits before each retry of a failed submission, in seconds.
@@ -57,7 +58,10 @@
     // { questionId, skipped, result? }, with result only under "each".
     feedbackMode: "release",
     navigationMode: "free",
-    committed: {}
+    committed: {},
+    // True while the review page (the end of the challenge, where Submit
+    // is) is showing instead of a question.
+    onReview: false
   };
 
   function isLinear() {
@@ -86,6 +90,30 @@
   function firstOpenIndex() {
     const index = ACTIVE_BANK.findIndex(q => !state.committed[q.id]);
     return index === -1 ? ACTIVE_BANK.length : index;
+  }
+
+  // The review page is where Submit lives. With free navigation it can be
+  // opened at any time; in order, only once every question is committed.
+  function canReview() {
+    return Review.reviewReachable({
+      linear: isLinear(),
+      held: ACTIVE_BANK.length,
+      questionCount: state.questionCount,
+      committedCount: ACTIVE_BANK.filter(q => state.committed[q.id]).length
+    });
+  }
+
+  // Whichever screen the attempt is on: a question, or the review page.
+  function render() {
+    if (state.onReview && !canReview()) {
+      state.onReview = false;
+    }
+
+    if (state.onReview) {
+      renderReview();
+    } else {
+      renderQuestion();
+    }
   }
 
   // Takes questions from the server: the full list from a start or a full
@@ -155,6 +183,7 @@
         name: state.name,
         group: state.group,
         joinCode: state.joinCode,
+        review: state.onReview,
         ...extra
       }));
     } catch (_error) {
@@ -296,9 +325,16 @@
   }
 
   // "Check answer", and "Next" under in-order navigation, need an answer.
+  // With free navigation, Skip shows while there is no answer and Next once
+  // there is one.
   function updateNavButtons() {
     const q = ACTIVE_BANK[state.i];
-    const answered = Boolean(q) && state.answers[q.id] !== undefined;
+
+    if (state.onReview || !q || !document.getElementById("answerArea")) {
+      return;
+    }
+
+    const answered = state.answers[q.id] !== undefined;
 
     ["checkBtn", "nextBtn"].forEach(id => {
       const button = document.getElementById(id);
@@ -306,6 +342,19 @@
         button.disabled = !answered || state.committing;
       }
     });
+
+    const skipBtn = document.getElementById("skipBtn");
+    const nextBtn = document.getElementById("nextBtn");
+
+    if (!isLinear() && !state.committed[q.id] && skipBtn && nextBtn) {
+      const hiding = document.activeElement === (answered ? skipBtn : nextBtn);
+      skipBtn.hidden = answered;
+      nextBtn.hidden = !answered;
+
+      if (hiding) {
+        (answered ? nextBtn : skipBtn).focus();
+      }
+    }
   }
 
   function showStatus(message) {
@@ -678,19 +727,25 @@
       state.notice = changeNotice(before) || state.notice;
 
       if (before.navigationMode !== "linear" && isLinear()) {
+        const wasOnReview = state.onReview;
+        state.onReview = false;
         await catchUpInOrder();
 
         if (state.submitting) {
           return;
         }
+
+        // The review page stays only if every answer is committed now.
+        state.onReview = wasOnReview && canReview();
       } else if (stayOn && state.committed[stayOn]) {
+        state.onReview = false;
         state.i = ACTIVE_BANK.findIndex(q => q.id === stayOn);
-      } else if (isLinear()) {
+      } else if (isLinear() && !state.onReview) {
         state.i = clamp(firstOpenIndex(), 0, ACTIVE_BANK.length - 1);
       }
 
       saveAttempt();
-      renderQuestion();
+      render();
     } catch (_error) {
       // Try again at the next poll or move.
     } finally {
@@ -960,7 +1015,7 @@
     });
   }
 
-  function enterAttempt(payload, answers, index) {
+  function enterAttempt(payload, answers, index, { review = false } = {}) {
     state.joinCode = payload.event.joinCode;
     state.eventTitle = payload.event.title;
     state.attemptId = payload.attempt.id;
@@ -989,11 +1044,12 @@
     state.i = clamp(target, 0, Math.max(0, ACTIVE_BANK.length - 1));
 
     state.inAttempt = true;
+    state.onReview = Boolean(review);
     state.notice = "";
     state.markingPolls = 0;
     saveAttempt();
     startTimer(payload.attempt.deadlineAt, payload.serverNow);
-    renderQuestion();
+    render();
 
     if (state.deadlineMs !== null && Date.now() >= state.deadlineMs) {
       stopTimer();
@@ -1040,36 +1096,45 @@
       return;
     }
 
-    enterAttempt(payload, saved.answers || {}, saved.i || 0);
+    enterAttempt(payload, saved.answers || {}, saved.i || 0, { review: Boolean(saved.review) });
   }
 
-  // The buttons under the answer. Free navigation keeps Back and Next;
-  // in order drops Back, and moving on means answering (Next commits) or
-  // skipping. Under "each", Check answer commits and shows the result first.
+  // The buttons under the answer. There is no Submit here: it is on the
+  // review page at the end (renderReview), so a student sees which questions
+  // they skipped before sending. Free navigation keeps Back, and offers Skip
+  // until there is an answer, then Next. In order drops Back, and moving on
+  // means answering (Next commits) or skipping (which commits a skip). Under
+  // "each", Check answer commits and shows the result first. The last
+  // question's Next reads "Finish" and opens the review page.
   function navButtons(q, isLast) {
     const locked = Boolean(state.committed[q.id]);
     const answered = state.answers[q.id] !== undefined;
     const needsAnswer = `data-needs-answer ${answered ? "" : "disabled"}`;
+    const forward = isLast ? "Finish" : "Next";
     const buttons = [];
 
-    if (!locked && isLinear()) {
-      buttons.push(`<button class="btn btn--secondary" id="skipBtn">Skip</button>`);
-    }
-
-    if (!locked && feedbackEach()) {
-      buttons.push(`<button class="btn btn--primary" id="checkBtn" ${needsAnswer}>Check answer</button>`);
-    }
-
-    if (!isLast) {
-      const commitsOnNext = isLinear() && !locked && !feedbackEach();
-      const hidden = isLinear() && !locked && feedbackEach();
-
-      if (!hidden) {
-        buttons.push(`<button class="btn ${feedbackEach() && !locked ? "btn--secondary" : "btn--primary"}" id="nextBtn" ${commitsOnNext ? needsAnswer : ""}>Next</button>`);
+    if (isLinear()) {
+      if (!locked) {
+        buttons.push(`<button class="btn btn--secondary" id="skipBtn">Skip</button>`);
       }
-    }
 
-    buttons.push(`<button class="btn ${isLast ? "btn--accent" : "btn--secondary"}" id="submitBtn">Submit answers</button>`);
+      if (!locked && feedbackEach()) {
+        buttons.push(`<button class="btn btn--primary" id="checkBtn" ${needsAnswer}>Check answer</button>`);
+      } else if (!locked) {
+        buttons.push(`<button class="btn btn--primary" id="nextBtn" ${needsAnswer}>${forward}</button>`);
+      } else {
+        buttons.push(`<button class="btn btn--primary" id="nextBtn">${forward}</button>`);
+      }
+    } else if (locked) {
+      buttons.push(`<button class="btn btn--primary" id="nextBtn">${forward}</button>`);
+    } else {
+      if (feedbackEach()) {
+        buttons.push(`<button class="btn btn--primary" id="checkBtn" ${needsAnswer}>Check answer</button>`);
+      }
+
+      buttons.push(`<button class="btn btn--secondary" id="skipBtn" ${answered ? "hidden" : ""}>Skip</button>`);
+      buttons.push(`<button class="btn ${feedbackEach() ? "btn--secondary" : "btn--primary"}" id="nextBtn" ${answered ? "" : "hidden"}>${forward}</button>`);
+    }
 
     return `
       ${isLinear() ? "<span></span>" : `<button id="backBtn" class="btn btn--secondary" ${state.i === 0 ? "disabled" : ""}>Back</button>`}
@@ -1077,12 +1142,14 @@
     `;
   }
 
-  // One line on how this test works, so the buttons make sense.
+  // One line on how this challenge works, so the buttons make sense.
   function modeHint() {
     const parts = [];
 
     if (isLinear()) {
       parts.push("Questions come in order: answer or skip to move on. You can't go back.");
+    } else {
+      parts.push("Skip any question and come back to it. Submit from the end.");
     }
 
     if (feedbackEach()) {
@@ -1098,9 +1165,20 @@
   // the teacher changed something.
   function goTo(index) {
     state.i = clamp(index, 0, ACTIVE_BANK.length - 1);
+    state.onReview = false;
     state.notice = "";
     saveAttempt();
     renderQuestion();
+    syncFromServer();
+  }
+
+  // Opens the review page, saving the answer on screen first.
+  function goToReview() {
+    captureCurrentAnswer();
+    state.onReview = true;
+    state.notice = "";
+    saveAttempt();
+    render();
     syncFromServer();
   }
 
@@ -1201,6 +1279,7 @@
           ? `<ol class="progress progress--jump" id="progressDots" aria-label="Questions">${dots}</ol>`
           : `<ol class="progress" id="progressDots" aria-hidden="true">${dots}</ol>`}
         <span class="muted small">${answered} answered${skipped ? `, ${skipped} skipped` : ""}</span>
+        ${jumpable ? `<button type="button" class="btn btn--secondary btn--sm" id="reviewBtn">Review and submit</button>` : ""}
         ${state.deadlineMs !== null ? `<span class="timer" id="timerPill" role="timer" aria-live="off"></span>` : ""}
         <span class="q-strip__event">${escapeHtml(state.eventTitle)} <span class="mono">${escapeHtml(state.joinCode)}</span></span>
       </div>
@@ -1251,7 +1330,21 @@
           return;
         }
 
-        goTo(state.i + 1);
+        if (isLast) {
+          goToReview();
+        } else {
+          goTo(state.i + 1);
+        }
+      });
+    }
+
+    const reviewBtn = document.getElementById("reviewBtn");
+
+    if (reviewBtn) {
+      reviewBtn.addEventListener("click", () => {
+        if (!state.committing && !state.submitting) {
+          goToReview();
+        }
       });
     }
 
@@ -1269,6 +1362,19 @@
 
     if (skipBtn) {
       skipBtn.addEventListener("click", async () => {
+        // Free navigation: nothing is recorded, the student can come back.
+        if (!isLinear()) {
+          captureCurrentAnswer();
+
+          if (isLast) {
+            goToReview();
+          } else {
+            goTo(state.i + 1);
+          }
+
+          return;
+        }
+
         const message = feedbackEach()
           ? "Skip this question? You'll see the answer, but you can't come back to it. It scores zero."
           : "Skip this question? You can't come back to it. It scores zero.";
@@ -1281,24 +1387,110 @@
           return;
         }
 
-        if (feedbackEach() || isLast) {
+        if (feedbackEach()) {
           renderQuestion();
+        } else if (isLast) {
+          goToReview();
         } else {
           goTo(state.i + 1);
         }
       });
     }
+  }
+
+  // The end of the challenge, and the only place Submit is. It lists which
+  // questions have no answer (skipped), which are only partly answered, and
+  // with free navigation links back to each. Submitting with gaps is allowed,
+  // behind a warning: blank answers score zero.
+  function renderReview() {
+    state.inAttempt = true;
+    const linear = isLinear();
+    const summary = Review.summarize(ACTIVE_BANK, state.answers, state.committed, question => rendererFor(question.type), state.questionCount);
+    const names = rows => rows.map(row => `Question ${row.index + 1}`).join(", ");
+    const missingRows = summary.rows.filter(row => row.state === "unanswered" || row.state === "locked-skipped");
+    const partialRows = summary.rows.filter(row => row.state === "partial");
+    const tags = {
+      unanswered: { label: "Not answered", tone: "critical", action: "Answer now" },
+      partial: { label: "Partly answered", tone: "warning", action: "Finish it" },
+      answered: { label: "Answered", tone: "positive", action: "Change" },
+      locked: { label: "Answered, locked", tone: "positive", action: "View" },
+      "locked-skipped": { label: "Skipped", tone: "neutral", action: "View" }
+    };
+    const rows = summary.rows.map(row => {
+      const tag = tags[row.state];
+
+      return `
+        <li class="result-row">
+          <span>Question ${row.index + 1} &middot; ${escapeHtml(row.title)}</span>
+          <span class="result-row__side">
+            <span class="tag status status--${tag.tone}">${tag.label}</span>
+            ${linear ? "" : `<button type="button" class="btn btn--secondary btn--sm" data-goto="${row.index}">${tag.action}</button>`}
+          </span>
+        </li>
+      `;
+    }).join("");
+
+    const missingNote = summary.missing > 0
+      ? `<p class="notice notice--warning" role="status">You haven't answered ${summary.missing} question${summary.missing === 1 ? "" : "s"}${missingRows.length ? `: ${names(missingRows)}` : ""}. They score zero if you submit now. ${linear ? "Questions come in order, so you can't go back to skipped ones." : "Choose one below to answer it."}</p>`
+      : "";
+    const partialNote = summary.partial > 0
+      ? `<p class="notice" role="status">${summary.partial} question${summary.partial === 1 ? " is" : "s are"} only partly answered: ${names(partialRows)}.</p>`
+      : "";
+
+    screen.innerHTML = `
+      <div class="q-strip">
+        <span class="q-strip__count">Review</span>
+        ${state.deadlineMs !== null ? `<span class="timer" id="timerPill" role="timer" aria-live="off"></span>` : ""}
+        <span class="q-strip__event">${escapeHtml(state.eventTitle)} <span class="mono">${escapeHtml(state.joinCode)}</span></span>
+      </div>
+
+      <section class="card stack" aria-label="Review your answers">
+        <div class="section-heading">
+          <h2 id="reviewTitle" tabindex="-1">Check your answers</h2>
+          <p>${summary.answered + summary.partial} of ${state.questionCount} answered</p>
+        </div>
+
+        ${missingNote}
+        ${partialNote}
+        ${state.notice ? `<p class="notice notice--warning" role="status">${escapeHtml(state.notice)}</p>` : ""}
+
+        <ol class="breakdown review-list">${rows}</ol>
+
+        <p class="notice q-status" id="submitStatus" role="status" hidden></p>
+
+        <div class="q-nav">
+          ${linear ? "<span></span>" : `<button id="backBtn" class="btn btn--secondary">Back to question ${ACTIVE_BANK.length}</button>`}
+          <div class="row"><button id="submitBtn" class="btn btn--accent">Submit answers</button></div>
+        </div>
+      </section>
+    `;
+
+    updateTimerPill();
+    scheduleSync();
+
+    const title = document.getElementById("reviewTitle");
+
+    if (title) {
+      title.focus();
+    }
+
+    screen.querySelectorAll("[data-goto]").forEach(button => {
+      button.addEventListener("click", () => {
+        if (!state.submitting) {
+          goTo(Number(button.dataset.goto));
+        }
+      });
+    });
+
+    const backBtn = document.getElementById("backBtn");
+
+    if (backBtn) {
+      backBtn.addEventListener("click", () => goTo(ACTIVE_BANK.length - 1));
+    }
 
     document.getElementById("submitBtn").addEventListener("click", async () => {
-      captureCurrentAnswer();
-      // Under in order, questions not reached yet are not held here at all.
-      const given = ACTIVE_BANK.filter(item => state.committed[item.id] || state.answers[item.id] !== undefined).length;
-      const missing = state.questionCount - given;
-      const message = isLinear()
-        ? `${missing} question${missing === 1 ? " has" : "s have"} no answer yet, including any you haven't reached. Submit anyway? They score zero.`
-        : `You have ${missing} unanswered question${missing === 1 ? "" : "s"}. Submit anyway? Unanswered questions score zero.`;
-
-      if (missing > 0 && !confirm(message)) {
+      if (summary.missing > 0 &&
+          !confirm(`${summary.missing} question${summary.missing === 1 ? " has" : "s have"} no answer. Submit anyway? They score zero.`)) {
         return;
       }
 
@@ -1510,6 +1702,7 @@
       state.feedbackMode = "release";
       state.navigationMode = "free";
       state.committed = {};
+      state.onReview = false;
       clearSavedAttempt();
       renderStart();
     });
