@@ -152,6 +152,13 @@ test("admin role: every teacher route under each kind of caller", async t => {
     const summaryOwner = (await request(app).get(`/api/events/${ev.id}/outcomes-summary`).set(auth(tokens.teacher))).body;
     const summaryAdmin = (await request(app).get(`/api/events/${ev.id}/outcomes-summary`).set(auth(tokens.admin))).body;
     assert.deepEqual(summaryAdmin, summaryOwner);
+    // The per-question and per-student figures come to an admin too.
+    assert.equal(summaryAdmin.questions.length, 2);
+    assert.deepEqual(summaryAdmin.perAttempt.map(row => row.attemptId), [ev.attemptId]);
+
+    const cross = await request(app).get(`/api/events/${ev.id}/outcomes-summary`).set(auth(tokens.other));
+    assert.equal(cross.status, 404, "another teacher sees no per-student data");
+    assert.equal(cross.body.perAttempt, undefined);
   });
 
   await t.test("GET /api/events: every teacher's events for an admin, with owners; only their own for a teacher", async () => {

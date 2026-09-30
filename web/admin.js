@@ -16,6 +16,15 @@
     results: null,
     outcomesSummary: null,
     outcomesSort: { key: "meanPercentage", dir: "asc" },
+    // Which results sections (and the tables and previews nested in them)
+    // are open, by data-section key. Kept across re-renders, such as after a
+    // mark is saved, and in localStorage between visits.
+    openSections: loadOpenSections(),
+    // The attempt shown in the per-student dialog, or null. Kept in state so
+    // the dialog reopens after a re-render (a saved mark reloads the results).
+    openAttemptId: null,
+    // The question rows expanded in that dialog.
+    openAnswerRows: new Set(),
     // Advanced-picker reference data. null until loaded; catalogFailed marks a
     // failed fetch so the page falls back to the simple form instead of
     // showing a broken picker.
@@ -293,12 +302,12 @@
     return { tone: "neutral", text: answer.response ? `Scored ${answer.earnedPoints}/${answer.maxPoints}` : "No answer" };
   }
 
-  // Each AI-scored answer, with a small form to set the score and feedback.
-  // A committed answer can be marked before the student submits, so under
-  // "after each question" they see the mark straight away.
-  function aiAnswersBlock(attempt, canManage) {
-    return attempt.answers
-      .filter(answer => answer.questionType === "open-response-ai")
+  // One AI-scored answer, with a small form to set the score and feedback.
+  // Shown in the per-student dialog, on that question's row. A committed
+  // answer can be marked before the student submits, so under "after each
+  // question" they see the mark straight away.
+  function aiAnswerReview(attempt, answer, canManage) {
+    return [answer]
       .map(answer => {
         const detail = answer.detail || {};
         const aiFeedback = detail.ai === "scored" && detail.feedback ? detail.feedback : "";
@@ -1710,32 +1719,601 @@
     `;
   }
 
-  function renderOutcomesSummaryBlock() {
-    if (!state.outcomesSummary) {
+  // The sortable tables, now the secondary view under each chart.
+  function outcomesTableHtml() {
+    const rows = sortRows(state.outcomesSummary.outcomes, state.outcomesSort.key, state.outcomesSort.dir);
+    return rows.length
+      ? outcomesTable("Learning outcomes", "Outcome", rows, row => renderOutcomeRow(row, row.statement, false))
+      : `<p class="muted">No learning outcome has submissions yet.</p>`;
+  }
+
+  function capabilitiesTableHtml() {
+    const rows = sortRows(state.outcomesSummary.ontologyNodes, state.outcomesSort.key, state.outcomesSort.dir);
+    return rows.length
+      ? outcomesTable("CT capabilities", "Capability", rows, row => renderOutcomeRow(row, row.label, !row.topLevel))
+      : `<p class="muted">No CT capability has submissions yet.</p>`;
+  }
+
+  // ---------- Cohort results: tiles, charts and collapsible sections ----------
+
+  const Charts = window.CTQuestCharts;
+  const OPEN_SECTIONS_KEY = "ct-quest-open-sections";
+  // Only the overview starts open; the rest wait to be asked for.
+  const SECTION_DEFAULTS = { overview: true };
+
+  function loadOpenSections() {
+    try {
+      const saved = JSON.parse(localStorage.getItem("ct-quest-open-sections") || "{}");
+      return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    } catch (_error) {
+      return {};
+    }
+  }
+
+  function saveOpenSections() {
+    try {
+      localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify(state.openSections));
+    } catch (_error) {
+      // Storage can be full or blocked; the state still holds for this visit.
+    }
+  }
+
+  function sectionOpen(key) {
+    return Object.prototype.hasOwnProperty.call(state.openSections, key)
+      ? Boolean(state.openSections[key])
+      : Boolean(SECTION_DEFAULTS[key]);
+  }
+
+  // A top-level results section: a <details> whose open state lives in
+  // state.openSections under key.
+  function resultsSection(key, title, meta, body) {
+    return `
+      <details class="results-section" data-section="${key}" id="section-${key}" ${sectionOpen(key) ? "open" : ""}>
+        <summary><span class="results-section__title">${escapeHtml(title)}</span>${meta ? `<span class="muted small">${meta}</span>` : ""}</summary>
+        <div class="results-section__body">${body}</div>
+      </details>
+    `;
+  }
+
+  // A nested disclosure (a table under a chart, the question preview) whose
+  // open state is kept the same way.
+  function subSection(key, title, body, id) {
+    return `
+      <details class="history sub-section" data-section="${key}" ${id ? `id="${id}"` : ""} ${sectionOpen(key) ? "open" : ""}>
+        <summary>${escapeHtml(title)}</summary>
+        ${body}
+      </details>
+    `;
+  }
+
+  function chartsOr(fallback, build) {
+    return Charts ? build() : `<p class="muted small">${escapeHtml(fallback)}</p>`;
+  }
+
+  function liveAttemptsOf(results) {
+    return results.attempts.filter(attempt => !attempt.reset_at);
+  }
+
+  function countAnswers(attempts, status) {
+    return attempts.reduce((sum, attempt) => sum + attempt.answers.filter(answer => answer.scoreStatus === status).length, 0);
+  }
+
+  function plural(n, word, many) {
+    return `${n} ${n === 1 ? word : (many || `${word}s`)}`;
+  }
+
+  function resultTiles(canManage) {
+    const live = liveAttemptsOf(state.results);
+    const submitted = live.filter(attempt => attempt.status === "submitted");
+    const late = submitted.filter(attempt => attempt.late).length;
+    const overall = state.outcomesSummary && state.outcomesSummary.overall;
+    const mean = overall && overall.meanPercentage !== null ? `${overall.meanPercentage}%` : "–";
+    const below = overall ? overall.belowHalfCount : 0;
+    const needs = countAnswers(live, "needs-review");
+    const pending = countAnswers(live, "pending");
+    const tile = (label, value, note, tone) => `
+      <li class="stat-tile">
+        <span class="stat-tile__label">${label}</span>
+        <span class="stat-tile__value ${tone ? `tone-${tone}` : ""}">${value}</span>
+        ${note ? `<span class="stat-tile__note muted">${note}</span>` : ""}
+      </li>`;
+
+    return `
+      <ul class="stat-tiles" aria-label="Summary">
+        ${tile("Submitted", submitted.length, late ? `${late} late` : "")}
+        ${tile("In progress", live.length - submitted.length, "")}
+        ${tile("Mean score", mean, overall && overall.unmarkedAnswers ? `${plural(overall.unmarkedAnswers, "answer")} not marked yet left out` : "")}
+        ${tile("Below 50%", below, "", below ? "critical" : "")}
+        ${tile("Needs marking", needs, `${pending ? `${pending} being marked by AI` : ""}${needs ? `${pending ? " · " : ""}<button type="button" class="link-btn" data-open-section="students">${canManage ? "Mark in Students" : "See Students"}</button>` : ""}`, needs ? "warning" : "")}
+      </ul>
+    `;
+  }
+
+  function overviewSection() {
+    const summary = state.outcomesSummary;
+    const scores = summary && summary.perAttempt ? summary.perAttempt.map(row => row.percentage) : [];
+    const marked = scores.filter(value => value !== null).length;
+    const body = !summary
+      ? `<p class="muted small">Could not load the summary.</p>`
+      : chartsOr("Charts could not load.", () => Charts.histogram(scores, 10, {
+        title: "How the class scored",
+        desc: "Each column counts the students whose score falls in that range. Answers not marked yet are left out."
+      }));
+
+    return resultsSection("overview", "Overview", marked ? `Score spread, ${plural(marked, "student")}` : "Score spread", body);
+  }
+
+  function questionsSection() {
+    const summary = state.outcomesSummary;
+    const questions = state.eventQuestions || [];
+    const numberOf = new Map(questions.map((question, i) => [question.id, i + 1]));
+    const rows = summary && summary.questions
+      ? summary.questions.slice().sort((a, b) => (a.percentage === null) - (b.percentage === null) || (a.percentage || 0) - (b.percentage || 0))
+        .map(row => {
+          const notes = [];
+          if (row.maxPoints <= 0) {
+            notes.push("worth no points");
+          } else if (row.markedAttempts) {
+            notes.push(`${row.fullMarks}/${row.markedAttempts} full marks`);
+          }
+          if (row.skipped) {
+            notes.push(`${row.skipped} skipped`);
+          }
+          if (row.unmarkedAnswers) {
+            notes.push(`${row.unmarkedAnswers} not marked yet`);
+          }
+          return {
+            label: `Q${numberOf.get(row.id) || "?"}. ${row.title || row.id}`,
+            value: row.percentage,
+            note: notes.join(" · ")
+          };
+        })
+      : [];
+
+    const chart = !summary
+      ? `<p class="muted small">Could not load the summary.</p>`
+      : chartsOr("Charts could not load.", () => Charts.barChart(rows, {
+        threshold: 50,
+        title: "Average score on each question, hardest first",
+        nullText: "No marks yet",
+        emptyText: "No marked answers yet."
+      }));
+
+    const preview = subSection(
+      "questionPreview",
+      `Question preview${state.eventQuestions ? ` (${state.eventQuestions.length})` : ""}`,
+      state.eventQuestions ? renderQuestionPreview(state.eventQuestions) : `<p class="muted small">Could not load the questions.</p>`,
+      "eventQuestionsSection"
+    );
+
+    return resultsSection(
+      "questions",
+      "Questions",
+      `${plural(questions.length, "question")} · hardest first`,
+      `<p class="muted small">Average share of the points, over submitted attempts.</p>${chart}${renderEventComposition(state.eventQuestions)}${preview}`
+    );
+  }
+
+  // Depth of a CT node under its top-level node, from its dotted id.
+  function nodeDepth(node) {
+    return node.topLevel ? 0 : Math.min(2, node.id.split(".").length - 1);
+  }
+
+  // Each top-level node followed by the reported nodes beneath it.
+  function capabilityOrder(nodes) {
+    const tops = nodes.filter(node => node.topLevel);
+    const ordered = [];
+
+    tops.forEach(top => {
+      ordered.push(top);
+      nodes.filter(node => !node.topLevel && node.id.startsWith(`${top.id}.`))
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .forEach(node => ordered.push(node));
+    });
+
+    nodes.filter(node => !ordered.includes(node)).forEach(node => ordered.push(node));
+    return ordered;
+  }
+
+  function groupNote(row) {
+    const notes = [];
+    if (row.unmarkedAnswers) {
+      notes.push(`${row.unmarkedAnswers} not marked yet`);
+    }
+    if (row.lateAttempts) {
+      notes.push(`${row.lateAttempts} late`);
+    }
+    return notes.join(" · ");
+  }
+
+  function outcomesSection() {
+    const summary = state.outcomesSummary;
+
+    if (!summary) {
+      return resultsSection("outcomes", "Learning outcomes", "", `<p class="muted small">Could not load the summary.</p>`);
+    }
+
+    const rows = summary.outcomes.slice()
+      .sort((a, b) => (a.meanPercentage === null) - (b.meanPercentage === null) || (a.meanPercentage || 0) - (b.meanPercentage || 0))
+      .map(row => ({ label: row.statement, value: row.meanPercentage, note: groupNote(row) }));
+    const chart = chartsOr("Charts could not load.", () => Charts.barChart(rows, {
+      threshold: 50,
+      title: "Class average for each learning outcome, weakest first",
+      nullText: "No marks yet",
+      emptyText: "No learning outcome has submissions yet."
+    }));
+
+    return resultsSection(
+      "outcomes",
+      "Learning outcomes",
+      `${plural(summary.outcomes.length, "outcome")} · weakest first`,
+      `${chart}${subSection("outcomesTable", "Show table", outcomesTableHtml())}`
+    );
+  }
+
+  function capabilitiesSection() {
+    const summary = state.outcomesSummary;
+
+    if (!summary) {
+      return resultsSection("capabilities", "CT capabilities", "", `<p class="muted small">Could not load the summary.</p>`);
+    }
+
+    const rows = capabilityOrder(summary.ontologyNodes)
+      .map(row => ({ label: row.label, value: row.meanPercentage, note: groupNote(row), indent: nodeDepth(row) }));
+    const chart = chartsOr("Charts could not load.", () => Charts.barChart(rows, {
+      threshold: 50,
+      title: "Class average for each CT capability, with the capabilities beneath each indented",
+      nullText: "No marks yet",
+      emptyText: "No CT capability has submissions yet."
+    }));
+
+    return resultsSection(
+      "capabilities",
+      "CT capabilities",
+      `${plural(summary.ontologyNodes.length, "capability", "capabilities")}`,
+      `${chart}${subSection("capabilitiesTable", "Show table", capabilitiesTableHtml())}`
+    );
+  }
+
+  // A small word beside an attempt row when its answers wait for a mark.
+  function markingBadges(attempt) {
+    const needs = attempt.answers.filter(answer => answer.scoreStatus === "needs-review").length;
+    const pending = attempt.answers.filter(answer => answer.scoreStatus === "pending").length;
+    return `${needs ? `<span class="tag status status--warning">${needs} needs marking</span>` : ""}${pending ? `<span class="tag status status--pending">${pending} being marked</span>` : ""}`;
+  }
+
+  function sectionControls() {
+    return `
+      <div class="section-controls">
+        <button type="button" class="btn btn--ghost btn--sm" data-sections-expand>Expand all</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-sections-collapse>Collapse all</button>
+      </div>
+    `;
+  }
+
+  function bindSections() {
+    screen.querySelectorAll("details[data-section]").forEach(details => {
+      details.addEventListener("toggle", () => {
+        const key = details.getAttribute("data-section");
+        if (sectionOpen(key) !== details.open) {
+          state.openSections = { ...state.openSections, [key]: details.open };
+          saveOpenSections();
+        }
+      });
+    });
+
+    const setAll = open => screen.querySelectorAll("details.results-section").forEach(details => { details.open = open; });
+    const expand = screen.querySelector("[data-sections-expand]");
+    const collapse = screen.querySelector("[data-sections-collapse]");
+
+    if (expand) {
+      expand.addEventListener("click", () => setAll(true));
+    }
+
+    if (collapse) {
+      collapse.addEventListener("click", () => setAll(false));
+    }
+
+    screen.querySelectorAll("[data-open-section]").forEach(button => {
+      button.addEventListener("click", () => {
+        const details = document.getElementById(`section-${button.getAttribute("data-open-section")}`);
+        if (details) {
+          details.open = true;
+          details.scrollIntoView({ block: "start", behavior: "smooth" });
+        }
+      });
+    });
+  }
+
+  // ---------- Per-student view (one attempt, in a dialog) ----------
+
+  // The renderers' describeResponse gives a student's answer in words. They
+  // load with the question bank's types; until then (or for a type with no
+  // renderer) a plain fallback is shown.
+  let typesLoaded = false;
+
+  function ensureTypesForDialog() {
+    if (typesLoaded) {
+      return;
+    }
+
+    loadBankTypes().then(() => {
+      typesLoaded = true;
+      if (state.openAttemptId !== null && state.view === "event") {
+        renderDashboard();
+      }
+    }).catch(() => {});
+  }
+
+  function studentAnswerText(answer) {
+    if (!answer || answer.response === null || answer.response === undefined) {
+      return "No answer";
+    }
+
+    try {
+      const text = window.CTQuestTypes.get(answer.questionType).describeResponse(answer.response, { escapeHtml });
+      return String(text).replace(/^\n/, "");
+    } catch (_error) {
+      const response = answer.response;
+      return typeof response === "object" && typeof response.text === "string" ? response.text : JSON.stringify(response);
+    }
+  }
+
+  // One answer's state, with the word that goes beside its colour.
+  function answerState(answer, question) {
+    if (answer && answer.scoreStatus === "pending") {
+      return { key: "unmarked", tone: "pending", word: "Being marked", short: "Marking" };
+    }
+
+    if (answer && answer.scoreStatus === "needs-review") {
+      return { key: "unmarked", tone: "warning", word: "Needs marking", short: "To mark" };
+    }
+
+    if (!answer || answer.response === null || answer.response === undefined) {
+      return { key: "skipped", tone: "neutral", word: "Skipped", short: "Skipped" };
+    }
+
+    const max = answer.maxPoints ?? (question ? question.points : 0);
+    const earned = answer.earnedPoints || 0;
+
+    if (max > 0 && earned >= max) {
+      return { key: "correct", tone: "positive", word: "Correct", short: "Correct" };
+    }
+
+    if (earned > 0) {
+      return { key: "partial", tone: "warning", word: "Part marks", short: "Part" };
+    }
+
+    return { key: "wrong", tone: "critical", word: "Incorrect", short: "Wrong" };
+  }
+
+  // The questions in snapshot order, each with this attempt's answer (or
+  // none). Falls back to the answers alone if the snapshot did not load.
+  function attemptItems(attempt) {
+    const byId = new Map(attempt.answers.map(answer => [answer.questionId, answer]));
+
+    if (state.eventQuestions && state.eventQuestions.length) {
+      return state.eventQuestions.map((question, i) => ({ number: i + 1, question, answer: byId.get(question.id) || null }));
+    }
+
+    return attempt.answers.map((answer, i) => ({ number: i + 1, question: null, answer }));
+  }
+
+  function answerKeyHtml(question) {
+    if (!question) {
       return "";
     }
 
-    const outcomeRows = sortRows(state.outcomesSummary.outcomes, state.outcomesSort.key, state.outcomesSort.dir);
-    const nodeRows = sortRows(state.outcomesSummary.ontologyNodes, state.outcomesSort.key, state.outcomesSort.dir);
+    const body = `${qpTypeBody(question)}${question.type === "open-response-ai" && question.rubric ? qpRubricTable(question.rubric) : ""}`;
+    return body ? `<div class="qp-teacher"><p class="qp-teacher__label"><span class="tag">Answer key, teacher only</span></p>${body}</div>` : "";
+  }
+
+  function answerRow(attempt, item, canManage) {
+    const { number, question, answer } = item;
+    const id = question ? question.id : answer.questionId;
+    const status = answerState(answer, question);
+    const max = answer ? answer.maxPoints : question.points;
+    const open = state.openAnswerRows.has(id) || (status.key === "unmarked" && status.tone === "warning" && canManage);
+    const text = studentAnswerText(answer);
+    const review = answer && answer.questionType === "open-response-ai" ? aiAnswerReview(attempt, answer, canManage) : "";
 
     return `
-      <section class="card">
-        <div class="section-heading">
-          <h2>Results by outcome</h2>
-          <p class="small">Averages leave out AI-scored answers that are not marked yet. Click a column to sort.</p>
-        </div>
-
-        ${outcomeRows.length
-          ? outcomesTable("Learning outcomes", "Outcome", outcomeRows, row => renderOutcomeRow(row, row.statement, false))
-          : `<p class="muted">No learning outcome has submissions yet.</p>`
-        }
-
-        ${nodeRows.length
-          ? outcomesTable("CT capabilities", "Capability", nodeRows, row => renderOutcomeRow(row, row.label, !row.topLevel))
-          : `<p class="muted mt-m">No CT capability has submissions yet.</p>`
-        }
-      </section>
+      <li>
+        <details class="qp-row answer-row" data-answer-row="${escapeHtml(id)}" id="answer-${escapeHtml(attempt.id)}-${escapeHtml(id)}" ${open ? "open" : ""}>
+          <summary>
+            <span class="qp-row__num">${number}.</span>
+            <span class="qp-row__title">${escapeHtml(question ? question.title : id)}</span>
+            <span class="tag status status--${status.tone}">${status.word}</span>
+            <span class="muted small mono">${answer && status.key !== "unmarked" ? `${answer.earnedPoints ?? 0}/${max}` : `&ndash;/${max}`}</span>
+          </summary>
+          <div class="qp-row__body">
+            ${question ? `<p class="prompt-text">${escapeHtml(question.prompt)}</p>` : ""}
+            ${review || `<p class="answer-label">Student's answer</p><pre class="codebox answer-text">${escapeHtml(text)}</pre>`}
+            ${answerKeyHtml(question)}
+          </div>
+        </details>
+      </li>
     `;
+  }
+
+  function comparisonCharts(attemptRow) {
+    const summary = state.outcomesSummary;
+
+    if (!summary || !attemptRow || !Charts) {
+      return "";
+    }
+
+    const mine = list => new Map((list || []).map(row => [row.id, row.percentage]));
+    const outcomeMine = mine(attemptRow.outcomes);
+    const nodeMine = mine(attemptRow.nodes);
+    const opts = { threshold: 50, valueLabel: "This student", compareLabel: "Class average", nullText: "Not marked yet" };
+    const outcomes = Charts.barChart(summary.outcomes.map(row => ({
+      label: row.statement, value: outcomeMine.has(row.id) ? outcomeMine.get(row.id) : null, compare: row.meanPercentage
+    })), { ...opts, title: "This student's score on each learning outcome, beside the class average", emptyText: "No learning outcomes in this test." });
+    const nodes = Charts.barChart(capabilityOrder(summary.ontologyNodes).map(row => ({
+      label: row.label, value: nodeMine.has(row.id) ? nodeMine.get(row.id) : null, compare: row.meanPercentage, indent: nodeDepth(row)
+    })), { ...opts, title: "This student's score on each CT capability, beside the class average", emptyText: "No CT capabilities in this test." });
+
+    return `
+      <h3 class="student-dialog__h">Learning outcomes</h3>
+      ${outcomes}
+      <h3 class="student-dialog__h">CT capabilities</h3>
+      ${nodes}
+    `;
+  }
+
+  function renderStudentDialog(canManage) {
+    if (state.openAttemptId === null || !state.results) {
+      return "";
+    }
+
+    const attempt = state.results.attempts.find(row => row.id === state.openAttemptId);
+
+    if (!attempt) {
+      return "";
+    }
+
+    const summary = state.outcomesSummary;
+    const attemptRow = summary && summary.perAttempt ? summary.perAttempt.find(row => row.attemptId === attempt.id) : null;
+    const overall = summary && summary.overall;
+    const items = attemptItems(attempt);
+    const counts = items.reduce((acc, item) => {
+      const key = answerState(item.answer, item.question).key;
+      return { ...acc, [key]: (acc[key] || 0) + 1 };
+    }, {});
+    const countText = [["correct", "correct"], ["partial", "part marks"], ["wrong", "incorrect"], ["unmarked", "not marked yet"], ["skipped", "skipped"]]
+      .filter(([key]) => counts[key]).map(([key, word]) => `${counts[key]} ${word}`).join(", ");
+
+    const status = attempt.reset_at
+      ? `<p class="notice">This attempt was reset. It is kept as history and left out of the class figures.</p>`
+      : attempt.status !== "submitted"
+        ? `<p class="notice">Not submitted yet. These are the answers so far, and none of them count in the class figures.</p>`
+        : "";
+
+    const score = attemptRow && Charts
+      ? Charts.barChart([{
+        label: "Score",
+        value: attemptRow.percentage,
+        compare: overall ? overall.meanPercentage : null,
+        note: attempt.max_score === null ? "" : `${attempt.score ?? 0}/${attempt.max_score} points`
+      }], { threshold: 50, valueLabel: "This student", compareLabel: "Class average", nullText: "Not marked yet", title: "This student's score beside the class average", wrapAt: 40 })
+      : "";
+
+    const strip = items.map(item => {
+      const state_ = answerState(item.answer, item.question);
+      const id = item.question ? item.question.id : item.answer.questionId;
+      const title = `${item.number}. ${item.question ? item.question.title : id}: ${state_.word}`;
+      return `<li><button type="button" class="q-cell q-cell--${state_.key}" data-jump-answer="${escapeHtml(id)}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><span class="q-cell__num">${item.number}</span><span class="q-cell__word">${state_.short}</span></button></li>`;
+    }).join("");
+
+    return `
+      <dialog class="student-dialog" id="studentDialog" aria-labelledby="studentDialogTitle">
+        <div class="student-dialog__head">
+          <div class="student-dialog__who">
+            <h2 id="studentDialogTitle">${escapeHtml(attempt.student_name)}</h2>
+            <span class="muted small">${escapeHtml(attempt.student_group)}</span>
+            ${attempt.late ? `<span class="tag status status--warning">Late</span>` : ""}
+            ${markingBadges(attempt)}
+          </div>
+          <button type="button" class="btn btn--secondary btn--sm" data-close-student>Close</button>
+        </div>
+        <div class="student-dialog__body">
+          ${status}
+          ${score}
+          <h3 class="student-dialog__h">Question by question</h3>
+          ${countText ? `<p class="muted small">${escapeHtml(countText)}. Choose a question to see the answer.</p>` : ""}
+          <ol class="q-strip" aria-label="Each question's result">${strip}</ol>
+          ${comparisonCharts(attemptRow)}
+          <h3 class="student-dialog__h">Answers</h3>
+          <ol class="qp-list answer-rows">${items.map(item => answerRow(attempt, item, canManage)).join("")}</ol>
+        </div>
+      </dialog>
+    `;
+  }
+
+  // Opens the dialog rendered into the page, keeping its scroll position
+  // across a re-render. prevScroll: the old dialog's scrollTop, if any.
+  function bindStudentDialog(prevScroll) {
+    screen.querySelectorAll("[data-view-attempt]").forEach(button => {
+      button.addEventListener("click", () => {
+        const attemptId = Number(button.getAttribute("data-view-attempt"));
+        if (state.openAttemptId !== attemptId) {
+          state.openAnswerRows = new Set();
+        }
+        state.openAttemptId = attemptId;
+        ensureTypesForDialog();
+        renderDashboard();
+      });
+    });
+
+    const dialog = document.getElementById("studentDialog");
+
+    if (!dialog) {
+      return;
+    }
+
+    if (typeof dialog.showModal === "function") {
+      dialog.showModal();
+    } else {
+      dialog.setAttribute("open", "");
+    }
+
+    if (prevScroll) {
+      dialog.scrollTop = prevScroll;
+    }
+
+    ensureTypesForDialog();
+
+    const close = () => {
+      if (dialog.open) {
+        dialog.close();
+      }
+    };
+
+    dialog.addEventListener("close", () => {
+      // A re-render removes the old dialog; only a real close clears state.
+      if (!dialog.isConnected) {
+        return;
+      }
+      const reopen = state.openAttemptId;
+      state.openAttemptId = null;
+      state.openAnswerRows = new Set();
+      dialog.remove();
+      const button = screen.querySelector(`[data-view-attempt="${reopen}"]`);
+      if (button) {
+        button.focus();
+      }
+    });
+
+    dialog.querySelector("[data-close-student]").addEventListener("click", close);
+    // A click on the backdrop (the dialog itself, outside its content) closes it.
+    dialog.addEventListener("click", event => {
+      if (event.target === dialog) {
+        close();
+      }
+    });
+
+    dialog.querySelectorAll("[data-answer-row]").forEach(details => {
+      details.addEventListener("toggle", () => {
+        const id = details.getAttribute("data-answer-row");
+        if (details.open) {
+          state.openAnswerRows.add(id);
+        } else {
+          state.openAnswerRows.delete(id);
+        }
+      });
+    });
+
+    dialog.querySelectorAll("[data-jump-answer]").forEach(button => {
+      button.addEventListener("click", () => {
+        const row = dialog.querySelector(`[data-answer-row="${CSS.escape(button.getAttribute("data-jump-answer"))}"]`);
+        if (row) {
+          row.open = true;
+          row.scrollIntoView({ block: "start", behavior: "smooth" });
+          row.querySelector("summary").focus({ preventScroll: true });
+        }
+      });
+    });
   }
 
   function bindOutcomesSummaryEvents() {
@@ -1811,9 +2389,7 @@
       return "";
     }
 
-    return `
-      <details class="history">
-        <summary>Settings history (${changes.length} change${changes.length === 1 ? "" : "s"})</summary>
+    return resultsSection("history", "Settings history", plural(changes.length, "change"), `
         <ol class="history__list">
           ${changes.map(change => `
             <li class="history__item">
@@ -1824,8 +2400,7 @@
             </li>
           `).join("")}
         </ol>
-      </details>
-    `;
+    `);
   }
 
   // The form's starting values, so only fields the teacher touched are sent.
@@ -2635,13 +3210,13 @@
           </p>
           ${canManage ? "" : `<p class="notice read-only">Read only: this is ${escapeHtml(resultsEvent.owner_email || "another teacher")}'s event. Only they can reset attempts, release results, edit settings or mark answers.</p>`}
           ${canManage && state.editingSettings ? renderEditSettings(resultsEvent) : ""}
-          ${renderEventComposition(state.eventQuestions)}
-          <details class="history" id="eventQuestionsSection">
-            <summary>Questions${state.eventQuestions ? ` (${state.eventQuestions.length})` : ""}</summary>
-            ${state.eventQuestions ? renderQuestionPreview(state.eventQuestions) : `<p class="muted small">Could not load the questions.</p>`}
-          </details>
-          ${renderSettingsHistory(state.results.settingChanges)}
-          ${state.results.attempts.length
+          ${resultTiles(canManage)}
+          ${sectionControls()}
+          ${overviewSection()}
+          ${questionsSection()}
+          ${outcomesSection()}
+          ${capabilitiesSection()}
+          ${resultsSection("students", "Students", plural(state.results.attempts.length, "attempt"), state.results.attempts.length
             ? `<ul class="attempts">${state.results.attempts.map(attempt => `
               <li class="attempt">
                 <div class="attempt__row">
@@ -2649,19 +3224,21 @@
                   <span class="row">
                     ${attemptStatus(attempt)}
                     ${attempt.late ? `<span class="tag status status--warning">Late</span>` : ""}
+                    ${markingBadges(attempt)}
                     <span class="muted small">${attempt.submitted_at ? formatTime(attempt.submitted_at) : "Not submitted"}</span>
                   </span>
                   <span class="attempt__score">${attempt.max_score === null ? "&ndash;" : `${attempt.score ?? 0}/${attempt.max_score}`}</span>
-                  ${attempt.reset_at || !canManage ? "<span></span>" : `<button class="btn btn--destructive btn--sm" data-reset-attempt="${attempt.id}" aria-label="Reset attempt for ${escapeHtml(attempt.student_name)}">Reset</button>`}
+                  <span class="attempt__actions">
+                    <button type="button" class="btn btn--secondary btn--sm" data-view-attempt="${attempt.id}" aria-haspopup="dialog" aria-label="View ${escapeHtml(attempt.student_name)}'s answers">View</button>
+                    ${attempt.reset_at || !canManage ? "" : `<button class="btn btn--destructive btn--sm" data-reset-attempt="${attempt.id}" aria-label="Reset attempt for ${escapeHtml(attempt.student_name)}">Reset</button>`}
+                  </span>
                 </div>
-                ${aiAnswersBlock(attempt, canManage)}
               </li>
             `).join("")}</ul>`
-            : `<p class="muted">No submissions yet.</p>`
-          }
+            : `<p class="muted">No submissions yet.</p>`)}
+          ${renderSettingsHistory(state.results.settingChanges)}
+          ${renderStudentDialog(canManage)}
         </section>
-
-        ${renderOutcomesSummaryBlock()}
       `
       : "";
 
@@ -2774,6 +3351,9 @@
         ? resultsBlock
         : emptyBlock;
     const viewOpen = state.view === "create" || (state.view === "questions" && Boolean(questionsBlock)) || state.view === "bank" || (state.view === "event" && Boolean(state.results));
+    // The student dialog is rebuilt below; keep where it was scrolled to.
+    const oldDialog = document.getElementById("studentDialog");
+    const dialogScroll = oldDialog ? oldDialog.scrollTop : 0;
 
     screen.innerHTML = `
       <div class="toolbar">
@@ -2813,6 +3393,7 @@
       state.results = null;
       state.outcomesSummary = null;
       state.eventQuestions = null;
+      state.openAttemptId = null;
       state.eventFilter = { scope: "all", owner: "" };
       localStorage.removeItem(TOKEN_KEY);
       renderLogin();
@@ -3006,6 +3587,8 @@
     bindEventListEvents();
     bindOutcomesSummaryEvents();
     bindQuestionPreviewEvents(document.getElementById("eventQuestionsSection"));
+    bindSections();
+    bindStudentDialog(dialogScroll);
   }
 
   // Opens an event in the main area. On a phone the list gives way to it.
@@ -3013,6 +3596,8 @@
     state.selectedEventId = eventId;
     state.view = "event";
     state.editingSettings = false;
+    state.openAttemptId = null;
+    state.openAnswerRows = new Set();
 
     // Show the choice straight away: mark the list row and swap the main area
     // for a skeleton, so the previous event never lingers while this loads.
