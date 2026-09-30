@@ -16,9 +16,29 @@
       <a class="bar__link" href="/">Student page</a>
     </div>
   </header>
+  <div class="load-bar" aria-hidden="true"></div>
 
   <main class="wrap wrap--wide">
-    <section id="screen" class="screen"></section>
+    <section id="screen" class="screen">
+      <!-- Shown until admin.js renders; keep in step with skeletonDashboardHtml() there. -->
+      <div class="dash">
+        <nav class="dash__side" aria-label="Events">
+          <div class="sk-side card card--flush" role="status">
+            <span class="visually-hidden-b">Loading&hellip;</span>
+            <div class="skeleton-b sk-row"></div><div class="skeleton-b sk-row"></div><div class="skeleton-b sk-row"></div><div class="skeleton-b sk-row"></div><div class="skeleton-b sk-row"></div>
+          </div>
+        </nav>
+        <div class="dash__main">
+          <div class="sk-main">
+            <div class="skeleton-b sk-head"></div>
+            <div class="skeleton-b sk-subhead"></div>
+            <div class="sk-attempts"><div class="skeleton-b sk-row"></div><div class="skeleton-b sk-row"></div><div class="skeleton-b sk-row"></div><div class="skeleton-b sk-row"></div></div>
+            <div class="skeleton-b sk-chart"></div>
+            <div class="skeleton-b sk-chart"></div>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script src="type-registry.js"></script>

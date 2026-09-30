@@ -122,7 +122,114 @@
   let previewTimer = null;
   let previewRequestId = 0;
 
+  // Loading cue: a thin bar under the header while any request is in flight.
+  // It only appears after LOADING_DELAY_MS so quick requests never flash it.
+  const LOADING_DELAY_MS = 150;
+  let inFlight = 0;
+  let loadingTimer = null;
+
+  function loadingStart() {
+    inFlight += 1;
+
+    if (inFlight === 1 && !loadingTimer) {
+      loadingTimer = setTimeout(() => {
+        loadingTimer = null;
+        if (inFlight > 0) {
+          document.body.dataset.loading = "true";
+        }
+      }, LOADING_DELAY_MS);
+    }
+  }
+
+  function loadingEnd() {
+    inFlight = Math.max(0, inFlight - 1);
+
+    if (inFlight === 0) {
+      if (loadingTimer) {
+        clearTimeout(loadingTimer);
+        loadingTimer = null;
+      }
+      delete document.body.dataset.loading;
+    }
+  }
+
+  // Runs fn while the button shows a busy state: aria-busy, disabled and a
+  // label such as "Saving…". Restored afterwards if the button is still on
+  // the page (most handlers re-render, which replaces it anyway).
+  async function withBusy(button, fn, busyLabel) {
+    if (!button) {
+      return fn();
+    }
+
+    if (button.getAttribute("aria-busy") === "true") {
+      return undefined;
+    }
+
+    const label = button.textContent;
+    button.setAttribute("aria-busy", "true");
+    button.disabled = true;
+
+    if (busyLabel) {
+      button.textContent = busyLabel;
+    }
+
+    try {
+      return await fn();
+    } finally {
+      if (button.isConnected) {
+        button.removeAttribute("aria-busy");
+        button.disabled = false;
+        button.textContent = label;
+
+        if (button.id === "createEventBtn") {
+          updateCreateButtonState();
+        }
+      }
+    }
+  }
+
+  // Placeholder blocks shown while data loads. Sizes come from CSS.
+  function skeletonRows(count) {
+    return Array.from({ length: count }, () => `<div class="skeleton-b sk-row"></div>`).join("");
+  }
+
+  function skeletonMainHtml() {
+    return `
+      <div class="sk-main" role="status" aria-live="polite">
+        <span class="visually-hidden-b">Loading&hellip;</span>
+        <div class="skeleton-b sk-head"></div>
+        <div class="skeleton-b sk-subhead"></div>
+        <div class="sk-attempts">${skeletonRows(4)}</div>
+        <div class="skeleton-b sk-chart"></div>
+        <div class="skeleton-b sk-chart"></div>
+      </div>
+    `;
+  }
+
+  function skeletonSideHtml() {
+    return `<div class="sk-side card card--flush" role="status"><span class="visually-hidden-b">Loading events&hellip;</span>${skeletonRows(5)}</div>`;
+  }
+
+  function skeletonDashboardHtml() {
+    return `
+      <div class="dash">
+        <nav class="dash__side" aria-label="Events">${skeletonSideHtml()}</nav>
+        <div class="dash__main">${skeletonMainHtml()}</div>
+      </div>
+    `;
+  }
+
   async function api(path, options) {
+    loadingStart();
+
+    try {
+      return await apiRequest(path, options);
+    } finally {
+      loadingEnd();
+    }
+  }
+
+  async function apiRequest(path, options) {
     const headers = new Headers(options && options.headers ? options.headers : {});
     headers.set("Content-Type", "application/json");
 
@@ -671,19 +778,21 @@
       const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
 
-      try {
-        const payload = await api("/api/auth/login", {
-          method: "POST",
-          body: JSON.stringify({ email, password })
-        });
+      await withBusy(document.getElementById("loginBtn"), async () => {
+        try {
+          const payload = await api("/api/auth/login", {
+            method: "POST",
+            body: JSON.stringify({ email, password })
+          });
 
-        state.token = payload.token;
-        state.user = payload.user;
-        localStorage.setItem(TOKEN_KEY, payload.token);
-        await loadDashboard();
-      } catch (error) {
-        renderLogin(error.message);
-      }
+          state.token = payload.token;
+          state.user = payload.user;
+          localStorage.setItem(TOKEN_KEY, payload.token);
+          await loadDashboard();
+        } catch (error) {
+          renderLogin(error.message);
+        }
+      }, "Signing in\u2026");
     });
   }
 
@@ -805,7 +914,7 @@
     }
 
     if (state.previewLoading && !state.preview && !state.previewError) {
-      el.innerHTML = `<p class="muted">Checking what matches&hellip;</p>`;
+      el.innerHTML = `<div class="sk-list" role="status"><span class="visually-hidden-b">Checking what matches&hellip;</span>${skeletonRows(2)}</div>`;
       return;
     }
 
@@ -846,7 +955,7 @@
       ${showQuestionPreview
         ? renderQuestionPreview(preview.questions)
         : (state.previewQuestionsOpen
-          ? `<p class="muted small">Loading questions&hellip;</p>`
+          ? `<div class="sk-list" role="status"><span class="visually-hidden-b">Loading questions&hellip;</span>${skeletonRows(3)}</div>`
           : (preview.questions && preview.questions.length
             ? `<ol class="preview-list">${preview.questions.map(q => `<li>${escapeHtml(q.title)} <span class="muted">${escapeHtml(q.level)} · ${escapeHtml(q.type)}</span></li>`).join("")}</ol>`
             : ""))
@@ -1046,7 +1155,7 @@
     }
 
     if (!state.preview) {
-      el.innerHTML = `<p class="muted small">Checking what matches&hellip;</p>`;
+      el.innerHTML = `<div class="sk-list" role="status"><span class="visually-hidden-b">Checking what matches&hellip;</span>${skeletonRows(2)}</div>`;
       return;
     }
 
@@ -1061,7 +1170,7 @@
       ${preview.count === 0 ? `<p class="notice notice--critical mt-s">No questions match. Pick another setting before you create the event.</p>` : ""}
       ${preview.warning ? `<p class="notice notice--warning mt-s">${escapeHtml(preview.warning)}</p>` : ""}
       ${state.previewQuestionsOpen
-        ? (showQuestionPreview ? renderQuestionPreview(preview.questions) : `<p class="muted small">Loading questions&hellip;</p>`)
+        ? (showQuestionPreview ? renderQuestionPreview(preview.questions) : `<div class="sk-list" role="status"><span class="visually-hidden-b">Loading questions&hellip;</span>${skeletonRows(3)}</div>`)
         : ""}
     `;
 
@@ -1845,15 +1954,17 @@
         return;
       }
 
-      try {
-        await api(`/api/events/${event.id}`, { method: "PATCH", body: JSON.stringify(body) });
-        state.editingSettings = false;
-        const eventsPayload = await api("/api/events", { method: "GET" });
-        state.events = eventsPayload.events;
-        await loadResults(event.id);
-      } catch (error) {
-        alert(error.message);
-      }
+      await withBusy(document.getElementById("saveEditBtn"), async () => {
+        try {
+          await api(`/api/events/${event.id}`, { method: "PATCH", body: JSON.stringify(body) });
+          state.editingSettings = false;
+          const eventsPayload = await api("/api/events", { method: "GET" });
+          state.events = eventsPayload.events;
+          await loadResults(event.id);
+        } catch (error) {
+          alert(error.message);
+        }
+      }, "Saving\u2026");
     });
   }
 
@@ -2176,7 +2287,7 @@
     }
 
     if (!state.bank) {
-      return `<p class="muted small">Loading the question bank&hellip;</p>`;
+      return `<div class="sk-list" role="status"><span class="visually-hidden-b">Loading the question bank&hellip;</span>${skeletonRows(6)}</div>`;
     }
 
     const shown = state.bank.filter(bankMatches);
@@ -2709,7 +2820,7 @@
 
     const createBtn = document.getElementById("createEventBtn");
 
-    if (createBtn && state.view === "create") createBtn.addEventListener("click", async () => {
+    if (createBtn && state.view === "create") createBtn.addEventListener("click", () => withBusy(createBtn, async () => {
       const title = document.getElementById("title").value.trim();
       const joinCode = document.getElementById("joinCode").value.trim();
       const durationMinutes = document.getElementById("durationMinutes").value;
@@ -2764,10 +2875,10 @@
       } catch (error) {
         alert(error.message);
       }
-    });
+    }, "Creating\u2026"));
 
     if (createBtn && state.view === "questions") {
-      createBtn.addEventListener("click", saveQuestions);
+      createBtn.addEventListener("click", () => withBusy(createBtn, saveQuestions, "Saving\u2026"));
       document.getElementById("cancelQuestionsBtn").addEventListener("click", () => {
         resetPickerState();
         state.view = "event";
@@ -2840,12 +2951,14 @@
           return;
         }
 
-        try {
-          await api(`/api/events/${state.selectedEventId}/release`, { method: "POST" });
-          await loadResults(state.selectedEventId);
-        } catch (error) {
-          alert(error.message);
-        }
+        await withBusy(releaseBtn, async () => {
+          try {
+            await api(`/api/events/${state.selectedEventId}/release`, { method: "POST" });
+            await loadResults(state.selectedEventId);
+          } catch (error) {
+            alert(error.message);
+          }
+        }, "Releasing\u2026");
       });
     }
 
@@ -2857,12 +2970,14 @@
           return;
         }
 
-        try {
-          await api(`/api/events/${state.selectedEventId}/attempts/${attemptId}/reset`, { method: "POST" });
-          await loadResults(state.selectedEventId);
-        } catch (error) {
-          alert(error.message);
-        }
+        await withBusy(button, async () => {
+          try {
+            await api(`/api/events/${state.selectedEventId}/attempts/${attemptId}/reset`, { method: "POST" });
+            await loadResults(state.selectedEventId);
+          } catch (error) {
+            alert(error.message);
+          }
+        }, "Resetting\u2026");
       });
     });
 
@@ -2874,15 +2989,17 @@
         const score = Number(document.getElementById(`score-${key}`).value);
         const feedback = document.getElementById(`feedback-${key}`).value;
 
-        try {
-          await api(`/api/events/${state.selectedEventId}/attempts/${attemptId}/answers/${encodeURIComponent(questionId)}/review`, {
-            method: "POST",
-            body: JSON.stringify({ score, feedback })
-          });
-          await loadResults(state.selectedEventId);
-        } catch (error) {
-          alert(error.message);
-        }
+        await withBusy(button, async () => {
+          try {
+            await api(`/api/events/${state.selectedEventId}/attempts/${attemptId}/answers/${encodeURIComponent(questionId)}/review`, {
+              method: "POST",
+              body: JSON.stringify({ score, feedback })
+            });
+            await loadResults(state.selectedEventId);
+          } catch (error) {
+            alert(error.message);
+          }
+        }, "Saving\u2026");
       });
     });
 
@@ -2896,8 +3013,29 @@
     state.selectedEventId = eventId;
     state.view = "event";
     state.editingSettings = false;
-    await loadResults(eventId);
+
+    // Show the choice straight away: mark the list row and swap the main area
+    // for a skeleton, so the previous event never lingers while this loads.
+    const main = screen.querySelector(".dash__main");
+    const dash = screen.querySelector(".dash");
+
+    if (main && dash) {
+      dash.classList.add("dash--open");
+      main.innerHTML = skeletonMainHtml();
+      screen.querySelectorAll("[data-event-id]").forEach(button => {
+        const active = Number(button.getAttribute("data-event-id")) === eventId;
+        button.classList.toggle("event-card--active", active);
+
+        if (active) {
+          button.setAttribute("aria-current", "true");
+        } else {
+          button.removeAttribute("aria-current");
+        }
+      });
+    }
+
     window.scrollTo({ top: 0 });
+    await loadResults(eventId);
   }
 
   // Opens the new-event form in the main area, with a fresh preview.
@@ -2973,24 +3111,54 @@
     }
   }
 
+  let resultsRequestId = 0;
+
   async function loadResults(eventId) {
+    const requestId = (resultsRequestId += 1);
+
     try {
       const [results, outcomesSummary, questions] = await Promise.all([
         api(`/api/events/${eventId}/results`),
         api(`/api/events/${eventId}/outcomes-summary`).catch(() => null),
         api(`/api/events/${eventId}/questions`).catch(() => null)
       ]);
+      // A newer click, or leaving the event view, makes this response stale.
+      if (requestId !== resultsRequestId || state.selectedEventId !== eventId || state.view !== "event") {
+        return;
+      }
+
       state.results = results;
       state.outcomesSummary = outcomesSummary;
       state.eventQuestions = questions ? questions.questions : null;
       renderDashboard();
     } catch (error) {
-      alert(error.message);
+      if (requestId !== resultsRequestId || state.selectedEventId !== eventId || state.view !== "event") {
+        return;
+      }
+
+      const main = screen.querySelector(".dash__main");
+
+      if (!main) {
+        alert(error.message);
+        return;
+      }
+
+      main.innerHTML = `
+        <div class="notice notice--critical" role="alert">
+          <p><strong>Could not load this event.</strong> ${escapeHtml(error.message)}</p>
+          <div class="row mt-s">
+            <button type="button" class="btn btn--secondary btn--sm" id="retryEventBtn">Retry</button>
+          </div>
+        </div>
+      `;
+      document.getElementById("retryEventBtn").addEventListener("click", () => openEvent(eventId));
     }
   }
 
   // Loads the picker's reference data. Failure here must not block the
   // simple create-event path, so it is caught and flagged rather than thrown.
+  let pickerDataLoading = false;
+
   async function loadPickerData() {
     try {
       const [catalog, ontology, outcomes] = await Promise.all([
@@ -3024,6 +3192,12 @@
   }
 
   async function loadDashboard() {
+    // Nothing on screen yet (first load or just signed in): show the layout
+    // as a skeleton rather than an empty page while the first requests run.
+    if (!screen.querySelector(".dash")) {
+      screen.innerHTML = skeletonDashboardHtml();
+    }
+
     const mePayload = await api("/api/auth/me", { method: "GET" });
     const eventsPayload = await api("/api/events", { method: "GET" });
 
@@ -3046,11 +3220,37 @@
       }
     }
 
-    if (!state.catalog && !state.catalogFailed) {
+    const pickerNeeded = !state.catalog && !state.catalogFailed;
+
+    // A first-time teacher lands straight on the form, which needs the preset
+    // cards, so wait for them. Everyone else sees the dashboard now and the
+    // picker data finishes in the background.
+    if (pickerNeeded && state.view === "create") {
       await loadPickerData();
     }
 
     renderDashboard();
+
+    if (pickerNeeded && state.view !== "create" && !pickerDataLoading) {
+      pickerDataLoading = true;
+      loadPickerData().finally(() => {
+        pickerDataLoading = false;
+
+        // The teacher may have opened New event before the data arrived; give
+        // them the real form unless they have already started typing.
+        const titleInput = document.getElementById("title");
+
+        if (state.view === "create" && !state.pickerEdited && titleInput && !titleInput.value) {
+          resetPickerState();
+          renderDashboard();
+          schedulePreview();
+          return;
+        }
+
+        refreshAdvancedPicker();
+        updateCreateButtonState();
+      });
+    }
   }
 
   async function boot() {
@@ -3064,6 +3264,7 @@
     // A reload with #q=ID goes back to the bank; the first dashboard draw
     // would clear the hash, so it is read first.
     state.bankSelected = bankHashId();
+    screen.innerHTML = skeletonDashboardHtml();
 
     try {
       await loadDashboard();
