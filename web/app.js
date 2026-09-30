@@ -14,14 +14,14 @@
   const MARKING_POLL_SECONDS = 15;
   const MARKING_POLLS = 40;
 
-  // During a test the page also re-reads the attempt this often (seconds),
+  // During a activity the page also re-reads the attempt this often (seconds),
   // and after each move between questions, so a teacher's change to the
   // settings or the time reaches the student (ADR 0003 §10).
   const SETTINGS_POLL_SECONDS = 30;
 
   // The questions this student holds, in order. Under in-order navigation
   // the server sends them one at a time (the ones reached so far), so this
-  // can be shorter than state.questionCount, the number in the test.
+  // can be shorter than state.questionCount, the number in the activity.
   let ACTIVE_BANK = [];
 
   const state = {
@@ -545,7 +545,7 @@
     return ACTIVE_BANK.length - 1;
   }
 
-  // The teacher switched to in order mid-test. The student carries on from
+  // The teacher switched to in order mid-activity. The student carries on from
   // the first question they have not answered; the answers they gave before
   // it are committed now, in order, so they cannot go back to them.
   async function catchUpInOrder() {
@@ -601,10 +601,10 @@
     }
 
     if (before.deadlineAt !== state.deadlineAt) {
-      parts.push(state.deadlineAt ? "The time for this test has changed." : "This test no longer has a time limit.");
+      parts.push(state.deadlineAt ? "The time for this activity has changed." : "This test no longer has a time limit.");
     }
 
-    return parts.length ? `Your teacher changed this test. ${parts.join(" ")}` : "";
+    return parts.length ? `Your teacher changed this activity. ${parts.join(" ")}` : "";
   }
 
   // Re-reads the attempt: settings, committed answers and the deadline. The
@@ -785,7 +785,7 @@
       <section class="card join">
         <form class="stack" id="joinForm" novalidate>
           <div class="section-heading">
-            <h2>Join a test</h2>
+            <h2>Join an activity</h2>
             <p>Type the join code your teacher gave your class.</p>
           </div>
 
@@ -806,7 +806,7 @@
 
           ${errorMessage ? `<p class="error-text" role="alert">${escapeHtml(errorMessage)}</p>` : ""}
 
-          <button type="submit" class="btn btn--accent btn--block" id="startBtn">Start test</button>
+          <button type="submit" class="btn btn--accent btn--block" id="startBtn">Start activity</button>
         </form>
 
         <ul class="join__rules">
@@ -913,7 +913,7 @@
       payload = await api(`/api/attempts/${saved.attemptId}`, { method: "GET", headers: attemptHeaders() });
     } catch (error) {
       if (!error.status || error.status >= 500) {
-        renderStart("Could not reach the server to resume your test. Refresh to try again.");
+        renderStart("Could not reach the server to resume your activity. Refresh to try again.");
         return;
       }
 
@@ -969,7 +969,7 @@
       }
     }
 
-    buttons.push(`<button class="btn ${isLast ? "btn--accent" : "btn--secondary"}" id="submitBtn">Submit test</button>`);
+    buttons.push(`<button class="btn ${isLast ? "btn--accent" : "btn--secondary"}" id="submitBtn">Submit answers</button>`);
 
     return `
       ${isLinear() ? "<span></span>" : `<button id="backBtn" class="btn btn--secondary" ${state.i === 0 ? "disabled" : ""}>Back</button>`}
@@ -1374,7 +1374,7 @@
         </section>
 
         <div class="row">
-          <button id="restartBtn" class="btn btn--secondary">Start another test</button>
+          <button id="restartBtn" class="btn btn--secondary">Join another activity</button>
         </div>
       </div>
     `;
@@ -1433,7 +1433,7 @@
     try {
       await Promise.all([Types.load(), Visuals.load()]);
     } catch (_error) {
-      screen.innerHTML = `<section class="card"><p class="notice notice--critical">Could not load the test. Check your connection and refresh.</p></section>`;
+      screen.innerHTML = `<section class="card"><p class="notice notice--critical">Could not load the activity. Check your connection and refresh.</p></section>`;
       return;
     }
 

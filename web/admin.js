@@ -761,7 +761,7 @@
         <form class="stack" id="loginForm" novalidate>
           <div class="section-heading">
             <h2>Teacher sign-in</h2>
-            <p>Sign in to create tests and see your students' results.</p>
+            <p>Sign in to create events and see your students' results.</p>
           </div>
 
           <div class="field">
@@ -1266,7 +1266,7 @@
     return `
       ${renderSettingRadios("feedbackMode", "Students see which answers were right", {
         each: "After each question",
-        end: "At the end of the test",
+        end: "When they submit",
         release: "When I release them"
       }, feedbackWarningHtml())}
       ${renderSettingRadios("navigationMode", "Moving between questions", {
@@ -2149,10 +2149,10 @@
     const opts = { threshold: 50, valueLabel: "This student", compareLabel: "Class average", nullText: "Not marked yet" };
     const outcomes = Charts.barChart(summary.outcomes.map(row => ({
       label: row.statement, value: outcomeMine.has(row.id) ? outcomeMine.get(row.id) : null, compare: row.meanPercentage
-    })), { ...opts, title: "This student's score on each learning outcome, beside the class average", emptyText: "No learning outcomes in this test." });
+    })), { ...opts, title: "This student's score on each learning outcome, beside the class average", emptyText: "No learning outcomes in this event." });
     const nodes = Charts.barChart(capabilityOrder(summary.ontologyNodes).map(row => ({
       label: row.label, value: nodeMine.has(row.id) ? nodeMine.get(row.id) : null, compare: row.meanPercentage, indent: nodeDepth(row)
-    })), { ...opts, title: "This student's score on each CT capability, beside the class average", emptyText: "No CT capabilities in this test." });
+    })), { ...opts, title: "This student's score on each CT capability, beside the class average", emptyText: "No CT capabilities in this event." });
 
     return `
       <h3 class="student-dialog__h">Learning outcomes</h3>
@@ -2438,7 +2438,7 @@
         <div class="section-heading">
           <h3>Edit settings</h3>
         </div>
-        <p class="notice">Students already taking the test pick up changes on their next move, or within 30 seconds. A new time limit or deadline resets each student's own end time (their start plus the limit, or the deadline if sooner); anyone now past it has their answers sent and marked late. Answers students have locked stay locked, and switching to in order moves each student on to their first unanswered question.</p>
+        <p class="notice">Students already doing this event pick up changes on their next move, or within 30 seconds. A new time limit or deadline resets each student's own end time (their start plus the limit, or the deadline if sooner); anyone now past it has their answers sent and marked late. Answers students have locked stay locked, and switching to in order moves each student on to their first unanswered question.</p>
         <div class="form-grid">
           <div class="field field--full">
             <label for="editTitle">Title</label>
@@ -2458,7 +2458,7 @@
           </div>
           <fieldset class="setting field--full">
             <legend class="legend">Students see which answers were right</legend>
-            <div class="setting__options">${radios("feedbackMode", { each: "After each question", end: "At the end of the test", release: "When I release them" })}</div>
+            <div class="setting__options">${radios("feedbackMode", { each: "After each question", end: "When they submit", release: "When I release them" })}</div>
             ${editFeedbackWarningHtml(values.feedbackMode, values.feedbackMode)}
           </fieldset>
           <fieldset class="setting field--full">
@@ -3547,7 +3547,7 @@
       button.addEventListener("click", async () => {
         const attemptId = Number(button.getAttribute("data-reset-attempt"));
 
-        if (!confirm("Reset this attempt? It stays in the record, and the student can start the test again.")) {
+        if (!confirm("Reset this attempt? It stays in the record, and the student can start again.")) {
           return;
         }
 
