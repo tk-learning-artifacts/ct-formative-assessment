@@ -2395,3 +2395,134 @@ textarea.open-response {
   border-radius: 4px 4px 0 0;
   background: var(--color-accent);
 }
+
+
+/* ---------- Admin loading (Task B) ----------
+   Loading cues for the teacher pages. Self-contained on purpose: names carry
+   a -b suffix or sk- prefix so they can be merged with the student-side
+   skeleton/spinner styles later. */
+
+/* Thin indeterminate bar under the header, shown while requests are in
+   flight (body[data-loading], set by admin.js after a short delay). Sticky
+   with zero layout height, so it hugs the top of the viewport. */
+.load-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: 3px;
+  margin-bottom: -3px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+body[data-loading] .load-bar {
+  opacity: 1;
+}
+
+.load-bar::before {
+  content: "";
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--color-accent);
+  animation: load-bar-b 1.1s ease-in-out infinite;
+}
+
+@keyframes load-bar-b {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+.visually-hidden-b {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Shimmering placeholder block. */
+.skeleton-b {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-2) 25%,
+    var(--color-line) 50%,
+    var(--color-surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-b-shimmer 1.4s linear infinite;
+}
+
+@keyframes skeleton-b-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.sk-main,
+.sk-side,
+.sk-attempts,
+.sk-list {
+  display: grid;
+  gap: 10px;
+}
+
+.sk-main {
+  position: relative;
+  padding: 4px 0;
+}
+
+.sk-side {
+  padding: 12px;
+}
+
+.sk-head { height: 28px; width: 55%; }
+.sk-subhead { height: 14px; width: 80%; }
+.sk-row { height: 40px; }
+.sk-list .sk-row { height: 28px; }
+.sk-chart { height: 120px; }
+
+/* Busy button: a spinner ahead of the label. */
+.btn[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.85;
+}
+
+.btn[aria-busy="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: 0.5em;
+  vertical-align: -0.12em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spinner-b 0.7s linear infinite;
+}
+
+@keyframes spinner-b {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-b {
+    animation: none;
+    background: var(--color-line);
+  }
+
+  .load-bar::before {
+    width: 100%;
+    animation: none;
+    opacity: 0.6;
+  }
+
+  .btn[aria-busy="true"]::before {
+    animation: none;
+    border-right-color: currentColor;
+    border-style: dotted;
+  }
+}
