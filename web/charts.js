@@ -34,6 +34,8 @@
   // The share of the width the bars may use; the rest holds the value label
   // at the tip of a full-length bar.
   const PLOT = 82;
+  // A histogram column's width in pixels (the mark spec's 24px cap).
+  const COLUMN = 24;
   let idCounter = 0;
 
   function esc(value) {
@@ -227,7 +229,9 @@
       const label = `${rangeText(i)}: ${plural(n)}`;
 
       return `<g class="chart__row"><title>${esc(label)}</title>${n
-        ? `<rect class="chart__bar${below ? " chart__bar--below" : ""}" x="${pct(x)}" y="${base - height}" width="${pct(barWidth)}" height="${height}" rx="3" /><text class="chart__value" x="${pct(x + barWidth / 2)}" y="${base - height - 4}" text-anchor="middle">${n}</text>`
+        // A column is at most COLUMN px wide: a percentage centre, shifted
+        // back by half the width in pixels, so it never fills its slot.
+        ? `<rect class="chart__bar${below ? " chart__bar--below" : ""}" x="${pct(x + barWidth / 2)}" y="${base - height}" width="${COLUMN}" height="${height}" rx="3" transform="translate(-${COLUMN / 2} 0)" /><text class="chart__value" x="${pct(x + barWidth / 2)}" y="${base - height - 4}" text-anchor="middle">${n}</text>`
         : ""}</g>`;
     }).join("");
 
