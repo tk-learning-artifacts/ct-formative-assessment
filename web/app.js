@@ -832,6 +832,7 @@
 
       try {
         button.disabled = true;
+        button.setAttribute("aria-busy", "true");
         button.textContent = "Starting...";
 
         const payload = await api("/api/attempts", {
@@ -1347,7 +1348,7 @@
             ${late ? `<p class="notice notice--warning">This came in after the time limit, so your teacher will see it marked late.</p>` : ""}
             ${markedSoFar
               ? `<p class="notice">Your written answers are marked separately. Your full score appears when your teacher releases the results.</p>`
-              : pendingCount ? `<p class="notice">${pendingCount} written answer${pendingCount === 1 ? " is" : "s are"} still being marked, so your score may go up. This page checks again every ${MARKING_POLL_SECONDS} seconds.</p>` : ""}
+              : pendingCount ? `<p class="notice">${pendingCount} written answer${pendingCount === 1 ? " is" : "s are"} still being marked, so your score may go up. This page checks again every ${MARKING_POLL_SECONDS} seconds.</p><span class="skeleton skeleton--line skeleton--short" role="status" aria-label="Checking for marks"></span>` : ""}
             <p class="muted small">Your teacher can see your answers now.</p>
           </div>
         </section>
@@ -1413,7 +1414,22 @@
     });
   }
 
+  // The same card index.html ships, so the page never goes blank between
+  // the HTML and the first real screen.
+  const LOADING_CARD = `
+    <div class="card" role="status" aria-label="Loading">
+      <span class="skeleton skeleton--title" aria-hidden="true"></span>
+      <span class="skeleton skeleton--line" aria-hidden="true"></span>
+      <span class="skeleton skeleton--line skeleton--short" aria-hidden="true"></span>
+      <span class="skeleton skeleton--block" aria-hidden="true"></span>
+    </div>
+  `;
+
   async function boot() {
+    if (!screen.querySelector(".skeleton")) {
+      screen.innerHTML = LOADING_CARD;
+    }
+
     try {
       await Promise.all([Types.load(), Visuals.load()]);
     } catch (_error) {
