@@ -32,7 +32,7 @@
         <span class="pa-handle" aria-hidden="true" title="Drag to move">&#8942;&#8942;</span>
         <code class="pa-text">${escapeHtml(line.text)}</code>
         <span class="pa-controls">
-          <button type="button" class="btn btn--secondary pa-btn pa-add" data-pa-action="add" aria-label="Add to program: ${label}">Add</button>
+          <button type="button" class="btn btn--accent pa-btn pa-add" data-pa-action="add" aria-label="Add to program: ${label}"><span aria-hidden="true">+</span> Add</button>
           <button type="button" class="btn btn--secondary pa-btn pa-up" data-pa-action="up" aria-label="Move up: ${label}" ${i === 0 ? "disabled" : ""}>&#8593;</button>
           <button type="button" class="btn btn--secondary pa-btn pa-down" data-pa-action="down" aria-label="Move down: ${label}" ${i === count - 1 ? "disabled" : ""}>&#8595;</button>
           <button type="button" class="btn btn--secondary pa-btn pa-remove" data-pa-action="remove" aria-label="Remove from program: ${label}">&#10005;</button>
@@ -61,6 +61,8 @@
     });
 
     widget.querySelector("[data-pa-program-empty]").hidden = programLines.length > 0;
+    widget.querySelector(".pa-workspace").classList.toggle("pa-workspace--empty", programLines.length === 0);
+    widget.querySelector("[data-pa-count]").textContent = `${programLines.length} ${programLines.length === 1 ? "line" : "lines"}`;
     widget.querySelector("[data-pa-pool-empty]").hidden = pool.querySelector(".pa-line") !== null;
   }
 
@@ -126,7 +128,14 @@
 
   function dropTarget(widget, x, y) {
     const under = document.elementFromPoint(x, y);
-    const list = under && under.closest("[data-pa-program], [data-pa-pool]");
+    let list = under && under.closest("[data-pa-program], [data-pa-pool]");
+
+    // The empty-program placeholder sits beside the list, so dropping on it
+    // counts as dropping on the program.
+    if (!list && under && under.closest("[data-pa-program-empty]")) {
+      list = widget.querySelector("[data-pa-program]");
+    }
+
     return list && widget.contains(list) ? { list, line: under.closest(".pa-line") } : null;
   }
 
@@ -137,6 +146,12 @@
 
     event.preventDefault();
     const target = dropTarget(drag.widget, event.clientX, event.clientY);
+    drag.widget.querySelectorAll(".pa-drop-active").forEach(el => el.classList.remove("pa-drop-active"));
+
+    if (target) {
+      const panel = target.list.closest(".pa-workspace, .pa-tray");
+      panel && panel.classList.add("pa-drop-active");
+    }
 
     if (!target || target.line === drag.line) {
       return;
@@ -160,6 +175,7 @@
     const { widget, line } = drag;
     line.classList.remove("pa-line--dragging");
     widget.classList.remove("pa--dragging");
+    widget.querySelectorAll(".pa-drop-active").forEach(el => el.classList.remove("pa-drop-active"));
     document.removeEventListener("pointermove", onPointerMove);
     document.removeEventListener("pointerup", endDrag);
     document.removeEventListener("pointercancel", endDrag);
@@ -202,18 +218,26 @@
       return `
         <div class="pa" data-parsons>
           <p class="answer-label">Build the program</p>
+          <p class="pa-instruction">Tap <strong>+ Add</strong> on a block in the tray to move it into your program, or drag it by the handle.</p>
 
-          <p class="code-label" id="paProgramLabel">Your program (${language})</p>
-          <ol class="pa-list pa-program" data-pa-program aria-labelledby="paProgramLabel">
-            ${programLines.map((line, i) => lineHtml(line, i, programLines.length)).join("")}
-          </ol>
-          <p class="pa-empty" data-pa-program-empty ${programLines.length ? "hidden" : ""}>No lines yet.</p>
+          <section class="pa-workspace ${programLines.length ? "" : "pa-workspace--empty"}" aria-labelledby="paProgramLabel">
+            <div class="pa-panel-head">
+              <h3 class="pa-panel-title" id="paProgramLabel">Your program (${language})</h3>
+              <span class="pa-count" data-pa-count>${programLines.length} ${programLines.length === 1 ? "line" : "lines"}</span>
+            </div>
+            <ol class="pa-list pa-program" data-pa-program aria-labelledby="paProgramLabel">
+              ${programLines.map((line, i) => lineHtml(line, i, programLines.length)).join("")}
+            </ol>
+            <p class="pa-empty pa-dropzone" data-pa-program-empty ${programLines.length ? "hidden" : ""}>Your program is empty. Add lines from the tray below, or drag them here.</p>
+          </section>
 
-          <p class="code-label" id="paPoolLabel">Lines to use</p>
-          <ul class="pa-list pa-pool" data-pa-pool aria-labelledby="paPoolLabel">
-            ${poolLines.map(line => lineHtml(line)).join("")}
-          </ul>
-          <p class="pa-empty" data-pa-pool-empty ${poolLines.length ? "hidden" : ""}>Every line is in your program.</p>
+          <section class="pa-tray" aria-labelledby="paPoolLabel">
+            <h3 class="pa-panel-title" id="paPoolLabel">Code blocks: tap Add to use one</h3>
+            <ul class="pa-list pa-pool" data-pa-pool aria-labelledby="paPoolLabel">
+              ${poolLines.map(line => lineHtml(line)).join("")}
+            </ul>
+            <p class="pa-empty" data-pa-pool-empty ${poolLines.length ? "hidden" : ""}>Every line is in your program.</p>
+          </section>
 
           <p class="pa-status" data-pa-status aria-live="polite"></p>
         </div>
@@ -228,7 +252,7 @@
         : "";
 
       return `
-        <p class="pa-help">Press Add to put a line in your program, or drag it by the handle. Leave out lines you don't need. The indentation is already in each line.</p>
+        <p class="pa-help">Leave out lines you don't need. The indentation is already in each line.</p>
         ${target}
       `;
     },

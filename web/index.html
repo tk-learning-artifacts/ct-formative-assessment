@@ -17,7 +17,14 @@
   </header>
 
   <main class="wrap">
-    <section id="screen" class="screen"></section>
+    <section id="screen" class="screen">
+      <div class="card" role="status" aria-label="Loading">
+        <span class="skeleton skeleton--title" aria-hidden="true"></span>
+        <span class="skeleton skeleton--line" aria-hidden="true"></span>
+        <span class="skeleton skeleton--line skeleton--short" aria-hidden="true"></span>
+        <span class="skeleton skeleton--block" aria-hidden="true"></span>
+      </div>
+    </section>
   </main>
 
   <script src="type-registry.js"></script>

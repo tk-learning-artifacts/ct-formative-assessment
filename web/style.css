@@ -872,6 +872,11 @@ pre {
   cursor: default;
 }
 
+/* A committed answer cannot be changed, so the panels lose their emphasis. */
+.answer-locked .pa-workspace {
+  border-color: var(--color-line-strong);
+}
+
 /* While a commit is in flight the answer cannot be edited (the area is
    inert); dimmed so that shows. */
 .answer-area--busy {
@@ -1050,34 +1055,98 @@ textarea.open-response {
   color: var(--color-ink-soft);
 }
 
-.pa .code-label {
-  margin: 10px 0 4px;
+.pa-instruction {
+  margin: 4px 0 10px;
+  font-size: 0.875rem;
+  color: var(--color-ink-soft);
+}
+
+/* The workspace is the main area: heavier border, tall, and a big dashed
+   drop zone while it is empty. */
+.pa-workspace {
+  padding: 10px 12px 12px;
+  border: 2px solid var(--color-accent);
+  border-radius: 8px;
+  background: var(--color-surface-2);
+  min-height: 12rem;
+  transition: box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.pa-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pa-panel-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.pa-count {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-accent-deep);
+}
+
+.pa-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 8rem;
+  margin: 0;
+  padding: 16px;
+  border: 2px dashed var(--color-accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-accent-soft) 45%, transparent);
+  color: var(--color-accent-deep);
+  font-size: 1rem;
+  text-align: center;
+}
+
+/* The tray is recessed: blocks sit in it waiting to be used. */
+.pa-tray {
+  margin-top: 14px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: inset 0 2px 5px color-mix(in srgb, var(--color-ink) 16%, transparent);
+}
+
+.pa-tray .pa-panel-title {
+  margin-bottom: 8px;
+}
+
+.pa-drop-active {
+  box-shadow: 0 0 0 4px var(--color-accent-soft), 0 0 0 6px var(--color-accent-deep);
+}
+
+.pa-tray.pa-drop-active {
+  box-shadow: inset 0 2px 5px color-mix(in srgb, var(--color-ink) 16%, transparent), 0 0 0 4px var(--color-accent-soft), 0 0 0 6px var(--color-accent-deep);
 }
 
 .pa-list {
-  min-height: 2.75rem;
+  min-height: 0;
   margin: 0;
-  padding: 4px;
+  padding: 0;
   list-style: none;
-  border: 1px dashed var(--color-line-strong);
-  border-radius: 6px;
-}
-
-.pa-program {
-  border-style: solid;
-  border-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent-soft) 45%, transparent);
 }
 
 .pa-line {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 3px 0;
-  padding: 2px 4px;
-  border: 1px solid var(--color-line);
-  border-radius: 4px;
+  margin: 6px 0;
+  padding: 4px 6px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 6px;
   background: var(--color-bg);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-ink) 18%, transparent);
 }
 
 .pa-line--dragging {
@@ -1124,6 +1193,12 @@ textarea.open-response {
   padding: 2px 8px;
 }
 
+/* Add is the call to action; up, down and remove stay secondary. */
+.pa-btn.pa-add {
+  padding: 2px 14px;
+  font-weight: 700;
+}
+
 /* Fingers need bigger targets than a mouse does. */
 @media (pointer: coarse) {
   .pa-btn {
@@ -1143,6 +1218,10 @@ textarea.open-response {
   margin-top: 4px;
   color: var(--color-muted);
   font-size: 0.8125rem;
+}
+
+.pa-empty[hidden] {
+  display: none;
 }
 
 .pa-status {
@@ -2082,6 +2161,10 @@ textarea.open-response {
   justify-content: space-between;
 }
 
+.qp-row__body .pa-list {
+  padding: 2px 0;
+}
+
 .qp-teacher {
   margin-top: 12px;
   padding: 8px 10px;
@@ -2394,4 +2477,97 @@ textarea.open-response {
   width: 24px;
   border-radius: 4px 4px 0 0;
   background: var(--color-accent);
+}
+
+
+/* ==========================================================================
+   Loading cues (student side): skeleton, spinner, busy button.
+   Reusable: put .skeleton on any block, .spinner inline, aria-busy="true" on
+   a .btn. Motion is switched off under prefers-reduced-motion.
+   ========================================================================== */
+
+.skeleton {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--color-surface) 0%,
+    var(--color-surface-2) 50%,
+    var(--color-surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton--line {
+  height: 0.875rem;
+  margin: 10px 0;
+}
+
+.skeleton--title {
+  width: 55%;
+  height: 1.5rem;
+  margin: 4px 0 14px;
+}
+
+.skeleton--short {
+  width: 40%;
+}
+
+.skeleton--block {
+  height: 2.5rem;
+  margin: 10px 0;
+}
+
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+.spinner {
+  display: inline-block;
+  flex: none;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -0.125em;
+  animation: spinner-turn 0.7s linear infinite;
+}
+
+@keyframes spinner-turn {
+  to { transform: rotate(360deg); }
+}
+
+.btn[aria-busy="true"] {
+  opacity: 0.7;
+  cursor: progress;
+  pointer-events: none;
+}
+
+.btn[aria-busy="true"]::before {
+  content: "";
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spinner-turn 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    background: var(--color-surface);
+  }
+
+  /* A spinner that does not turn is a broken ring; show a static dotted
+     ring instead. The button keeps its word ("Starting...") either way. */
+  .spinner,
+  .btn[aria-busy="true"]::before {
+    animation: none;
+    border-style: dotted;
+    border-right-color: currentColor;
+  }
 }
