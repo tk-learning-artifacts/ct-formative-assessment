@@ -968,6 +968,10 @@ pre {
   align-content: start;
 }
 
+.review-list .result-row {
+  align-items: center;
+}
+
 .result-row__score {
   flex: none;
   font-family: var(--font-mono);

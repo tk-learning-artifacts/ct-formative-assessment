@@ -223,6 +223,12 @@
       return response;
     },
 
+    // Only one of the two parts picked: the review page lists it as partly answered.
+    isPartial(question, response) {
+      if (!question.followUp || !response || typeof response !== "object") return false;
+      return (response.choice === undefined) !== (response.followUp === undefined);
+    },
+
     // Stored responses look like { choice: { index, text }, followUp:
     // { index, text } or { line, text } }. The leading line break puts each
     // part on its own line under the label.

@@ -67,8 +67,8 @@ function devLoginScript({ email, password, joinCode, name, group }) {
       var input = document.getElementById(id);
       if (input && !input.value && !input.dataset.devFilled) { input.value = fields[id]; input.dataset.devFilled = '1'; }
     });
-    var start = document.getElementById('startBtn');
-    if (start && !start.dataset.devFocused && document.getElementById('joinCode')) { start.dataset.devFocused = '1'; start.focus(); }
+    var start = document.getElementById('joinBtn') || document.getElementById('startBtn');
+    if (start && !start.dataset.devFocused) { start.dataset.devFocused = '1'; start.focus(); }
   };
   new MutationObserver(fill).observe(document, { childList: true, subtree: true });
 })();`

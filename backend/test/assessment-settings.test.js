@@ -303,7 +303,7 @@ test("commit guards: token, question, submitted, reset, time up, and one attempt
 
   const unknown = await commit(app, attempt, "S2-01", { response: 0 });
   assert.equal(unknown.status, 404);
-  assert.match(unknown.body.error, /not in this test/);
+  assert.match(unknown.body.error, /not in this challenge/);
 
   // After the deadline and its grace window, commits stop.
   store.db.prepare("UPDATE attempts SET deadline_at = ? WHERE id = ?").run(new Date(Date.now() - 5 * 60 * 1000).toISOString(), attempt.id);

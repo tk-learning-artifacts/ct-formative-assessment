@@ -9,6 +9,9 @@
 //                                        leaves the saved answer as it is,
 //                                        null clears it
 //   describeResponse(response, h)        text for the results breakdown
+//   isPartial(question, response)        optional; true when the response is
+//                                        only part of an answer, for the
+//                                        review page
 //   renderCode(code, h, question)        optional; HTML for the question's
 //                                        code block instead of the default
 //                                        (code-reading marks its glossary

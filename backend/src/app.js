@@ -85,7 +85,7 @@ function ensureEventAccessible(event) {
   const now = Date.now();
 
   if (!event) {
-    return "That join code does not match any active test.";
+    return "That join code does not match any open challenge.";
   }
 
   if (event.status !== "active") {
@@ -93,11 +93,11 @@ function ensureEventAccessible(event) {
   }
 
   if (event.start_at && now < Date.parse(event.start_at)) {
-    return "This test has not opened yet.";
+    return "This challenge has not opened yet.";
   }
 
   if (event.end_at && now > Date.parse(event.end_at)) {
-    return "This test is already closed.";
+    return "This challenge is already closed.";
   }
 
   return null;
@@ -451,7 +451,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     const token = req.get("X-Attempt-Token");
 
     if (attempt && !attempt.token_hash) {
-      res.status(403).json({ error: "This attempt was started before an upgrade and cannot be continued. Please start the test again." });
+      res.status(403).json({ error: "This attempt was started before an upgrade and cannot be continued. Please start the challenge again." });
       return null;
     }
 
@@ -1125,14 +1125,14 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     const event = db.attemptEvent(attempt);
 
     if (!policy.locksAnswers(event)) {
-      res.status(409).json({ error: "This test takes all its answers when you submit.", code: "commit-not-used" });
+      res.status(409).json({ error: "This challenge takes all its answers when you submit.", code: "commit-not-used" });
       return;
     }
 
     const deadlineMs = attempt.deadline_at ? Date.parse(attempt.deadline_at) : null;
 
     if (deadlineMs !== null && Date.now() > deadlineMs + config.submitGraceMs) {
-      res.status(409).json({ error: "Time is up, so answers can no longer be checked one by one. Submit your test.", code: "time-up" });
+      res.status(409).json({ error: "Time is up, so answers can no longer be checked one by one. Submit your answers.", code: "time-up" });
       return;
     }
 
@@ -1176,7 +1176,7 @@ function createApp({ config = loadConfig(), store = null, log = console.log } = 
     }
 
     if (attempt.reset_at) {
-      res.status(409).json({ error: "Your teacher reset this attempt. Start the test again." });
+      res.status(409).json({ error: "Your teacher reset this attempt. Start the challenge again." });
       return;
     }
 
