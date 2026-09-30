@@ -9,7 +9,7 @@ const { PUBLIC_FILES, listPublicFiles } = require("../src/app");
 
 test("the public file list comes from web/, without build config", () => {
   const files = Array.from(listPublicFiles());
-  ["index.html", "admin.html", "app.js", "admin.js", "style.css", "type-registry.js", "types/mcq.js"]
+  ["index.html", "admin.html", "app.js", "admin.js", "charts.js", "style.css", "type-registry.js", "types/mcq.js"]
     .forEach(name => assert.ok(files.includes(name), name));
   ["vite.config.js", "package.json"].forEach(name => assert.ok(!files.includes(name), name));
   assert.ok(files.every(name => /\.(html|css|js)$/.test(name) || /^visuals\/img\/[a-z0-9-]+\.webp$/.test(name)), "only pages, styles, scripts and the question illustrations");
