@@ -10,14 +10,14 @@ Start the app with `pnpm run dev`, then open:
 | Tab | Open | Lands as |
 |-----|------|----------|
 | Teacher | `http://teacher.localhost:5173/` | signed in as the seeded admin, on the teacher page |
-| Student | `http://student.localhost:5173/` | the join form with the demo event's code, a name and a class filled in, and "Start test" focused |
+| Student | `http://student.localhost:5173/` | the join form: the demo event's code filled in and "Next" focused, then a name and a class filled in on the second step with "Start challenge" focused |
 
 `teacher.localhost:5173/admin` works too. Plain `http://localhost:5173/` is
 unchanged: nothing is filled in and nobody is signed in.
 
 Students have no accounts in this app. They join an event with a code, a name
 and a class, so "login" for a student is a filled-in form and one click, not a
-session. Starting the test on every page load would create an attempt each time
+session. Starting the challenge on every page load would create an attempt each time
 and hit the one-attempt-per-student rule, so it is left to the click.
 
 ## Why hostnames
@@ -44,8 +44,8 @@ role a tab is for.
   `POST /api/auth/login` and stores the result. It does this with a synchronous
   request, so the token is there before `admin.js` runs and the login form never
   flashes. A stale token is replaced;
-- on `student.*`, fills `#joinCode`, `#name` and `#group` when the join form
-  appears, only where a field is empty, and focuses the start button.
+- on `student.*`, fills `#joinCode`, `#name` and `#group` as each join step
+  appears, only where a field is empty, and focuses the button ("Next" on the code step, "Start challenge" on the details step).
 
 There is no server-side bypass and no `?role=` parameter. Slate ADR 0020 rules
 those out because they put an authentication hole beside the real one. The
@@ -80,7 +80,7 @@ Things that go wrong quietly:
 - The demo event `DEMO123` is created only when the database has no events.
 - The student name is fixed, and a student can only start an event once. A
   second browser profile, a private window or cleared storage gets "You already
-  started this test". Set `DEV_STUDENT_NAME` to something else, or reset the
+  started this challenge". Set `DEV_STUDENT_NAME` to something else, or reset the
   attempt from the teacher page. Clearing the name field and pressing Start
   refills it from the script.
 - A teacher token from a hand sign-in is kept as it is (the check is only that

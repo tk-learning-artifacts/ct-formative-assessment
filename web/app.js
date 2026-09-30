@@ -14,20 +14,22 @@
   const MARKING_POLL_SECONDS = 15;
   const MARKING_POLLS = 40;
 
-  // During a activity the page also re-reads the attempt this often (seconds),
+  // During a challenge the page also re-reads the attempt this often (seconds),
   // and after each move between questions, so a teacher's change to the
   // settings or the time reaches the student (ADR 0003 §10).
   const SETTINGS_POLL_SECONDS = 30;
 
   // The questions this student holds, in order. Under in-order navigation
   // the server sends them one at a time (the ones reached so far), so this
-  // can be shorter than state.questionCount, the number in the activity.
+  // can be shorter than state.questionCount, the number in the challenge.
   let ACTIVE_BANK = [];
 
   const state = {
     name: "",
     group: "",
     joinCode: "",
+    // The /api/events/join payload, kept between the two join steps.
+    joinEvent: null,
     eventTitle: "",
     attemptId: null,
     attemptToken: null,
@@ -545,7 +547,7 @@
     return ACTIVE_BANK.length - 1;
   }
 
-  // The teacher switched to in order mid-activity. The student carries on from
+  // The teacher switched to in order mid-challenge. The student carries on from
   // the first question they have not answered; the answers they gave before
   // it are committed now, in order, so they cannot go back to them.
   async function catchUpInOrder() {
@@ -601,10 +603,10 @@
     }
 
     if (before.deadlineAt !== state.deadlineAt) {
-      parts.push(state.deadlineAt ? "The time for this activity has changed." : "This test no longer has a time limit.");
+      parts.push(state.deadlineAt ? "The time for this challenge has changed." : "This challenge no longer has a time limit.");
     }
 
-    return parts.length ? `Your teacher changed this activity. ${parts.join(" ")}` : "";
+    return parts.length ? `Your teacher changed this challenge. ${parts.join(" ")}` : "";
   }
 
   // Re-reads the attempt: settings, committed answers and the deadline. The
@@ -777,7 +779,9 @@
 
   // ---------- Screens ----------
 
-  function renderStart(errorMessage) {
+  // Step 1 of joining: just the code. Step 2 (renderDetails) asks for the
+  // student's name and class once the code is known to match a challenge.
+  function renderJoinCode(errorMessage) {
     stopTimer();
     state.inAttempt = false;
     stopProgressPoll();
@@ -785,48 +789,135 @@
       <section class="card join">
         <form class="stack" id="joinForm" novalidate>
           <div class="section-heading">
-            <h2>Join an activity</h2>
+            <h2>Join a challenge</h2>
             <p>Type the join code your teacher gave your class.</p>
           </div>
 
           <div class="field">
-            <label for="joinCode">Join code <span class="field__hint">try DEMO123</span></label>
-            <input id="joinCode" type="text" placeholder="DEMO123" autocomplete="off" autocapitalize="characters" spellcheck="false" />
-          </div>
-
-          <div class="field">
-            <label for="name">Your name</label>
-            <input id="name" type="text" placeholder="Joe Tan" autocomplete="off" />
-          </div>
-
-          <div class="field">
-            <label for="group">Class</label>
-            <input id="group" type="text" placeholder="P6-3 or S1-2" autocomplete="off" />
+            <label for="joinCode">Join code</label>
+            <input id="joinCode" type="text" value="${escapeHtml(state.joinCode)}" autocomplete="off" autocapitalize="characters" spellcheck="false" />
           </div>
 
           ${errorMessage ? `<p class="error-text" role="alert">${escapeHtml(errorMessage)}</p>` : ""}
 
-          <button type="submit" class="btn btn--accent btn--block" id="startBtn">Start activity</button>
+          <button type="submit" class="btn btn--accent btn--block" id="joinBtn">Next</button>
+        </form>
+      </section>
+    `;
+
+    const button = document.getElementById("joinBtn");
+    const input = document.getElementById("joinCode");
+    input.focus();
+
+    document.getElementById("joinForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const joinCode = input.value.trim().toUpperCase();
+
+      if (!joinCode) {
+        state.joinCode = "";
+        renderJoinCode("Type your join code.");
+        return;
+      }
+
+      try {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        button.textContent = "Checking...";
+
+        const payload = await api("/api/events/join", {
+          method: "POST",
+          body: JSON.stringify({ joinCode })
+        });
+
+        state.joinCode = payload.event.joinCode;
+        state.joinEvent = payload;
+        renderDetails();
+      } catch (error) {
+        state.joinCode = joinCode;
+        renderJoinCode(error.status ? error.message : "Could not reach the server. Check your connection and try again.");
+      }
+    });
+  }
+
+  function renderStart(errorMessage) {
+    renderJoinCode(errorMessage);
+  }
+
+  function renderDetails(errorMessage) {
+    if (!state.joinEvent) {
+      renderJoinCode();
+      return;
+    }
+
+    stopTimer();
+    state.inAttempt = false;
+    stopProgressPoll();
+
+    const info = state.joinEvent;
+    const linear = info.event.navigationMode === "linear";
+    const facts = [
+      escapeHtml(info.event.title),
+      `<span class="mono">${escapeHtml(state.joinCode)}</span>`,
+      `${info.questionCount} question${info.questionCount === 1 ? "" : "s"}`
+    ];
+
+    if (info.event.durationMinutes) facts.push(`${escapeHtml(String(info.event.durationMinutes))} min`);
+
+    screen.innerHTML = `
+      <section class="card join">
+        <form class="stack" id="detailsForm" novalidate>
+          <div class="section-heading">
+            <h2 id="detailsTitle" tabindex="-1">Your details</h2>
+            <p>${facts.join(" · ")}</p>
+          </div>
+
+          <div class="field">
+            <label for="name">Your name</label>
+            <input id="name" type="text" value="${escapeHtml(state.name)}" placeholder="Joe Tan" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="group">Class</label>
+            <input id="group" type="text" value="${escapeHtml(state.group)}" placeholder="P6-3 or S1-2" autocomplete="off" />
+          </div>
+
+          ${errorMessage ? `<p class="error-text" role="alert">${escapeHtml(errorMessage)}</p>` : ""}
+
+          <div class="q-nav">
+            <button type="button" class="btn btn--secondary" id="changeCodeBtn">Change code</button>
+            <button type="submit" class="btn btn--accent" id="startBtn">Start challenge</button>
+          </div>
         </form>
 
         <ul class="join__rules">
           <li>You get one attempt, so read each question carefully.</li>
-          <li>You can submit from any question. Blank answers score zero.</li>
+          ${linear
+            ? "<li>Questions come in order. Answer or skip each one to move on; you can't go back.</li>"
+            : "<li>You can skip a question and come back to it. Submit at the end, where you'll see any you haven't answered.</li>"}
         </ul>
       </section>
     `;
 
     const button = document.getElementById("startBtn");
+    document.getElementById("name").focus();
 
-    // A form, so Enter in any field starts the test too.
-    document.getElementById("joinForm").addEventListener("submit", async event => {
+    document.getElementById("changeCodeBtn").addEventListener("click", () => {
+      state.name = document.getElementById("name").value.trim();
+      state.group = document.getElementById("group").value.trim();
+      renderJoinCode();
+    });
+
+    // A form, so Enter in any field starts the challenge too.
+    document.getElementById("detailsForm").addEventListener("submit", async event => {
       event.preventDefault();
-      const joinCode = document.getElementById("joinCode").value.trim().toUpperCase();
       const name = document.getElementById("name").value.trim();
       const group = document.getElementById("group").value.trim();
+      const joinCode = state.joinCode;
 
-      if (!joinCode || !name || !group) {
-        renderStart("Fill in your join code, name and class.");
+      if (!name || !group) {
+        state.name = name;
+        state.group = group;
+        renderDetails("Fill in your name and class.");
         return;
       }
 
@@ -855,7 +946,16 @@
           return;
         }
 
-        renderStart(error.message);
+        state.name = name;
+        state.group = group;
+
+        // The challenge closed or vanished between the two steps.
+        if (error.status === 404) {
+          renderJoinCode(error.message);
+          return;
+        }
+
+        renderDetails(error.message);
       }
     });
   }
@@ -913,7 +1013,7 @@
       payload = await api(`/api/attempts/${saved.attemptId}`, { method: "GET", headers: attemptHeaders() });
     } catch (error) {
       if (!error.status || error.status >= 500) {
-        renderStart("Could not reach the server to resume your activity. Refresh to try again.");
+        renderStart("Could not reach the server to resume your challenge. Refresh to try again.");
         return;
       }
 
@@ -1374,7 +1474,7 @@
         </section>
 
         <div class="row">
-          <button id="restartBtn" class="btn btn--secondary">Join another activity</button>
+          <button id="restartBtn" class="btn btn--secondary">Join another challenge</button>
         </div>
       </div>
     `;
@@ -1396,6 +1496,7 @@
       state.name = "";
       state.group = "";
       state.joinCode = "";
+      state.joinEvent = null;
       state.eventTitle = "";
       state.attemptId = null;
       state.attemptToken = null;
@@ -1433,7 +1534,7 @@
     try {
       await Promise.all([Types.load(), Visuals.load()]);
     } catch (_error) {
-      screen.innerHTML = `<section class="card"><p class="notice notice--critical">Could not load the activity. Check your connection and refresh.</p></section>`;
+      screen.innerHTML = `<section class="card"><p class="notice notice--critical">Could not load the challenge. Check your connection and refresh.</p></section>`;
       return;
     }
 
